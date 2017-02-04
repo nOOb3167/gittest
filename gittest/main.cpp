@@ -87,7 +87,7 @@ clean:
 	return r;
 }
 
-int serv_oid_treelist(git_repository *Repository, git_oid *Oid) {
+int serv_oid_treelist(git_repository *Repository, git_oid *Oid, std::vector<git_oid> *oOutput) {
 	int r = 0;
 
 	git_odb *Odb = NULL;
@@ -95,7 +95,8 @@ int serv_oid_treelist(git_repository *Repository, git_oid *Oid) {
 	git_commit *CommitOid = NULL;
 	git_tree *TreeOid = NULL;
 	
-	topolist_t NodeList;
+	topolist_t NodeListTopo;
+	std::vector<git_oid> Output;
 
 	if (!!(r = git_repository_odb(&Odb, Repository)))
 		goto clean;
@@ -119,14 +120,23 @@ int serv_oid_treelist(git_repository *Repository, git_oid *Oid) {
 	if (!!(r = git_commit_tree(&TreeOid, CommitOid)))
 		goto clean;
 
-	if (!!(r = tree_toposort(Repository, TreeOid, &NodeList)))
+	if (!!(r = tree_toposort(Repository, TreeOid, &NodeListTopo)))
 		goto clean;
 
-	for (topolist_t::iterator it = NodeList.begin(); it != NodeList.end(); it++) {
+	for (topolist_t::iterator it = NodeListTopo.begin(); it != NodeListTopo.end(); it++) {
 		char buf[GIT_OID_HEXSZ] ={};
 		git_oid_fmt(buf, git_tree_id(*it));
 		printf("tree [%.*s]\n", GIT_OID_HEXSZ, buf);
 	}
+
+	/* output in reverse topological order */
+	Output.resize(NodeListTopo.size());  // FIXME: inefficient list size operation?
+	int OutputIdx = 0;
+	for (topolist_t::reverse_iterator it = NodeListTopo.rbegin(); it != NodeListTopo.rend(); it++, OutputIdx++)
+		git_oid_cpy(Output.data() + OutputIdx,  git_tree_id(*it));
+
+	if (oOutput)
+		oOutput->swap(Output);
 
 clean:
 	if (TreeOid)
@@ -154,6 +164,8 @@ int stuff() {
 	git_oid OidZero ={};
 	assert(git_oid_iszero(&OidZero));
 
+	std::vector<git_oid> Treelist;
+
 	if (!!(r = git_repository_discover(&RepoPath, ".", 0, NULL)))
 		goto clean;
 	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
@@ -179,7 +191,7 @@ int stuff() {
 		goto clean;
 	}
 
-	if (!!(r = serv_oid_treelist(Repository, &OidLatest)))
+	if (!!(r = serv_oid_treelist(Repository, &OidLatest, &Treelist)))
 		goto clean;
 
 clean:
