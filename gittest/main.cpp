@@ -1,12 +1,15 @@
 #include <cstdlib>
 #include <cassert>
 #include <cstdio>
+#include <cstdint>
 
 #include <vector>
 #include <set>
 #include <list>
 
 #include <git2.h>
+#include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
+#include <git2/sys/mempack.h>     /* in-memory backend */
 
 /*
 = git init =
@@ -41,15 +44,20 @@ int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist
 			/* ownership of 'Tree' by recursive call below taken only on success. therefore on failure we can free. */
 			if (!!(r = tree_toposort_visit(Repository, MarkSet, NodeList, TreeSubtree)))
 				goto cleansub;
-			continue;
 		cleansub:
-			if (TreeSubtree)
-				git_tree_free(TreeSubtree);
-			return r;
+			if (!!r) {
+				if (TreeSubtree)
+					git_tree_free(TreeSubtree);
+			}
+			if (!!r)
+				goto clean;
 		}
 		/* = add n to head of L = */
 		NodeList->push_front(Tree);
 	}
+
+clean:
+
 	return r;
 }
 
@@ -69,6 +77,14 @@ clean:
 	}
 
 	return r;
+}
+
+void aux_uint32_t_LE(uint32_t a, char *buf, size_t bufsize) {
+	assert(sizeof(uint32_t) == 4 && bufsize == 4);
+	buf[0] = (a >> 0) & 0xFF;
+	buf[1] = (a >> 8) & 0xFF;
+	buf[2] = (a >> 16) & 0xFF;
+	buf[3] = (a >> 24) & 0xFF;
 }
 
 int serv_oid_latest(git_repository *Repository, git_oid *OidLatest) {
@@ -147,6 +163,152 @@ clean:
 		git_odb_object_free(ObjectOid);
 	if (Odb)
 		git_odb_free(Odb);
+
+	return r;
+}
+
+int serv_serialize_trees(git_repository *Repository, std::vector<git_oid> *TreeOid, std::string *oSizeBuffer, std::string *oTreeBuffer) {
+	int r = 0;
+
+	git_odb *Odb = NULL;
+
+	std::vector<git_odb_object *> ObjectTree;
+	std::vector<uint32_t>         ObjectTreeSize;
+	size_t ObjectTreeCumulativeSize = 0;
+	std::string SizeBuffer;
+	std::string TreeBuffer;
+
+	if (!!(r = git_repository_odb(&Odb, Repository)))
+		goto clean;
+
+	ObjectTree.resize(TreeOid->size());
+	for (uint32_t i = 0; i < TreeOid->size(); i++) {
+		if (!!(r == git_odb_read(&ObjectTree[i], Odb, TreeOid->data() + i)))
+			goto clean;
+		if (git_odb_object_type(ObjectTree[i]) != GIT_OBJ_TREE)
+			{ r = 1; goto clean; }
+	}
+
+	ObjectTreeSize.resize(TreeOid->size());
+	for (uint32_t i = 0; i < TreeOid->size(); i++) {
+		ObjectTreeSize[i] = git_odb_object_size(ObjectTree[i]);
+		ObjectTreeCumulativeSize += ObjectTreeSize[i];
+	}
+
+	assert(sizeof(uint32_t) == 4);
+	SizeBuffer.reserve(ObjectTree.size() * sizeof(uint32_t));
+	TreeBuffer.reserve(ObjectTreeCumulativeSize);
+	for (uint32_t i = 0; i < ObjectTree.size(); i++) {
+		char sizebuf[4] ={};
+		aux_uint32_t_LE(ObjectTreeSize[i], sizebuf, 4);
+		SizeBuffer.append(sizebuf,
+			4);
+		TreeBuffer.append(static_cast<const char *>(git_odb_object_data(ObjectTree[i])),
+			ObjectTreeSize[i]);
+	}
+
+	if (oSizeBuffer)
+		oSizeBuffer->swap(SizeBuffer);
+	if (oTreeBuffer)
+		oTreeBuffer->swap(TreeBuffer);
+
+clean:
+	for (uint32_t i = 0; i < ObjectTree.size(); i++)
+		if (ObjectTree[i])
+			git_odb_object_free(ObjectTree[i]);
+
+	if (Odb)
+		git_odb_free(Odb);
+
+	return r;
+}
+
+int clnt_missing_trees(git_repository *RepositoryT, std::vector<git_oid> *Treelist, std::vector<git_oid> *oMissingTreeList) {
+	int r = 0;
+
+	std::vector<git_oid> MissingTree;
+
+	for (uint32_t i = 0; i < Treelist->size(); i++) {
+		git_tree *TmpTree = NULL;
+		int errTree = (r = git_tree_lookup(&TmpTree, RepositoryT, &(*Treelist)[i]));
+		// FIXME: not sure if GIT_ENOUTFOUND counts as official API but reading code, it is throws
+		if (errTree == GIT_ENOTFOUND)
+			MissingTree.push_back((*Treelist)[i]);
+		if (!!r)
+			goto cleansub;
+	cleansub:
+		if (TmpTree)
+			git_tree_free(TmpTree);
+		if (!!r)
+			goto clean;
+	}
+
+	if (oMissingTreeList)
+		oMissingTreeList->swap(MissingTree);
+
+clean:
+
+	return r;
+}
+
+int clnt_missing_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oMissingBlobList) {
+	int r = 0;
+
+	std::vector<git_oid> DeserializedTree;
+
+	git_repository *RepositoryMemory = NULL;
+	git_odb_backend *BackendMemory = NULL;
+	git_odb *RepositoryOdb = NULL;
+
+	/* https://github.com/libgit2/libgit2/blob/master/include/git2/sys/repository.h */
+	if (!!(r = git_repository_new(&RepositoryMemory)))
+		goto clean;
+
+	/* https://github.com/libgit2/libgit2/blob/master/include/git2/sys/mempack.h */
+
+	if (!!(r = git_mempack_new(&BackendMemory)))
+		goto clean;
+
+	if (!!(r = git_repository_odb(&RepositoryOdb, RepositoryMemory)))
+		goto clean;
+
+	if (!!(r = git_odb_add_backend(RepositoryOdb, BackendMemory, 999)))
+		goto clean;
+
+	assert(SizeBuffer->size() == TreeBuffer->size());
+	DeserializedTree.resize(TreeBuffer->size());
+	for (uint32_t idx = 0, i = 0; i < TreeBuffer->size(); idx+=(*SizeBuffer)[i], i++) {
+		git_oid FreshOid ={};
+		/* supposedly git_odb_stream_write recommended */
+		// FIXME: assuming contiguous std::string etc
+		if (!!(r = git_odb_write(&FreshOid, RepositoryOdb, TreeBuffer->data() + idx, (*SizeBuffer)[i], GIT_OBJ_TREE)))
+			goto clean;
+		git_oid_cpy(&DeserializedTree[i], &FreshOid);
+	}
+
+	for (uint32_t i = 0; i < DeserializedTree.size(); i++) {
+		git_tree *TreeMemory = NULL;
+		git_tree *TreeT = NULL;
+		int errM = git_tree_lookup(&TreeMemory, RepositoryMemory, &DeserializedTree[i]);
+		int errT = git_tree_lookup(&TreeT, RepositoryT, &DeserializedTree[i]);
+		if (!!errM)  // we just inserted into memory repository. must be present.
+			{ r = 1; goto clean; }
+		if (errT != GIT_ENOTFOUND)  // must be non-present (missing tree)
+			{ r = 1; goto clean; }
+		assert(errM == 0 && errT == GIT_ENOTFOUND);
+
+		size_t entrycount = git_tree_entrycount(TreeMemory);
+		for (uint32_t i = 0; i < entrycount; i++) {
+			const git_tree_entry *EntryMemory = git_tree_entry_byindex(TreeMemory, i);
+			//git_tree_entry_id()
+			assert(0); // FIXME:
+		}
+	}
+
+clean:
+	// FIXME: afaik other objects are attached and owned by git_repository and destroyed automatically
+	if (RepositoryMemory)
+		git_repository_free(RepositoryMemory);
 
 	return r;
 }
