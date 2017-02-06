@@ -71,7 +71,9 @@ int tree_toposort(git_repository *Repository, git_tree *Tree, topolist_t *oNodeL
 	topolist_t NodeList; /* filled by owned git_tree - must free */
 	if (!!(r = tree_toposort_visit(Repository, &MarkSet, &NodeList, Tree)))
 		goto clean;
-	oNodeList->swap(NodeList);
+	
+	if (oNodeList)
+		oNodeList->swap(NodeList);
 
 clean:
 	if (!!r) {
@@ -82,34 +84,42 @@ clean:
 	return r;
 }
 
-void aux_uint32_to_LE(uint32_t a, char *buf, size_t bufsize) {
+void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize) {
 	assert(sizeof(uint32_t) == 4 && bufsize == 4);
-	buf[0] = (a >> 0) & 0xFF;
-	buf[1] = (a >> 8) & 0xFF;
-	buf[2] = (a >> 16) & 0xFF;
-	buf[3] = (a >> 24) & 0xFF;
+	oBuf[0] = (a >> 0) & 0xFF;
+	oBuf[1] = (a >> 8) & 0xFF;
+	oBuf[2] = (a >> 16) & 0xFF;
+	oBuf[3] = (a >> 24) & 0xFF;
 }
 
-void aux_LE_to_uint32(uint32_t *a, const char *buf, size_t bufsize) {
+void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize) {
 	assert(sizeof(uint32_t) == 4 && bufsize == 4);
 	uint32_t w = 0;
 	w |= (buf[0] & 0xFF) << 0;
 	w |= (buf[1] & 0xFF) << 8;
 	w |= (buf[2] & 0xFF) << 16;
 	w |= (buf[3] & 0xFF) << 24;
-	*a = w;
+	*oA = w;
 }
 
-int serv_oid_latest(git_repository *Repository, git_oid *OidLatest) {
+void aux_topolist_print(const topolist_t &NodeListTopo) {
+	for (topolist_t::const_iterator it = NodeListTopo.begin(); it != NodeListTopo.end(); it++) {
+		char buf[GIT_OID_HEXSZ] = {};
+		git_oid_fmt(buf, git_tree_id(*it));
+		printf("tree [%.*s]\n", sizeof buf, buf);
+	}
+}
+
+int serv_oid_latest(git_repository *Repository, const char *RefName, git_oid *oOidLatest) {
 	int r = 0;
 
-	git_oid OidHead ={};
+	git_oid OidHead = {};
 
-	if (!!(r = git_reference_name_to_id(&OidHead, Repository, "refs/heads/master")))
+	if (!!(r = git_reference_name_to_id(&OidHead, Repository, RefName)))
 		goto clean;
 
-	if (OidLatest)
-		*OidLatest = OidHead;
+	if (oOidLatest)
+		git_oid_cpy(oOidLatest, &OidHead);
 
 clean:
 
@@ -143,8 +153,8 @@ int serv_oid_treelist(git_repository *Repository, git_oid *CommitOid, std::vecto
 	if (!!(r = git_commit_lookup(&Commit, Repository, CommitOid)))
 		goto clean;
 
-	const char *CommitMessage = git_commit_message(Commit);
-	printf("CommitMessage [%s]\n", CommitMessage);
+	//const char *CommitMessage = git_commit_message(Commit);
+	//printf("CommitMessage [%s]\n", CommitMessage);
 
 	if (!!(r = git_commit_tree(&Tree, Commit)))
 		goto clean;
@@ -152,16 +162,10 @@ int serv_oid_treelist(git_repository *Repository, git_oid *CommitOid, std::vecto
 	if (!!(r = tree_toposort(Repository, Tree, &NodeListTopo)))
 		goto clean;
 
-	for (topolist_t::iterator it = NodeListTopo.begin(); it != NodeListTopo.end(); it++) {
-		char buf[GIT_OID_HEXSZ] ={};
-		git_oid_fmt(buf, git_tree_id(*it));
-		printf("tree [%.*s]\n", GIT_OID_HEXSZ, buf);
-	}
-
 	/* output in reverse topological order */
 	Output.resize(NodeListTopo.size());  // FIXME: inefficient list size operation?
 	int OutputIdx = 0;
-	for (topolist_t::reverse_iterator it = NodeListTopo.rbegin(); it != NodeListTopo.rend(); it++, OutputIdx++)
+	for (topolist_t::reverse_iterator it = NodeListTopo.rbegin(); it != NodeListTopo.rend(); OutputIdx++, it++)
 		git_oid_cpy(Output.data() + OutputIdx,  git_tree_id(*it));
 
 	if (oOutput)
@@ -215,7 +219,7 @@ int aux_serialize_objects(
 	SizeBuffer.reserve(Object.size() * sizeof(uint32_t));
 	ObjectBuffer.reserve(ObjectCumulativeSize);
 	for (uint32_t i = 0; i < Object.size(); i++) {
-		char sizebuf[sizeof(uint32_t)] ={};
+		char sizebuf[sizeof(uint32_t)] = {};
 		aux_uint32_to_LE(ObjectSize[i], sizebuf, sizeof sizebuf);
 		SizeBuffer.append(sizebuf,
 			sizeof sizebuf);
@@ -225,6 +229,7 @@ int aux_serialize_objects(
 
 	if (oSizeBuffer)
 		oSizeBuffer->swap(SizeBuffer);
+
 	if (oObjectBuffer)
 		oObjectBuffer->swap(ObjectBuffer);
 
@@ -294,7 +299,7 @@ int aux_deserialize_objects_odb(
 
 	WrittenObjectOid.resize(SizeVector.size());
 	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
-		git_oid FreshOid ={};
+		git_oid FreshOid = {};
 		/* supposedly git_odb_stream_write recommended */
 		// FIXME: assuming contiguous std::string etc
 		if (!!(r = git_odb_write(&FreshOid, OdbT, ObjectBuffer->data() + idx, SizeVector[i], WrittenObjectType)))
@@ -447,10 +452,11 @@ int aux_clnt_dual_lookup_expect_missing(
 
 clean:
 	if (!!r) {
-		if (TreeMem)
-			git_tree_free(TreeMem);
 		if (TreeT)
 			git_tree_free(TreeT);
+
+		if (TreeMem)
+			git_tree_free(TreeMem);
 	}
 
 	return r;
@@ -467,7 +473,7 @@ int clnt_missing_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std
 	git_odb *RepositoryMemoryOdb = NULL;
 	git_odb *RepositoryTOdb = NULL;
 
-	git_oid OidZero ={};
+	git_oid OidZero = {};
 	assert(git_oid_iszero(&OidZero));
 
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
@@ -527,23 +533,51 @@ clean:
 	return r;
 }
 
-int clnt_commit_dummy(git_repository *RepositoryT, const char *CommitRefName, git_oid *TreeOid) {
+int aux_commit_buffer_checkexist_dummy(git_odb *OdbT, git_buf *CommitBuf, uint32_t *oExists, git_oid *oCommitOid) {
+	int r = 0;
+
+	git_oid CommitOid = {};
+
+	if (!!(r = git_odb_hash(&CommitOid, CommitBuf->ptr, CommitBuf->size, GIT_OBJ_COMMIT)))
+		goto clean;
+
+	uint32_t Exists = git_odb_exists(OdbT, &CommitOid);
+
+	if (oExists)
+		*oExists = Exists;
+
+	if (oCommitOid)
+		git_oid_cpy(oCommitOid, &CommitOid);
+
+clean:
+
+	return r;
+}
+
+int aux_commit_buffer_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_buf *oCommitBuf) {
 	int r = 0;
 
 	git_tree *Tree = NULL;
 	git_signature *Signature = NULL;
-	git_oid CommitOid ={};
+	git_buf CommitBuf = {};
 
 	if (!!(r = git_tree_lookup(&Tree, RepositoryT, TreeOid)))
 		goto clean;
 
 	if (!!(r = git_signature_new(&Signature, "DummyName", "DummyEMail", 0, 0)))
 		goto clean;
-
-	if (!!(r = git_commit_create(&CommitOid, RepositoryT, CommitRefName, Signature, Signature, "UTF-8", "Dummy", Tree, 0, NULL)))
+	
+	if (!!(r = git_commit_create_buffer(&CommitBuf, RepositoryT, Signature, Signature, "UTF-8", "Dummy", Tree, 0, NULL)))
 		goto clean;
 
+	if (oCommitBuf)
+		*oCommitBuf = CommitBuf;
+
 clean:
+	if (!!r) {
+		git_buf_free(&CommitBuf);
+	}
+
 	if (Signature)
 		git_signature_free(Signature);
 
@@ -553,16 +587,88 @@ clean:
 	return r;
 }
 
+int aux_commit_commit_dummy(git_odb *OdbT, git_buf *CommitBuf, git_oid *oCommitOid) {
+	int r = 0;
+
+	git_oid CommitOid = {};
+
+	if (!!(r = git_odb_write(&CommitOid, OdbT, CommitBuf->ptr, CommitBuf->size, GIT_OBJ_COMMIT)))
+		goto clean;
+
+	if (oCommitOid)
+		git_oid_cpy(oCommitOid, &CommitOid);
+
+clean:
+
+	return r;
+}
+
+int clnt_commit_ensure_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_oid *oCommitOid) {
+	int r = 0;
+
+	git_odb *OdbT = NULL;
+	git_buf CommitBuf = {};
+	uint32_t Exists = 0;
+	git_oid CommitOid = {};
+
+	if (!!(r = git_repository_odb(&OdbT, RepositoryT)))
+		goto clean;
+
+	if (!!(r = aux_commit_buffer_dummy(RepositoryT, TreeOid, &CommitBuf)))
+		goto clean;
+
+	if (!!(r = aux_commit_buffer_checkexist_dummy(OdbT, &CommitBuf, &Exists, &CommitOid)))
+		goto clean;
+
+	if (!Exists) {
+		if (!!(r = aux_commit_commit_dummy(OdbT, &CommitBuf, &CommitOid)))
+			goto clean;
+	}
+
+	if (oCommitOid)
+		git_oid_cpy(oCommitOid, &CommitOid);
+
+clean:
+	git_buf_free(&CommitBuf);
+
+	if (OdbT)
+		git_odb_free(OdbT);
+
+	return r;
+}
+
+int clnt_commit_setref(git_repository *RepositoryT, const char *RefName, git_oid *CommitOid) {
+	int r = 0;
+
+	git_reference *Reference = NULL;
+
+	const char DummyLogMessage[] = "DummyLogMessage";
+
+	int errC = git_reference_create(&Reference, RepositoryT, RefName, CommitOid, true, DummyLogMessage);
+	if (!!errC && errC != GIT_EEXISTS)
+		{ r = errC; goto clean; }
+	assert(errC == 0 || errC == GIT_EEXISTS);
+	/* if we are forcing creation (force=true), existing reference is fine and will be overwritten */
+
+clean:
+	if (Reference)
+		git_reference_free(Reference);
+
+	return r;
+}
+
 int stuff() {
 	int r = 0;
 
-	git_buf RepoPath ={};
+	const char *RefName = "refs/heads/master";
+
+	git_buf RepoPath = {};
 	git_repository *Repository = NULL;
 	git_repository *RepositoryT = NULL;
-	git_oid OidHeadT ={};
-	git_oid OidLatest ={};
+	git_oid OidHeadT = {};
+	git_oid OidLatest = {};
 
-	git_oid OidZero ={};
+	git_oid OidZero = {};
 	assert(git_oid_iszero(&OidZero));
 
 	std::vector<git_oid> Treelist;
@@ -579,6 +685,9 @@ int stuff() {
 	std::vector<git_oid> WrittenTree;
 	std::vector<git_oid> WrittenBlob;
 
+	git_oid LastReverseToposortAkaFirstToposort = {};
+	git_oid CreatedCommitOid = {};
+
 	if (!!(r = git_repository_discover(&RepoPath, ".", 0, NULL)))
 		goto clean;
 	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
@@ -586,16 +695,16 @@ int stuff() {
 	if (!!(r = git_repository_open(&RepositoryT, "../data/repo0/.git")))
 		goto clean;
 
-	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, "refs/heads/master");
+	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, RefName);
 	assert(errNameToOidT == 0 || errNameToOidT == GIT_ENOTFOUND);
 	if (errNameToOidT == GIT_ENOTFOUND)
 		git_oid_cpy(&OidHeadT, &OidZero);
 
-	if (!!(r = serv_oid_latest(Repository, &OidLatest)))
+	if (!!(r = serv_oid_latest(Repository, RefName, &OidLatest)))
 		goto clean;
 
 	if (git_oid_cmp(&OidHeadT, &OidLatest) == 0) {
-		char buf[GIT_OID_HEXSZ] ={};
+		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &OidLatest);
 		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
 		goto clean;
@@ -622,12 +731,12 @@ int stuff() {
 	if (!!(r = clnt_deserialize_blobs(RepositoryT, &SizeBufferBlob, &ObjectBufferBlob, &WrittenBlob)))
 		goto clean;
 
-	if (! MissingTreelist.empty()) {
-		git_oid LastReverseToposortAkaFirstToposort ={};
-		git_oid_cpy(&LastReverseToposortAkaFirstToposort, &MissingTreelist[MissingTreelist.size() - 1]);
-		if (!!(r = clnt_commit_dummy(RepositoryT, "refs/heads/master", &LastReverseToposortAkaFirstToposort)))
-			goto clean;
-	}
+	assert(!Treelist.empty());
+	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
+	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
+		goto clean;
+	if (!!(r = clnt_commit_setref(RepositoryT, RefName, &CreatedCommitOid)))
+		goto clean;
 
 clean:
 	if (RepositoryT)
