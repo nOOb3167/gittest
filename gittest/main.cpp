@@ -15,6 +15,8 @@
 /*
 = git init =
 fresh repositories have no "refs/heads/master" ref
+= resetting the git repo (nuke loose objects but packs remain) =
+git gc --prune=all
 */
 
 struct oid_comparator_t {
@@ -245,6 +247,107 @@ int serv_serialize_blobs(git_repository *Repository, std::vector<git_oid> *BlobO
 	return aux_serialize_objects(Repository, BlobOid, GIT_OBJ_BLOB, oSizeBuffer, oBlobBuffer);
 }
 
+int aux_deserialize_sizebuffer(std::string *SizeBuffer, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize) {
+	int r = 0;
+
+	std::vector<uint32_t> SizeVector;
+	size_t CumulativeSize = 0;
+
+	assert(sizeof(uint32_t) == 4);
+	if (SizeBuffer->size() % 4 != 0)
+	{
+		r = 1; goto clean;
+	}
+
+	uint32_t NumBuffer = (uint32_t)(SizeBuffer->size() / sizeof(uint32_t));
+
+	SizeVector.resize(NumBuffer);
+	for (uint32_t i = 0; i < NumBuffer; i++) {
+		aux_LE_to_uint32(&SizeVector[i], SizeBuffer->data() + i * sizeof(uint32_t), 4);
+		CumulativeSize += SizeVector[i];
+	}
+
+	if (oSizeVector)
+		oSizeVector->swap(SizeVector);
+	if (oCumulativeSize)
+		*oCumulativeSize = CumulativeSize;
+
+clean:
+
+	return r;
+}
+
+int aux_deserialize_objects_odb(
+	git_odb *OdbT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
+	std::vector<git_oid> *oWrittenObjectOid)
+{
+	int r = 0;
+
+	std::vector<git_oid> WrittenObjectOid;
+	std::vector<uint32_t> SizeVector;
+	size_t CumulativeSize = 0;
+
+	if (!!(r = aux_deserialize_sizebuffer(SizeBuffer, &SizeVector, &CumulativeSize)))
+		goto clean;
+
+	assert(ObjectBuffer->size() == CumulativeSize);
+
+	WrittenObjectOid.resize(SizeVector.size());
+	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
+		git_oid FreshOid ={};
+		/* supposedly git_odb_stream_write recommended */
+		// FIXME: assuming contiguous std::string etc
+		if (!!(r = git_odb_write(&FreshOid, OdbT, ObjectBuffer->data() + idx, SizeVector[i], WrittenObjectType)))
+			goto clean;
+		git_oid_cpy(&WrittenObjectOid[i], &FreshOid);
+	}
+
+	if (oWrittenObjectOid)
+		oWrittenObjectOid->swap(WrittenObjectOid);
+
+clean:
+
+	return r;
+}
+
+int aux_deserialize_objects(
+	git_repository *RepositoryT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
+	std::vector<git_oid> *oWrittenObjectOid)
+{
+	int r = 0;
+
+	git_odb *OdbT = NULL;
+
+	std::vector<git_oid> WrittenObjectOid;
+
+	if (!!(r = git_repository_odb(&OdbT, RepositoryT)))
+		goto clean;
+
+	if (!!(r = aux_deserialize_objects_odb(OdbT, SizeBuffer, ObjectBuffer, WrittenObjectType, &WrittenObjectOid)))
+		goto clean;
+
+	if (oWrittenObjectOid)
+		oWrittenObjectOid->swap(WrittenObjectOid);
+
+clean:
+	if (OdbT)
+		git_odb_free(OdbT);
+
+	return r;
+}
+
+int aux_clnt_deserialize_trees(git_odb *OdbT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree) {
+	return aux_deserialize_objects_odb(OdbT, SizeBuffer, TreeBuffer, GIT_OBJ_TREE, oDeserializedTree);
+}
+
+int clnt_deserialize_trees(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree) {
+	return aux_deserialize_objects(RepositoryT, SizeBuffer, TreeBuffer, GIT_OBJ_TREE, oDeserializedTree);
+}
+
+int clnt_deserialize_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *BlobBuffer, std::vector<git_oid> *oDeserializedBlob) {
+	return aux_deserialize_objects(RepositoryT, SizeBuffer, BlobBuffer, GIT_OBJ_BLOB, oDeserializedBlob);
+}
+
 int clnt_missing_trees(git_repository *RepositoryT, std::vector<git_oid> *Treelist, std::vector<git_oid> *oMissingTreeList) {
 	int r = 0;
 
@@ -309,64 +412,6 @@ clean:
 		if (RepositoryMemory)
 			git_repository_free(RepositoryMemory);
 	}
-
-	return r;
-}
-
-int aux_deserialize_sizebuffer(std::string *SizeBuffer, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize) {
-	int r = 0;
-
-	std::vector<uint32_t> SizeVector;
-	size_t CumulativeSize = 0;
-
-	assert(sizeof(uint32_t) == 4);
-	if (SizeBuffer->size() % 4 != 0)
-		{ r = 1; goto clean; }
-
-	uint32_t NumBuffer = (uint32_t)(SizeBuffer->size() / sizeof(uint32_t));
-
-	SizeVector.resize(NumBuffer);
-	for (uint32_t i = 0; i < NumBuffer; i++) {
-		aux_LE_to_uint32(&SizeVector[i], SizeBuffer->data() + i * sizeof(uint32_t), 4);
-		CumulativeSize += SizeVector[i];
-	}
-
-	if (oSizeVector)
-		oSizeVector->swap(SizeVector);
-	if (oCumulativeSize)
-		*oCumulativeSize = CumulativeSize;
-
-clean:
-
-	return r;
-}
-
-int aux_clnt_deserialize_trees(git_odb *RepositoryOdb, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree) {
-	int r = 0;
-
-	std::vector<git_oid> DeserializedTree;
-	std::vector<uint32_t> SizeVector;
-	size_t CumulativeSize = 0;
-
-	if (!!(r = aux_deserialize_sizebuffer(SizeBuffer, &SizeVector, &CumulativeSize)))
-		goto clean;
-
-	assert(TreeBuffer->size() == CumulativeSize);
-
-	DeserializedTree.resize(SizeVector.size());
-	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
-		git_oid FreshOid ={};
-		/* supposedly git_odb_stream_write recommended */
-		// FIXME: assuming contiguous std::string etc
-		if (!!(r = git_odb_write(&FreshOid, RepositoryOdb, TreeBuffer->data() + idx, SizeVector[i], GIT_OBJ_TREE)))
-			goto clean;
-		git_oid_cpy(&DeserializedTree[i], &FreshOid);
-	}
-
-	if (oDeserializedTree)
-		oDeserializedTree->swap(DeserializedTree);
-
-clean:
 
 	return r;
 }
@@ -482,13 +527,38 @@ clean:
 	return r;
 }
 
+int clnt_commit_dummy(git_repository *RepositoryT, const char *CommitRefName, git_oid *TreeOid) {
+	int r = 0;
+
+	git_tree *Tree = NULL;
+	git_signature *Signature = NULL;
+	git_oid CommitOid ={};
+
+	if (!!(r = git_tree_lookup(&Tree, RepositoryT, TreeOid)))
+		goto clean;
+
+	if (!!(r = git_signature_new(&Signature, "DummyName", "DummyEMail", 0, 0)))
+		goto clean;
+
+	if (!!(r = git_commit_create(&CommitOid, RepositoryT, CommitRefName, Signature, Signature, "UTF-8", "Dummy", Tree, 0, NULL)))
+		goto clean;
+
+clean:
+	if (Signature)
+		git_signature_free(Signature);
+
+	if (Tree)
+		git_tree_free(Tree);
+
+	return r;
+}
+
 int stuff() {
 	int r = 0;
 
 	git_buf RepoPath ={};
 	git_repository *Repository = NULL;
 	git_repository *RepositoryT = NULL;
-	git_odb *Odb = NULL;
 	git_oid OidHeadT ={};
 	git_oid OidLatest ={};
 
@@ -503,14 +573,17 @@ int stuff() {
 
 	std::vector<git_oid> MissingBloblist;
 
+	std::string SizeBufferBlob;
+	std::string ObjectBufferBlob;
+
+	std::vector<git_oid> WrittenTree;
+	std::vector<git_oid> WrittenBlob;
+
 	if (!!(r = git_repository_discover(&RepoPath, ".", 0, NULL)))
 		goto clean;
 	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
 		goto clean;
 	if (!!(r = git_repository_open(&RepositoryT, "../data/repo0/.git")))
-		goto clean;
-
-	if (!!(r = git_repository_odb(&Odb, Repository)))
 		goto clean;
 
 	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, "refs/heads/master");
@@ -540,9 +613,23 @@ int stuff() {
 	if (!!(r = clnt_missing_blobs(RepositoryT, &SizeBufferTree, &ObjectBufferTree, &MissingBloblist)))
 		goto clean;
 
+	if (!!(r = serv_serialize_blobs(Repository, &MissingBloblist, &SizeBufferBlob, &ObjectBufferBlob)))
+		goto clean;
+
+	if (!!(r = clnt_deserialize_trees(RepositoryT, &SizeBufferTree, &ObjectBufferTree, &WrittenTree)))
+		goto clean;
+
+	if (!!(r = clnt_deserialize_blobs(RepositoryT, &SizeBufferBlob, &ObjectBufferBlob, &WrittenBlob)))
+		goto clean;
+
+	if (! MissingTreelist.empty()) {
+		git_oid LastReverseToposortAkaFirstToposort ={};
+		git_oid_cpy(&LastReverseToposortAkaFirstToposort, &MissingTreelist[MissingTreelist.size() - 1]);
+		if (!!(r = clnt_commit_dummy(RepositoryT, "refs/heads/master", &LastReverseToposortAkaFirstToposort)))
+			goto clean;
+	}
+
 clean:
-	if (Odb)
-		git_odb_free(Odb);
 	if (RepositoryT)
 		git_repository_free(RepositoryT);
 	if (Repository)
