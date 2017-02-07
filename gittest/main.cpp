@@ -4,9 +4,11 @@
 #include <cstdint>
 
 #include <vector>
+#include <map>
 #include <set>
 #include <list>
 #include <utility>
+#include <sstream>
 
 #include <git2.h>
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
@@ -24,6 +26,8 @@ struct oid_comparator_t {
 		return git_oid_cmp(a, b) < 0;
 	}
 };
+
+typedef ::std::map<::std::string, ::std::string> confmap_t;
 
 typedef ::std::set<const git_oid *, oid_comparator_t> toposet_t;
 typedef ::std::list<git_tree *> topolist_t;
@@ -82,6 +86,87 @@ clean:
 	}
 
 	return r;
+}
+
+int aux_gittest_init() {
+	git_libgit2_init();
+	return 0;
+}
+
+int aux_config_read(const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal) {
+	int r = 0;
+
+	std::map<std::string, std::string> KeyVal;
+
+	const char newline = '\n';
+	const char equals  = '=';
+	const char hdr_nulterm_expected[] = "GITTEST_CONF";
+	const size_t hdr_raw_size = sizeof(hdr_nulterm_expected) - 1;
+
+	const size_t ArbitraryBufferSize = 4096;
+	char buf[ArbitraryBufferSize];
+
+	std::stringstream locationss;
+	std::string retbuffer;
+	
+	FILE *f = NULL;
+
+
+	locationss << ExpectedLocation << "/" << ExpectedName;
+
+	if (!(f = fopen(locationss.str().c_str(), "rb")))
+		{ r = 1; goto clean; }
+
+	size_t ret = 0;
+	while ((ret = fread(buf, 1, ArbitraryBufferSize, f)) > 0)
+		retbuffer.append(buf, ret);
+
+	if (ferror(f) || !feof(f))
+		{ r = 1; goto clean; }
+
+	/* hdr_raw_size of ASCII letters and 1 of NEWLINE */
+	if (retbuffer.size() < hdr_raw_size + 1)
+		{ r = 2; goto clean; }
+	// FIXME: relying on string data() contiguity
+	if (memcmp(hdr_nulterm_expected, retbuffer.data(), hdr_raw_size) != 0)
+		{ r = 2; goto clean; }
+	if (retbuffer.at(hdr_raw_size) != newline)
+		{ r = 2; goto clean; }
+
+	size_t idx = hdr_raw_size + 1;
+	while (idx < retbuffer.size()) {
+		size_t newlinepos = retbuffer.npos;
+		if ((newlinepos = retbuffer.find_first_of(newline, idx)) == retbuffer.npos)
+			{ r = 3; goto clean; }
+		
+		std::string line(retbuffer.data() + idx, retbuffer.data() + newlinepos);
+		size_t equalspos = line.npos;
+		if ((equalspos = line.find_first_of(equals, 0)) == line.npos)
+			{ r = 3; goto clean; }
+		std::string key(line.data() + 0, line.data() + equalspos);
+		std::string val(line.data() + equalspos + 1, line.data() + line.size());
+
+		KeyVal[key] = val;
+
+		idx = newlinepos + 1;
+	}
+
+	if (oKeyVal)
+		oKeyVal->swap(KeyVal);
+
+clean:
+	if (f)
+		fclose(f);
+
+	return r;
+}
+
+/* returned value scoped not even to map lifetime - becomes invalid on map modification so do not do that */
+const char * aux_config_key(const confmap_t &KeyVal, const char *Key) {
+	const confmap_t::const_iterator &it = KeyVal.find(Key);
+	if (it != KeyVal.end())
+		return it->second.c_str();
+	return NULL;
 }
 
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize) {
@@ -657,10 +742,12 @@ clean:
 	return r;
 }
 
-int stuff() {
+int stuff(const confmap_t &KeyVal) {
 	int r = 0;
 
-	const char *RefName = "refs/heads/master";
+	const char *ConfRefName = aux_config_key(KeyVal, "RefName");
+	const char *ConfRepoDiscoverPath = aux_config_key(KeyVal, "ConfRepoDiscoverPath");
+	const char *ConfRepoTOpenPath = aux_config_key(KeyVal, "ConfRepoTOpenPath");
 
 	git_buf RepoPath = {};
 	git_repository *Repository = NULL;
@@ -688,19 +775,22 @@ int stuff() {
 	git_oid LastReverseToposortAkaFirstToposort = {};
 	git_oid CreatedCommitOid = {};
 
-	if (!!(r = git_repository_discover(&RepoPath, ".", 0, NULL)))
+	if (!ConfRefName || !ConfRepoDiscoverPath || !ConfRepoTOpenPath)
+		{ r = 1; goto clean; }
+
+	if (!!(r = git_repository_discover(&RepoPath, ConfRepoDiscoverPath, 0, NULL)))
 		goto clean;
 	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
 		goto clean;
-	if (!!(r = git_repository_open(&RepositoryT, "../data/repo0/.git")))
+	if (!!(r = git_repository_open(&RepositoryT, ConfRepoTOpenPath)))
 		goto clean;
 
-	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, RefName);
+	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, ConfRefName);
 	assert(errNameToOidT == 0 || errNameToOidT == GIT_ENOTFOUND);
 	if (errNameToOidT == GIT_ENOTFOUND)
 		git_oid_cpy(&OidHeadT, &OidZero);
 
-	if (!!(r = serv_oid_latest(Repository, RefName, &OidLatest)))
+	if (!!(r = serv_oid_latest(Repository, ConfRefName, &OidLatest)))
 		goto clean;
 
 	if (git_oid_cmp(&OidHeadT, &OidLatest) == 0) {
@@ -735,7 +825,7 @@ int stuff() {
 	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
 	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
 		goto clean;
-	if (!!(r = clnt_commit_setref(RepositoryT, RefName, &CreatedCommitOid)))
+	if (!!(r = clnt_commit_setref(RepositoryT, ConfRefName, &CreatedCommitOid)))
 		goto clean;
 
 clean:
@@ -748,11 +838,22 @@ clean:
 }
 
 int main(int argc, char **argv) {
+	int r = 0;
 
-	git_libgit2_init();
+	confmap_t KeyVal;
 
-	int r = stuff();
-	assert(!r);
+	if (!!(r = aux_gittest_init()))
+		goto clean;
+
+	if (!!(r = aux_config_read("../data/", "gittest_config.conf", &KeyVal)))
+		goto clean;
+
+	if (!!(r = stuff(KeyVal)))
+		goto clean;
+
+clean:
+	if (!!r)
+		assert(!r);
 
 	return EXIT_SUCCESS;
 }
