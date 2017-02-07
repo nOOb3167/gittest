@@ -1,10 +1,143 @@
 #include <cstdlib>
 #include <cassert>
+#include <cstdio>
+
+#include <memory>
+#include <thread>
 
 #include <enet/enet.h>
 
+#define GS_PORT 3756
+
+#define GS_ERR_CLEAN(THE_R) { r = (THE_R); goto clean; }
+
+template<typename T>
+using sp = ::std::shared_ptr<T>;
+
+int serv_thread_func() {
+	int r = 0;
+
+	ENetAddress address;
+	ENetHost * server = NULL;
+	ENetEvent event;
+
+	address.host = ENET_HOST_ANY;
+	address.port = GS_PORT;
+
+	if (!(server = enet_host_create(& address, 32, 1, 0, 0)))
+		GS_ERR_CLEAN(1);
+
+	while (true) {
+		int retcode = 0;
+		if ((retcode = enet_host_service(server, &event, 1000)) < 0)
+			GS_ERR_CLEAN(1);
+		assert(retcode >= 0);
+		if (retcode == 0)
+			continue;
+
+		switch (event.type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+			printf("A new client connected from %x:%u.\n",
+				event.peer->address.host,
+				event.peer->address.port);
+			event.peer->data = "Client information";
+			break;
+		case ENET_EVENT_TYPE_RECEIVE:
+			printf("A packet of length %lu containing %.*s was received from %s on channel %u.\n",
+				(unsigned long)event.packet->dataLength,
+				(int)event.packet->dataLength, event.packet->data,
+				event.peer->data,
+				event.channelID);
+			enet_packet_destroy(event.packet);
+			break;
+		case ENET_EVENT_TYPE_DISCONNECT:
+			printf("%s disconnected.\n", event.peer->data);
+			event.peer->data = NULL;
+		}
+	}
+
+clean:
+	if (server)
+		enet_host_destroy(server);
+
+	return r;
+}
+
+int clnt_thread_func() {
+	int r = 0;
+
+	ENetHost *client = NULL;
+	ENetAddress address;
+	ENetEvent event;
+	ENetPeer *peer = NULL;
+	ENetPacket *packet = NULL;
+
+	if (!(client = enet_host_create(NULL, 1, 1, 0, 0)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = enet_address_set_host(&address, "localhost")))
+		GS_ERR_CLEAN(1);
+	address.port = GS_PORT;
+
+	if (!(peer = enet_host_connect(client, &address, 1, 0)))
+		GS_ERR_CLEAN(1);
+
+	int retcode = 0;
+	if ((retcode = enet_host_service(client, &event, 5000)) < 0)
+		GS_ERR_CLEAN(1);
+	assert(retcode >= 0);
+	if (retcode == 0)
+		GS_ERR_CLEAN(2);
+	if (event.type != ENET_EVENT_TYPE_CONNECT)
+		GS_ERR_CLEAN(3);
+
+	printf("Client connection succeeded.\n");
+
+	if (!(packet = enet_packet_create("packet", strlen("packet") + 1, ENET_PACKET_FLAG_RELIABLE)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = enet_peer_send(peer, 0, packet)))
+		goto clean;
+	packet = NULL;  /* lost ownership after enet_peer_send */
+
+	enet_host_flush(client);
+
+clean:
+	if (packet)
+		enet_packet_destroy(packet);
+
+	if (peer)
+		enet_peer_reset(peer);
+
+	if (client)
+		enet_host_destroy(client);
+
+	return r;
+}
+
+void serv_thread_func_f() {
+	int r = 0;
+	if (!!(r = serv_thread_func()))
+		assert(0);
+	for (;;) {}
+}
+
+void clnt_thread_func_f() {
+	int r = 0;
+	if (!!(r = clnt_thread_func()))
+		assert(0);
+	for (;;) {}
+}
+
 int stuff() {
 	int r = 0;
+
+	sp<std::thread> ServerThread(new std::thread(serv_thread_func_f));
+	sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f));
+
+	ServerThread->join();
+	ClientThread->join();
 
 clean:
 
@@ -12,11 +145,13 @@ clean:
 }
 
 int main(int argc, char **argv) {
+	int r = 0;
 
-	enet_initialize();
+	if (!!(r = enet_initialize()))
+		assert(0);
 
-	int r = stuff();
-	assert(!r);
+	if (!!(r = stuff()))
+		assert(0);
 
 	return EXIT_SUCCESS;
 }
