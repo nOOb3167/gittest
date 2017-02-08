@@ -4,6 +4,10 @@
 
 #include <memory>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <deque>
 
 #include <enet/enet.h>
 #include <git2.h>
@@ -16,6 +20,89 @@
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
+
+class ServWorkerRequestData {};
+
+class ServWorkerData {
+public:
+	ServWorkerData()
+		: mWorkerQueue(new std::deque<sp<ServWorkerRequestData> >),
+		mWorkerDataMutex(new std::mutex),
+		mWorkerDataCond(new std::condition_variable)
+	{}
+
+	void RequestEnqueue(sp<ServWorkerRequestData> RequestData);
+	void RequestDequeue(sp<ServWorkerRequestData> *oRequestData);
+
+private:
+	sp<std::deque<sp<ServWorkerRequestData> > > mWorkerQueue;
+	sp<std::mutex> mWorkerDataMutex;
+	sp<std::condition_variable> mWorkerDataCond;
+};
+
+void ServWorkerData::RequestEnqueue(sp<ServWorkerRequestData> RequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		mWorkerQueue->push_back(RequestData);
+	}
+	mWorkerDataCond->notify_one();
+}
+
+void ServWorkerData::RequestDequeue(sp<ServWorkerRequestData> *oRequestData) {
+	sp<ServWorkerRequestData> RequestData;
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		mWorkerDataCond->wait(lock, [&]() { return !mWorkerQueue->empty(); });
+		assert(! mWorkerQueue->empty());
+		RequestData = mWorkerQueue->front();
+		mWorkerQueue->pop_front();
+	}
+	if (oRequestData)
+		oRequestData->swap(RequestData);
+}
+
+class ServAuxData {
+public:
+	ServAuxData()
+		: mInterruptRequested(0),
+		mAuxDataMutex(new std::mutex),
+		mAuxDataCond(new std::condition_variable)
+	{}
+
+	void InterruptRequestedEnqueue();
+	bool InterruptRequestedDequeueTimeout(const std::chrono::milliseconds &WaitForMillis);
+
+private:
+	int mInterruptRequested;
+	sp<std::mutex> mAuxDataMutex;
+	sp<std::condition_variable> mAuxDataCond;
+};
+
+void ServAuxData::InterruptRequestedEnqueue() {
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		mInterruptRequested = true;
+	}
+	mAuxDataCond->notify_one();
+}
+
+bool ServAuxData::InterruptRequestedDequeueTimeout(const std::chrono::milliseconds &WaitForMillis) {
+	bool IsPredicateTrue = false;
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		IsPredicateTrue = mAuxDataCond->wait_for(lock, WaitForMillis, [&]() { return !!mInterruptRequested; });
+		assert(mInterruptRequested);
+	}
+	return IsPredicateTrue;
+}
+
+int serv_worker_thread_func() {
+	int r = 0;
+
+clean:
+
+	return r;
+}
 
 int serv_aux_thread_func() {
 	int r = 0;
@@ -166,21 +253,28 @@ clean:
 	return r;
 }
 
-void serv_aux_thread_func_f() {
+void serv_worker_thread_func_f(confmap_t *ServKeyVal, sp<ServWorkerData> ServWorkerData) {
+	int r = 0;
+	if (!!(r = serv_worker_thread_func()))
+		assert(0);
+	for (;;) {}
+}
+
+void serv_aux_thread_func_f(confmap_t *ServKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 	if (!!(r = serv_aux_thread_func()))
 		assert(0);
 	for (;;) {}
 }
 
-void serv_thread_func_f() {
+void serv_thread_func_f(confmap_t *ServKeyVal) {
 	int r = 0;
 	if (!!(r = serv_thread_func()))
 		assert(0);
 	for (;;) {}
 }
 
-void clnt_thread_func_f() {
+void clnt_thread_func_f(confmap_t *ClntKeyVal) {
 	int r = 0;
 	if (!!(r = clnt_thread_func()))
 		assert(0);
@@ -190,12 +284,27 @@ void clnt_thread_func_f() {
 int stuff() {
 	int r = 0;
 
-	sp<std::thread> ServerAuxThread(new std::thread(serv_aux_thread_func_f));
-	sp<std::thread> ServerThread(new std::thread(serv_thread_func_f));
-	sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f));
+	confmap_t ServKeyVal;
+	confmap_t ClntKeyVal;
 
-	ServerThread->join();
-	ClientThread->join();
+	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &ServKeyVal)))
+		goto clean;
+	ClntKeyVal = ServKeyVal;
+
+	{
+		sp<ServWorkerData> ServWorkerData(new ServWorkerData);
+		sp<ServAuxData> ServAuxData(new ServAuxData);
+
+		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, &ServKeyVal, ServWorkerData));
+		sp<std::thread> ServerAuxThread(new std::thread(serv_aux_thread_func_f, &ServKeyVal, ServAuxData));
+		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, &ServKeyVal));
+		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, &ClntKeyVal));
+
+		ServerThread->join();
+		ClientThread->join();
+	}
+
+clean:
 
 	return r;
 }
