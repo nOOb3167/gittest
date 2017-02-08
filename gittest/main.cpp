@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif /* _MSC_VER */
+
 #include <cstdlib>
 #include <cassert>
 #include <cstdio>
@@ -7,6 +11,7 @@
 #include <map>
 #include <set>
 #include <list>
+#include <string>
 #include <utility>
 #include <sstream>
 
@@ -14,23 +19,14 @@
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
 #include <git2/sys/mempack.h>     /* in-memory backend */
 
+#include <gittest.h>
+
 /*
 = git init =
 fresh repositories have no "refs/heads/master" ref
 = resetting the git repo (nuke loose objects but packs remain) =
 git gc --prune=all
 */
-
-struct oid_comparator_t {
-	bool operator()(const git_oid * const &a, const git_oid * const &b) {
-		return git_oid_cmp(a, b) < 0;
-	}
-};
-
-typedef ::std::map<::std::string, ::std::string> confmap_t;
-
-typedef ::std::set<const git_oid *, oid_comparator_t> toposet_t;
-typedef ::std::list<git_tree *> topolist_t;
 
 /* takes ownership of 'Tree' on success (list responsible for disposal) */
 int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist_t *NodeList, git_tree *Tree) {
@@ -911,7 +907,7 @@ clean:
 	return r;
 }
 
-int main(int argc, char **argv) {
+int gittest_main(int argc, char **argv) {
 	int r = 0;
 
 	confmap_t KeyVal;

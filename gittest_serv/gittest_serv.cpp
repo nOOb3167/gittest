@@ -6,6 +6,9 @@
 #include <thread>
 
 #include <enet/enet.h>
+#include <git2.h>
+
+#include <gittest.h>
 
 #define GS_PORT 3756
 
@@ -200,11 +203,19 @@ int stuff() {
 int main(int argc, char **argv) {
 	int r = 0;
 
+	if (!!(r = aux_gittest_init()))
+		goto clean;
+
 	if (!!(r = enet_initialize()))
-		assert(0);
+		goto clean;
 
 	if (!!(r = stuff()))
+		goto clean;
+
+clean:
+	if (!!r) {
 		assert(0);
+	}
 
 	return EXIT_SUCCESS;
 }
