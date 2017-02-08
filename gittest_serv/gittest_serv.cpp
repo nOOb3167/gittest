@@ -281,7 +281,7 @@ void clnt_thread_func_f(confmap_t *ClntKeyVal) {
 	for (;;) {}
 }
 
-int stuff() {
+int stuff2() {
 	int r = 0;
 
 	confmap_t ServKeyVal;
@@ -318,7 +318,7 @@ int main(int argc, char **argv) {
 	if (!!(r = enet_initialize()))
 		goto clean;
 
-	if (!!(r = stuff()))
+	if (!!(r = stuff2()))
 		goto clean;
 
 clean:
