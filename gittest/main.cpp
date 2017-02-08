@@ -195,53 +195,92 @@ void aux_topolist_print(const topolist_t &NodeListTopo) {
 	}
 }
 
-int serv_oid_latest(git_repository *Repository, const char *RefName, git_oid *oOidLatest) {
+int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid) {
+	/* return value GIT_ENOTFOUND is part of the API for this function */
+
 	int r = 0;
 
-	git_oid OidHead = {};
+	git_oid CommitHeadOid = {};
+	git_commit *CommitHead = NULL;
+	git_tree *TreeHead = NULL;
 
-	if (!!(r = git_reference_name_to_id(&OidHead, Repository, RefName)))
+	if (!!(r = git_reference_name_to_id(&CommitHeadOid, Repository, RefName)))
 		goto clean;
 
-	if (oOidLatest)
-		git_oid_cpy(oOidLatest, &OidHead);
+	// FIXME: not sure if GIT_ENOTFOUND return counts as official API for git_commit_lookup
+	int errC = git_commit_lookup(&CommitHead, Repository, &CommitHeadOid);
+	if (!!errC && errC != GIT_ENOTFOUND)
+		{ r = errC; goto clean; }
+
+	if (!!(r = git_commit_tree(&TreeHead, CommitHead)))
+		goto clean;
+
+	{
+		const git_oid *TreeHeadOid = git_tree_id(TreeHead);
+
+		if (oCommitHeadOid)
+			git_oid_cpy(oCommitHeadOid, &CommitHeadOid);
+
+		if (oTreeHeadOid)
+			git_oid_cpy(oTreeHeadOid, TreeHeadOid);
+	}
+
+clean:
+	if (TreeHead)
+		git_tree_free(TreeHead);
+
+	if (CommitHead)
+		git_commit_free(CommitHead);
+
+	return r;
+}
+
+int serv_latest_commit_tree_oid(git_repository *Repository, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid) {
+	return aux_oid_latest_commit_tree(Repository, RefName, oCommitHeadOid, oTreeHeadOid);
+}
+
+int clnt_latest_commit_tree_oid(git_repository *RepositoryT, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid) {
+	/* if the latest commit is not found, return success, setting output oids to zero */
+
+	int r = 0;
+
+	git_oid CommitHeadOid = {};
+	git_oid TreeHeadOid = {};
+
+	git_oid OidZero = {};
+	assert(git_oid_iszero(&OidZero));
+
+	int errX = aux_oid_latest_commit_tree(RepositoryT, RefName, &CommitHeadOid, &TreeHeadOid);
+	if (!!errX && errX != GIT_ENOTFOUND)
+	{
+		r = errX; goto clean;
+	}
+	assert(errX == 0 || errX == GIT_ENOTFOUND);
+	if (errX == GIT_ENOTFOUND) {
+		git_oid_cpy(&CommitHeadOid, &OidZero);
+		git_oid_cpy(&TreeHeadOid, &OidZero);
+	}
+
+	if (oCommitHeadOid)
+		git_oid_cpy(oCommitHeadOid, &CommitHeadOid);
+
+	if (oTreeHeadOid)
+		git_oid_cpy(oTreeHeadOid, &TreeHeadOid);
 
 clean:
 
 	return r;
 }
 
-int serv_oid_treelist(git_repository *Repository, git_oid *CommitOid, std::vector<git_oid> *oOutput) {
+int serv_oid_treelist(git_repository *Repository, git_oid *TreeOid, std::vector<git_oid> *oOutput) {
 	int r = 0;
 
-	git_odb *Odb = NULL;
-	git_odb_object *Object = NULL;
-	git_commit *Commit = NULL;
 	git_tree *Tree = NULL;
 	
 	topolist_t NodeListTopo;
 	std::vector<git_oid> Output;
 
-	if (!!(r = git_repository_odb(&Odb, Repository)))
-		goto clean;
-
-	if (!git_odb_exists(Odb, CommitOid))
-	    { r = 1; goto clean; }
-
-	// FIXME: really poor header-only read support (read_header_loose @ https://github.com/libgit2/libgit2/blob/master/src/odb_loose.c)
-	//git_odb_read_header
-	if (!!(r = git_odb_read(&Object, Odb, CommitOid)))
-		goto clean;
-	if (git_odb_object_type(Object) != GIT_OBJ_COMMIT)
-	    { r = 2; goto clean; }
-
-	if (!!(r = git_commit_lookup(&Commit, Repository, CommitOid)))
-		goto clean;
-
-	//const char *CommitMessage = git_commit_message(Commit);
-	//printf("CommitMessage [%s]\n", CommitMessage);
-
-	if (!!(r = git_commit_tree(&Tree, Commit)))
+	if (!!(r = git_tree_lookup(&Tree, Repository, TreeOid)))
 		goto clean;
 
 	if (!!(r = tree_toposort(Repository, Tree, &NodeListTopo)))
@@ -259,12 +298,6 @@ int serv_oid_treelist(git_repository *Repository, git_oid *CommitOid, std::vecto
 clean:
 	if (Tree)
 		git_tree_free(Tree);
-	if (Commit)
-		git_commit_free(Commit);
-	if (Object)
-		git_odb_object_free(Object);
-	if (Odb)
-		git_odb_free(Odb);
 
 	return r;
 }
@@ -742,6 +775,52 @@ clean:
 	return r;
 }
 
+int aux_repository_open(const char *RepoOpenPath, git_repository **oRepository) {
+	int r = 0;
+
+	git_repository *Repository = NULL;
+
+	if (!!(r = git_repository_open(&Repository, RepoOpenPath)))
+		goto clean;
+
+	if (oRepository)
+		*oRepository = Repository;
+
+clean:
+	if (!!r) {
+		if (Repository)
+			git_repository_free(Repository);
+	}
+
+	return r;
+}
+
+int aux_repository_discover_open(const char *RepoDiscoverPath, git_repository **oRepository) {
+	int r = 0;
+
+	git_buf RepoPath = {};
+	git_repository *Repository = NULL;
+
+	if (!!(r = git_repository_discover(&RepoPath, RepoDiscoverPath, 0, NULL)))
+		goto clean;
+
+	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
+		goto clean;
+
+	if (oRepository)
+		*oRepository = Repository;
+
+clean:
+	if (!!r) {
+		if (Repository)
+			git_repository_free(Repository);
+	}
+
+	git_buf_free(&RepoPath);
+
+	return r;
+}
+
 int stuff(const confmap_t &KeyVal) {
 	int r = 0;
 
@@ -752,11 +831,10 @@ int stuff(const confmap_t &KeyVal) {
 	git_buf RepoPath = {};
 	git_repository *Repository = NULL;
 	git_repository *RepositoryT = NULL;
-	git_oid OidHeadT = {};
-	git_oid OidLatest = {};
-
-	git_oid OidZero = {};
-	assert(git_oid_iszero(&OidZero));
+	git_oid CommitHeadOid = {};
+	git_oid TreeHeadOid = {};
+	git_oid CommitHeadOidT = {};
+	git_oid TreeHeadOidT = {};
 
 	std::vector<git_oid> Treelist;
 	std::vector<git_oid> MissingTreelist;
@@ -778,29 +856,25 @@ int stuff(const confmap_t &KeyVal) {
 	if (!ConfRefName || !ConfRepoDiscoverPath || !ConfRepoTOpenPath)
 		{ r = 1; goto clean; }
 
-	if (!!(r = git_repository_discover(&RepoPath, ConfRepoDiscoverPath, 0, NULL)))
-		goto clean;
-	if (!!(r = git_repository_open(&Repository, RepoPath.ptr)))
-		goto clean;
-	if (!!(r = git_repository_open(&RepositoryT, ConfRepoTOpenPath)))
+	if (!!(r = aux_repository_discover_open(ConfRepoDiscoverPath, &Repository)))
 		goto clean;
 
-	int errNameToOidT = git_reference_name_to_id(&OidHeadT, RepositoryT, ConfRefName);
-	assert(errNameToOidT == 0 || errNameToOidT == GIT_ENOTFOUND);
-	if (errNameToOidT == GIT_ENOTFOUND)
-		git_oid_cpy(&OidHeadT, &OidZero);
-
-	if (!!(r = serv_oid_latest(Repository, ConfRefName, &OidLatest)))
+	if (!!(r = aux_repository_open(ConfRepoTOpenPath, &RepositoryT)))
 		goto clean;
 
-	if (git_oid_cmp(&OidHeadT, &OidLatest) == 0) {
+	if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName, &CommitHeadOid, &TreeHeadOid)))
+		goto clean;
+
+	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, ConfRefName, &CommitHeadOidT, &TreeHeadOidT)))
+		goto clean;
+
+	if (git_oid_cmp(&TreeHeadOidT, &TreeHeadOid) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
-		git_oid_fmt(buf, &OidLatest);
+		git_oid_fmt(buf, &CommitHeadOid);
 		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
-		goto clean;
 	}
 
-	if (!!(r = serv_oid_treelist(Repository, &OidLatest, &Treelist)))
+	if (!!(r = serv_oid_treelist(Repository, &TreeHeadOid, &Treelist)))
 		goto clean;
 
 	if (!!(r = clnt_missing_trees(RepositoryT, &Treelist, &MissingTreelist)))
