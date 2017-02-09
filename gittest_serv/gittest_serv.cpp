@@ -217,7 +217,7 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 	address.host = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
 	address.port = GS_PORT;
 
-	if (!(client = enet_host_create(NULL, 32, 1, 0, 0)))
+	if (!(client = enet_host_create(NULL, 1, 1, 0, 0)))
 		GS_ERR_CLEAN(1);
 
 	if (!(peer = enet_host_connect(client, &address, 1, 0)))
