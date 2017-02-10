@@ -160,9 +160,29 @@ clean:
 /* returned value scoped not even to map lifetime - becomes invalid on map modification so do not do that */
 const char * aux_config_key(const confmap_t &KeyVal, const char *Key) {
 	const confmap_t::const_iterator &it = KeyVal.find(Key);
-	if (it != KeyVal.end())
-		return it->second.c_str();
-	return NULL;
+	if (it == KeyVal.end())
+		return NULL;
+	return it->second.c_str();
+}
+
+int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oVal) {
+	assert(sizeof(uint32_t) <= sizeof(long long));
+	const confmap_t::const_iterator &it = KeyVal.find(Key);
+	if (it == KeyVal.end())
+		return 1;
+	{
+		const char *startPtr = it->second.c_str();
+		char *endPtr = 0;
+		errno = 0;
+		long long valLL = strtoll(startPtr, &endPtr, 10);
+		if (errno = ERANGE && (valLL == LONG_MIN || valLL == LONG_MAX))
+			return 2;
+		if (endPtr != startPtr + it->second.size())
+			return 2;
+		if (oVal)
+			*oVal = (uint32_t)valLL;
+	}
+	return 0;
 }
 
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize) {

@@ -170,6 +170,65 @@ clean:
 	return r;
 }
 
+int aux_enet_host_create_serv(uint32_t EnetAddressPort, ENetHost **oServer) {
+	int r = 0;
+
+	ENetAddress address = {};
+	ENetHost *host = NULL;
+
+	address.host = ENET_HOST_ANY;
+	address.port = EnetAddressPort;
+
+	if (!(host = enet_host_create(&address, 256, 1, 0, 0)))
+		GS_ERR_CLEAN(1);
+
+	if (oServer)
+		*oServer = host;
+
+clean:
+	if (!!r) {
+		if (host)
+			enet_host_destroy(host);
+	}
+
+	return r;
+}
+
+int aux_enet_host_create_connect_clnt(uint32_t EnetAddressPort, const char *EnetHostName, ENetHost **oClient, ENetPeer **oPeer) {
+	int r = 0;
+
+	ENetHost *host = NULL;
+	ENetAddress address = {};
+	ENetPeer *peer = NULL;
+
+	if (!(host = enet_host_create(NULL, 1, 1, 0, 0)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = enet_address_set_host(&address, EnetHostName)))
+		GS_ERR_CLEAN(1);
+	address.port = EnetAddressPort;
+
+	if (!(peer = enet_host_connect(host, &address, 1, 0)))
+		GS_ERR_CLEAN(1);
+
+	if (oClient)
+		*oClient = host;
+
+	if (oPeer)
+		*oPeer = peer;
+
+clean:
+	if (!!r) {
+		if (peer)
+			enet_peer_disconnect(peer, NULL);
+
+		if (host)
+			enet_host_destroy(host);
+	}
+
+	return r;
+}
+
 int serv_aux_host_service(ENetHost *client) {
 	/* http://lists.cubik.org/pipermail/enet-discuss/2012-June/001927.html */
 	
@@ -267,15 +326,16 @@ clean:
 int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
 	int r = 0;
 
-	ENetAddress address;
+	uint32_t ServPort = 0;
+
 	ENetHost *server = NULL;
 	ENetEvent event;
 
-	address.host = ENET_HOST_ANY;
-	address.port = GS_PORT;
+	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
+		GS_GOTO_CLEAN();
 
-	if (!(server = enet_host_create(&address, 32, 1, 0, 0)))
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_enet_host_create_serv(GS_PORT, &server)))
+		GS_GOTO_CLEAN();
 
 	while (true) {
 		int retcode = 0;
@@ -318,19 +378,20 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 
 	ENetHost *client = NULL;
-	ENetAddress address = {};
 	ENetPeer *peer = NULL;
 	ENetPacket *packet = NULL;
 
-	if (!(client = enet_host_create(NULL, 1, 1, 0, 0)))
+	const char *ServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
+	uint32_t ServPort = 0;
+
+	if (!ServHostName)
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = enet_address_set_host(&address, "localhost")))
-		GS_ERR_CLEAN(1);
-	address.port = GS_PORT;
+	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ServPort)))
+		GS_GOTO_CLEAN();
 
-	if (!(peer = enet_host_connect(client, &address, 1, 0)))
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_enet_host_create_connect_clnt(ServPort, ServHostName, &client, &peer)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_connect_ensure_timeout(client, GS_CONNECT_TIMEOUT_MS)))
 		GS_GOTO_CLEAN();
