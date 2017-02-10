@@ -17,7 +17,8 @@
 #define GS_PORT 3756
 
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
-#define GS_CONNECT_TIMEOUT_MS 5000
+#define GS_CONNECT_NUMRETRY   5
+#define GS_CONNECT_TIMEOUT_MS 1000
 
 #define GS_FRAME_HEADER_LEN 40
 #define GS_FRAME_SIZE_LEN 4
@@ -27,6 +28,7 @@
 
 #define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
 #define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
+#define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -98,19 +100,23 @@ int aux_frame_type_interrupt_requested(uint8_t *DataStart, uint32_t DataLength, 
 /* FIXME: race condition between server startup and client connection.
  *   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
  *   the fix is having the connect be retried multiple times. */
-int aux_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs) {
+int aux_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
 	int r = 0;
 
 	ENetEvent event = {};
 
 	int retcode = 0;
+
 	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
 		GS_ERR_CLEAN(1);
+
 	assert(retcode >= 0);
-	if (retcode == 0)
+
+	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
 		GS_ERR_CLEAN(2);
-	if (event.type != ENET_EVENT_TYPE_CONNECT)
-		GS_ERR_CLEAN(3);
+
+	if (oHasTimedOut)
+		*oHasTimedOut = (retcode == 0);
 
 clean:
 
@@ -197,25 +203,23 @@ clean:
 	return r;
 }
 
-int aux_enet_host_create_connect_clnt(uint32_t EnetAddressPort, const char *EnetHostName, ENetHost **oClient, ENetPeer **oPeer) {
+int aux_enet_host_create_connect_addr(
+	ENetAddress *address,
+	ENetHost **oHost, ENetPeer **oPeer)
+{
 	int r = 0;
 
 	ENetHost *host = NULL;
-	ENetAddress address = {};
 	ENetPeer *peer = NULL;
 
 	if (!(host = enet_host_create(NULL, 1, 1, 0, 0)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = enet_address_set_host(&address, EnetHostName)))
-		GS_ERR_CLEAN(1);
-	address.port = EnetAddressPort;
-
-	if (!(peer = enet_host_connect(host, &address, 1, 0)))
+	if (!(peer = enet_host_connect(host, address, 1, 0)))
 		GS_ERR_CLEAN(1);
 
-	if (oClient)
-		*oClient = host;
+	if (oHost)
+		*oHost = host;
 
 	if (oPeer)
 		*oPeer = peer;
@@ -223,11 +227,46 @@ int aux_enet_host_create_connect_clnt(uint32_t EnetAddressPort, const char *Enet
 clean:
 	if (!!r) {
 		if (peer)
-			enet_peer_disconnect(peer, NULL);
+			enet_peer_disconnect_now(peer, NULL);
 
 		if (host)
 			enet_host_destroy(host);
 	}
+
+	return r;
+}
+
+int aux_enet_address_create_ip(
+	uint32_t EnetAddressPort, uint32_t EnetAddressHostNetworkByteOrder,
+	ENetAddress *oAddress)
+{
+	ENetAddress address;
+
+	address.host = EnetAddressHostNetworkByteOrder;
+	address.port = EnetAddressPort;
+
+	if (oAddress)
+		*oAddress = address;
+
+	return 0;
+}
+
+int aux_enet_address_create_hostname(
+	uint32_t EnetAddressPort, const char *EnetHostName,
+	ENetAddress *oAddress)
+{
+	int r = 0;
+
+	ENetAddress address = {};
+
+	if (!!(r = enet_address_set_host(&address, EnetHostName)))
+		GS_ERR_CLEAN(1);
+	address.port = EnetAddressPort;
+
+	if (oAddress)
+		*oAddress = address;
+
+clean:
 
 	return r;
 }
@@ -319,14 +358,75 @@ clean:
 	return r;
 }
 
+int aux_host_connect(
+	ENetAddress *address,
+	uint32_t NumRetry, uint32_t RetryTimeoutMs,
+	ENetHost **oClient, ENetPeer **oPeer)
+{
+	int r = 0;
+
+	ENetHost *nontimedout_client = NULL;
+	ENetPeer *nontimedout_peer = NULL;
+
+	for (uint32_t i = 0; i < NumRetry; i++) {
+		ENetHost *client = NULL;
+		ENetPeer *peer = NULL;
+		uint32_t HasTimedOut = 0;
+
+		if (!!(r = aux_enet_host_create_connect_addr(address, &client, &peer)))
+			GS_GOTO_CLEANSUB();
+
+		if (!!(r = aux_connect_ensure_timeout(client, RetryTimeoutMs, &HasTimedOut)))
+			GS_GOTO_CLEANSUB();
+
+		if (!HasTimedOut) {
+			nontimedout_client = client;
+			nontimedout_peer = peer;
+			break;
+		}
+
+	cleansub:
+		if (!!r || HasTimedOut) {
+			if (peer)
+				enet_peer_disconnect_now(peer, NULL);
+			if (client)
+				enet_host_destroy(client);
+		}
+		if (!!r)
+			GS_GOTO_CLEAN();
+	}
+
+	if (!nontimedout_client || !nontimedout_peer)
+		GS_ERR_CLEAN(1);
+
+	if (oClient)
+		*oClient = nontimedout_client;
+
+	if (oPeer)
+		*oPeer = nontimedout_peer;
+
+clean:
+	if (!!r) {
+		if (nontimedout_peer)
+			enet_peer_disconnect_now(nontimedout_peer, NULL);
+		if (nontimedout_client)
+			enet_host_destroy(nontimedout_client);
+	}
+
+	return r;
+}
+
 int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 
+	uint8_t FrameInterruptRequested[GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN] = {};
+
+	uint32_t ServPort = 0;
+	uint32_t ServHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
 	ENetAddress address = {};
+
 	ENetHost *client = NULL;
 	ENetPeer *peer = NULL;
-
-	uint8_t FrameInterruptRequested[GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN] = {};
 
 	uint32_t Offset = 0;
 	if (!!(r = aux_frame_type_interrupt_requested(FrameInterruptRequested, sizeof FrameInterruptRequested, Offset, &Offset)))
@@ -334,17 +434,15 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 	if (!!(r = aux_frame_size(FrameInterruptRequested, sizeof FrameInterruptRequested, Offset, &Offset, 0)))
 		GS_GOTO_CLEAN();
 
-	/* 127.0.0.1 */
-	address.host = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
-	address.port = GS_PORT;
+	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
+		GS_GOTO_CLEAN();
 
-	if (!(client = enet_host_create(NULL, 1, 1, 0, 0)))
-		GS_ERR_CLEAN(1);
+	assert(ServHostIp == ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24));
 
-	if (!(peer = enet_host_connect(client, &address, 1, 0)))
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_enet_address_create_ip(ServPort, ServHostIp, &address)))
+		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_connect_ensure_timeout(client, GS_CONNECT_TIMEOUT_MS)))
+	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &client, &peer)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -395,7 +493,7 @@ int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerD
 	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_enet_host_create_serv(GS_PORT, &server)))
+	if (!!(r = aux_enet_host_create_serv(ServPort, &server)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -413,6 +511,7 @@ clean:
 int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 
+	ENetAddress address = {};
 	ENetHost *client = NULL;
 	ENetPeer *peer = NULL;
 	ENetPacket *packet = NULL;
@@ -426,11 +525,11 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ServPort)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_enet_host_create_connect_clnt(ServPort, ServHostName, &client, &peer)))
+	if (!!(r = aux_enet_address_create_hostname(ServPort, ServHostName, &address)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_connect_ensure_timeout(client, GS_CONNECT_TIMEOUT_MS)))
-		GS_GOTO_CLEAN();
+	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &client, &peer)))
+		GS_ERR_CLEAN(1);
 
 	printf("[clnt] Client connection succeeded.\n");
 
