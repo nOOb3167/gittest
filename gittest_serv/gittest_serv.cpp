@@ -95,6 +95,9 @@ int aux_frame_type_interrupt_requested(uint8_t *DataStart, uint32_t DataLength, 
 	return 0;
 }
 
+/* FIXME: race condition between server startup and client connection.
+ *   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
+ *   the fix is having the connect be retried multiple times. */
 int aux_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs) {
 	int r = 0;
 
@@ -229,32 +232,91 @@ clean:
 	return r;
 }
 
-int serv_aux_host_service(ENetHost *client) {
+int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> *oEvents) {
 	/* http://lists.cubik.org/pipermail/enet-discuss/2012-June/001927.html */
-	
+
 	/* NOTE: special errorhandling */
 
 	int retcode = 0;
 
+	std::vector<ENetEvent> Events;
+	
 	ENetEvent event;
 
-	for ( (retcode = enet_host_service(client, &event, 0))
+	for ((retcode = enet_host_service(host, &event, 0))
 		; retcode > 0
-		; (retcode = enet_host_check_events(client, &event)))
+		; (retcode = enet_host_check_events(host, &event)))
 	{
-		switch (event.type)
+		// FIXME: copies an ENetEvent structure. not sure if part of the official enet API.
+		Events.push_back(event);
+	}
+
+	if (oEvents)
+		oEvents->swap(Events);
+
+	return retcode < 0;
+}
+
+int serv_aux_host_service(ENetHost *client) {
+	int r = 0;
+
+	std::vector<ENetEvent> Events;
+
+	if (!!(r = aux_host_service(client, 0, &Events)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < Events.size(); i++) {
+		switch (Events[i].type)
 		{
 		case ENET_EVENT_TYPE_CONNECT:
 		case ENET_EVENT_TYPE_DISCONNECT:
 			break;
 		case ENET_EVENT_TYPE_RECEIVE:
 			assert(0);
-			enet_packet_destroy(event.packet);
+			enet_packet_destroy(Events[i].packet);
 			break;
 		}
 	}
 
-	return retcode < 0;
+clean:
+
+	return r;
+}
+
+int serv_host_service(ENetHost *server) {
+	int r = 0;
+
+	std::vector<ENetEvent> Events;
+
+	if (!!(r = aux_host_service(server, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Events)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < Events.size(); i++) {
+		switch (Events[i].type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+			printf("[serv] A new client connected from %x:%u.\n",
+				Events[i].peer->address.host,
+				Events[i].peer->address.port);
+			Events[i].peer->data = "Client information";
+			break;
+		case ENET_EVENT_TYPE_RECEIVE:
+			printf("[serv] A packet of length %lu containing %.*s was received from %s on channel %u.\n",
+				(unsigned long)Events[i].packet->dataLength,
+				(int)Events[i].packet->dataLength, Events[i].packet->data,
+				Events[i].peer->data,
+				Events[i].channelID);
+			enet_packet_destroy(Events[i].packet);
+			break;
+		case ENET_EVENT_TYPE_DISCONNECT:
+			printf("[serv] %s disconnected.\n", Events[i].peer->data);
+			Events[i].peer->data = NULL;
+		}
+	}
+
+clean:
+
+	return r;
 }
 
 int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
@@ -326,10 +388,9 @@ clean:
 int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
 	int r = 0;
 
-	uint32_t ServPort = 0;
-
 	ENetHost *server = NULL;
-	ENetEvent event;
+
+	uint32_t ServPort = 0;
 
 	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
 		GS_GOTO_CLEAN();
@@ -338,33 +399,8 @@ int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerD
 		GS_GOTO_CLEAN();
 
 	while (true) {
-		int retcode = 0;
-		if ((retcode = enet_host_service(server, &event, 1000)) < 0)
-			GS_ERR_CLEAN(1);
-		assert(retcode >= 0);
-		if (retcode == 0)
-			continue;
-
-		switch (event.type)
-		{
-		case ENET_EVENT_TYPE_CONNECT:
-			printf("[serv] A new client connected from %x:%u.\n",
-				event.peer->address.host,
-				event.peer->address.port);
-			event.peer->data = "Client information";
-			break;
-		case ENET_EVENT_TYPE_RECEIVE:
-			printf("[serv] A packet of length %lu containing %.*s was received from %s on channel %u.\n",
-				(unsigned long)event.packet->dataLength,
-				(int)event.packet->dataLength, event.packet->data,
-				event.peer->data,
-				event.channelID);
-			enet_packet_destroy(event.packet);
-			break;
-		case ENET_EVENT_TYPE_DISCONNECT:
-			printf("[serv] %s disconnected.\n", event.peer->data);
-			event.peer->data = NULL;
-		}
+		if (!!(r = serv_host_service(server)))
+			GS_GOTO_CLEAN();
 	}
 
 clean:
