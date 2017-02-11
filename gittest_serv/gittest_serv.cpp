@@ -1,6 +1,11 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif _MSC_VER
+
 #include <cstdlib>
 #include <cassert>
 #include <cstdio>
+#include <cstring>
 
 #include <memory>
 #include <thread>
@@ -19,12 +24,13 @@
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
 #define GS_CONNECT_NUMRETRY   5
 #define GS_CONNECT_TIMEOUT_MS 1000
+#define GS_RECEIVE_TIMEOUT_MS 5000
 
 #define GS_FRAME_HEADER_LEN 40
 #define GS_FRAME_SIZE_LEN 4
 
-#define GS_DBG_CLEAN {}
-//#define GS_DBG_CLEAN { assert(0); }
+//#define GS_DBG_CLEAN {}
+#define GS_DBG_CLEAN { assert(0); }
 
 #define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
 #define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
@@ -32,6 +38,8 @@
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
+
+typedef ::std::shared_ptr<ENetPacket> gs_packet_t;
 
 class ServWorkerRequestData {};
 
@@ -73,6 +81,10 @@ private:
 	sp<std::condition_variable> mAuxDataCond;
 };
 
+gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
+	return gs_packet_t(packet, [](ENetPacket *xpacket) { enet_packet_destroy(xpacket); });
+}
+
 bool aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace) {
 	return (TotalLength >= Offset) && (TotalLength - Offset) >= WantedSpace;
 }
@@ -86,15 +98,114 @@ int aux_frame_size(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uin
 	return 0;
 }
 
-int aux_frame_type_interrupt_requested(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew) {
-	static const char ServAuxStaticMagicPackageBuffer[] = "SERV_AUX_INTERRUPT_REQUESTED";
-	assert(sizeof ServAuxStaticMagicPackageBuffer - 1 <= GS_FRAME_HEADER_LEN);
+int aux_frame_read_type_str_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const char HeaderStr[]) {
+	size_t HeaderStrLen = strlen(HeaderStr);
+	assert(HeaderStrLen <= GS_FRAME_HEADER_LEN);
+	assert(aux_frame_enough_space(DataLength, Offset, GS_FRAME_SIZE_LEN));
+	int ComparisonResult = memcmp(DataStart + Offset, HeaderStr, HeaderStrLen) != 0;
+	if (OffsetNew)
+		*OffsetNew = Offset + GS_FRAME_HEADER_LEN;
+	return ComparisonResult != 0;
+}
+
+int aux_frame_write_type_str(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const char HeaderStr[]) {
+	size_t HeaderStrLen = strlen(HeaderStr);
+	assert(HeaderStrLen <= GS_FRAME_HEADER_LEN);
 	assert(aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_LEN));
-	memset(DataStart+Offset, 0, GS_FRAME_HEADER_LEN);
-	memcpy(DataStart+Offset, ServAuxStaticMagicPackageBuffer, sizeof ServAuxStaticMagicPackageBuffer - 1);
+	memset(DataStart + Offset, 0, GS_FRAME_HEADER_LEN);
+	memcpy(DataStart + Offset, HeaderStr, HeaderStrLen);
 	if (OffsetNew)
 		*OffsetNew = Offset + GS_FRAME_HEADER_LEN;
 	return 0;
+}
+
+int aux_frame_write_size(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
+	return aux_frame_size(DataStart, DataLength, Offset, OffsetNew, MSize);
+}
+
+int aux_frame_write_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
+	assert(aux_frame_enough_space(DataLength, Offset, BufLen));
+	memcpy(DataStart + Offset, Buf, BufLen);
+	if (OffsetNew)
+		*OffsetNew = Offset + BufLen;
+	return 0;
+}
+
+int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
+	uint32_t SizeFound = 0;
+	assert(sizeof(uint8_t) == 1 && sizeof(uint32_t) == 4 && sizeof(uint32_t) == GS_FRAME_SIZE_LEN);
+	assert(aux_frame_enough_space(DataLength, Offset, sizeof(uint32_t)));
+	aux_LE_to_uint32(&SizeFound, (const char *)(DataStart + Offset), sizeof(uint32_t));
+	return SizeFound != MSize;
+}
+
+int aux_frame_type_interrupt_requested(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew) {
+	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "SERV_AUX_INTERRUPT_REQUESTED");
+}
+
+int aux_frame_type_request_latest_commit_tree(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+{
+	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "REQUEST_LATEST_COMMIT_TREE");
+}
+
+int aux_frame_type_response_latest_commit_tree(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+{
+	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "RESPONSE_LATEST_COMMIT_TREE");
+}
+
+int aux_frame_full_serv_aux_interrupt_requested(
+	std::string *oBuffer)
+{
+	int r = 0;
+	std::string Buffer;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+	uint32_t Offset = 0;
+	if (!!(r = aux_frame_type_interrupt_requested((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, 0)))
+		GS_GOTO_CLEAN();
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
+}
+
+int aux_frame_full_request_latest_commit_tree(
+	std::string *oBuffer)
+{
+	int r = 0;
+	std::string Buffer;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+	uint32_t Offset = 0;
+	if (!!(r = aux_frame_type_request_latest_commit_tree((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, 0)))
+		GS_GOTO_CLEAN();
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
+}
+
+int aux_frame_full_response_latest_commit_tree(
+	std::string *oBuffer,
+	uint8_t *Oid, uint32_t OidSize)
+{
+	int r = 0;
+	std::string Buffer;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + OidSize);
+	uint32_t Offset = 0;
+	if (!!(r = aux_frame_type_response_latest_commit_tree((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+		GS_GOTO_CLEAN();
+	assert(OidSize == 20);
+	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
+		GS_GOTO_CLEAN();
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
 }
 
 /* FIXME: race condition between server startup and client connection.
@@ -271,6 +382,57 @@ clean:
 	return r;
 }
 
+int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags) {
+	int r = 0;
+
+	/* only flag expected to be useful with this function is ENET_PACKET_FLAG_RELIABLE, really */
+	assert((EnetPacketFlags & ~(ENET_PACKET_FLAG_RELIABLE)) == 0);
+
+	ENetPacket *packet = NULL;
+
+	if (!(packet = enet_packet_create(Data, DataSize, EnetPacketFlags)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = enet_peer_send(peer, 0, packet)))
+		GS_GOTO_CLEAN();
+	packet = NULL;  /* lost ownership after enet_peer_send */
+
+	enet_host_flush(host);
+
+	ServAuxData->InterruptRequestedEnqueue();
+
+clean:
+	if (packet)
+		enet_packet_destroy(packet);
+
+	return r;
+}
+
+int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_packet_t *oPacket) {
+	/* NOTE: special errorhandling */
+
+	int r = 0;
+
+	int retcode = 0;
+
+	ENetEvent event = {};
+	gs_packet_t Packet;
+
+	retcode = enet_host_service(host, &event, TimeoutMs);
+
+	if (retcode > 0 && event.type != ENET_EVENT_TYPE_RECEIVE)
+		GS_ERR_CLEAN(1);
+
+	Packet = aux_gs_make_packet(event.packet);
+
+	if (oPacket)
+		*oPacket = Packet;
+
+clean:
+
+	return r;
+}
+
 int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> *oEvents) {
 	/* http://lists.cubik.org/pipermail/enet-discuss/2012-June/001927.html */
 
@@ -334,22 +496,39 @@ int serv_host_service(ENetHost *server) {
 		switch (Events[i].type)
 		{
 		case ENET_EVENT_TYPE_CONNECT:
+		{
 			printf("[serv] A new client connected from %x:%u.\n",
 				Events[i].peer->address.host,
 				Events[i].peer->address.port);
 			Events[i].peer->data = "Client information";
-			break;
+		}
+		break;
+
 		case ENET_EVENT_TYPE_RECEIVE:
-			printf("[serv] A packet of length %lu containing %.*s was received from %s on channel %u.\n",
-				(unsigned long)Events[i].packet->dataLength,
-				(int)Events[i].packet->dataLength, Events[i].packet->data,
-				Events[i].peer->data,
-				Events[i].channelID);
-			enet_packet_destroy(Events[i].packet);
-			break;
+		{
+			printf("[serv] received packet\n");
+
+			gs_packet_t Packet = aux_gs_make_packet(Events[i].packet);
+			uint32_t Offset = 0;
+
+			Offset = 0;
+			int typeLCT = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "REQUEST_LATEST_COMMIT_TREE");
+			Offset = 0;
+			int typeIRQ = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "SERV_AUX_INTERRUPT_REQUESTED");
+			if (!!typeLCT && !!typeIRQ)
+				GS_ERR_CLEAN(1);
+
+			printf("[serv] received packet type [%s]\n", (char *)Packet->data);
+		}
+		break;
+
 		case ENET_EVENT_TYPE_DISCONNECT:
+		{
 			printf("[serv] %s disconnected.\n", Events[i].peer->data);
 			Events[i].peer->data = NULL;
+		}
+		break;
+
 		}
 	}
 
@@ -419,7 +598,7 @@ clean:
 int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 
-	uint8_t FrameInterruptRequested[GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN] = {};
+	std::string BufferFrameInterruptRequested;
 
 	uint32_t ServPort = 0;
 	uint32_t ServHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
@@ -429,9 +608,7 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 	ENetPeer *peer = NULL;
 
 	uint32_t Offset = 0;
-	if (!!(r = aux_frame_type_interrupt_requested(FrameInterruptRequested, sizeof FrameInterruptRequested, Offset, &Offset)))
-		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_size(FrameInterruptRequested, sizeof FrameInterruptRequested, Offset, &Offset, 0)))
+	if (!!(r = aux_frame_full_serv_aux_interrupt_requested(&BufferFrameInterruptRequested)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
@@ -460,7 +637,7 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 			 *   enet_packet_resize essentially chokes and sets new size without validation so never call that */
 
 			ENetPacket *packet = enet_packet_create(
-				&FrameInterruptRequested, sizeof FrameInterruptRequested, ENET_PACKET_FLAG_NO_ALLOCATE);
+				BufferFrameInterruptRequested.data(), BufferFrameInterruptRequested.size(), ENET_PACKET_FLAG_NO_ALLOCATE);
 
 			/* NOTE: enet tutorial claims that enet_packet_destroy need not be called after packet handoff via enet_peer_send.
 			 *   but reading enet source reveals obvious leaks on some error conditions. (undistinguishable observing return code) */
@@ -516,6 +693,9 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	ENetPeer *peer = NULL;
 	ENetPacket *packet = NULL;
 
+	std::string Buffer;
+	gs_packet_t Packet;
+
 	const char *ServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
 	uint32_t ServPort = 0;
 
@@ -529,20 +709,24 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &client, &peer)))
-		GS_ERR_CLEAN(1);
+		GS_GOTO_CLEAN();
 
 	printf("[clnt] Client connection succeeded.\n");
 
-	if (!(packet = enet_packet_create("packet", strlen("packet") + 1, ENET_PACKET_FLAG_RELIABLE)))
-		GS_ERR_CLEAN(1);
+	uint32_t Offset = 0;
 
-	if (!!(r = enet_peer_send(peer, 0, packet)))
+	if (!!(r = aux_frame_full_request_latest_commit_tree(&Buffer)))
 		GS_GOTO_CLEAN();
-	packet = NULL;  /* lost ownership after enet_peer_send */
+	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
+		GS_GOTO_CLEAN();
 
-	enet_host_flush(client);
-
-	ServAuxData->InterruptRequestedEnqueue();
+	Offset = 0;
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "RESPONSE_LATEST_COMMIT_TREE")))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 20)))
+		GS_GOTO_CLEAN();
 
 clean:
 	if (packet)
