@@ -26,15 +26,38 @@
 #define GS_CONNECT_TIMEOUT_MS 1000
 #define GS_RECEIVE_TIMEOUT_MS 5000
 
-#define GS_FRAME_HEADER_LEN 40
+#define GS_FRAME_HEADER_STR_LEN 40
+#define GS_FRAME_HEADER_NUM_LEN 4
+#define GS_FRAME_HEADER_LEN (GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)
 #define GS_FRAME_SIZE_LEN 4
 
-//#define GS_DBG_CLEAN {}
-#define GS_DBG_CLEAN { assert(0); }
+#define GS_PAYLOAD_OID_SIZE 20
+
+#define GS_DBG_CLEAN {}
+//#define GS_DBG_CLEAN { assert(0); }
+//#define GS_DBG_CLEAN { DebugBreak(); }
 
 #define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
 #define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
 #define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
+
+#define GS_FRAME_TYPE_SERV_AUX_INTERRUPT_REQUESTED 0
+#define GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE 1
+#define GS_FRAME_TYPE_RESPONSE_LATEST_COMMIT_TREE 2
+
+#define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
+#define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
+
+struct GsFrameType {
+	char mTypeName[GS_FRAME_HEADER_STR_LEN];
+	uint32_t mTypeNum;
+};
+
+GsFrameType GsFrameTypes[] = {
+	GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED),
+	GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE),
+	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),
+};
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -85,86 +108,150 @@ gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(packet, [](ENetPacket *xpacket) { enet_packet_destroy(xpacket); });
 }
 
-bool aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace) {
-	return (TotalLength >= Offset) && (TotalLength - Offset) >= WantedSpace;
+bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
+	assert(sizeof a.mTypeName == GS_FRAME_HEADER_STR_LEN);
+	bool eqstr = memcmp(a.mTypeName, b.mTypeName, GS_FRAME_HEADER_STR_LEN) == 0;
+	bool eqnum = a.mTypeNum == b.mTypeNum;
+	/* XOR basically */
+	if ((eqstr || eqnum) && (!eqstr || !eqnum))
+		assert(0);
+	return eqstr && eqnum;
 }
 
-int aux_frame_size(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
-	assert(sizeof(uint8_t) == 1 && sizeof(uint32_t) == 4 && sizeof(uint32_t) == GS_FRAME_SIZE_LEN);
-	assert(aux_frame_enough_space(DataLength, Offset, sizeof(uint32_t)));
-	aux_uint32_to_LE(MSize, (char *)DataStart+Offset, sizeof(uint32_t));
+int aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace) {
+	int r = 0;
+	if (! ((TotalLength >= Offset) && (TotalLength - Offset) >= WantedSpace))
+		GS_ERR_CLEAN(1);
+clean:
+	return r;
+}
+
+int aux_frame_read_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
+	int r = 0;
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, BufLen)))
+		GS_GOTO_CLEAN();
+	memcpy(Buf, DataStart + Offset, BufLen);
 	if (OffsetNew)
-		*OffsetNew = Offset + sizeof(uint32_t);
-	return 0;
-}
-
-int aux_frame_read_type_str_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const char HeaderStr[]) {
-	size_t HeaderStrLen = strlen(HeaderStr);
-	assert(HeaderStrLen <= GS_FRAME_HEADER_LEN);
-	assert(aux_frame_enough_space(DataLength, Offset, GS_FRAME_SIZE_LEN));
-	int ComparisonResult = memcmp(DataStart + Offset, HeaderStr, HeaderStrLen) != 0;
-	if (OffsetNew)
-		*OffsetNew = Offset + GS_FRAME_HEADER_LEN;
-	return ComparisonResult != 0;
-}
-
-int aux_frame_write_type_str(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const char HeaderStr[]) {
-	size_t HeaderStrLen = strlen(HeaderStr);
-	assert(HeaderStrLen <= GS_FRAME_HEADER_LEN);
-	assert(aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_LEN));
-	memset(DataStart + Offset, 0, GS_FRAME_HEADER_LEN);
-	memcpy(DataStart + Offset, HeaderStr, HeaderStrLen);
-	if (OffsetNew)
-		*OffsetNew = Offset + GS_FRAME_HEADER_LEN;
-	return 0;
-}
-
-int aux_frame_write_size(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
-	return aux_frame_size(DataStart, DataLength, Offset, OffsetNew, MSize);
+		*OffsetNew = Offset + BufLen;
+clean:
+	return r;
 }
 
 int aux_frame_write_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
-	assert(aux_frame_enough_space(DataLength, Offset, BufLen));
+	int r = 0;
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, BufLen)))
+		GS_GOTO_CLEAN();
 	memcpy(DataStart + Offset, Buf, BufLen);
 	if (OffsetNew)
 		*OffsetNew = Offset + BufLen;
-	return 0;
+clean:
+	return r;
+}
+
+int aux_frame_read_size(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint32_t SizeOfSize, uint32_t *oSize)
+{
+	int r = 0;
+	uint32_t Size = 0;
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
+		GS_GOTO_CLEAN();
+	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
+	if (OffsetNew)
+		*OffsetNew = Offset + SizeOfSize;
+	if (oSize)
+		*oSize = Size;
+clean:
+	return r;
+}
+
+int aux_frame_write_size(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint32_t SizeOfSize, uint32_t Size)
+{
+	int r = 0;
+	assert(SizeOfSize == sizeof(uint32_t));
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
+		GS_GOTO_CLEAN();
+	aux_uint32_to_LE(Size, (char *)(DataStart + Offset), SizeOfSize);
+	if (OffsetNew)
+		*OffsetNew = Offset + SizeOfSize;
+clean:
+	return r;
 }
 
 int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
+	int r = 0;
 	uint32_t SizeFound = 0;
-	assert(sizeof(uint8_t) == 1 && sizeof(uint32_t) == 4 && sizeof(uint32_t) == GS_FRAME_SIZE_LEN);
-	assert(aux_frame_enough_space(DataLength, Offset, sizeof(uint32_t)));
-	aux_LE_to_uint32(&SizeFound, (const char *)(DataStart + Offset), sizeof(uint32_t));
-	return SizeFound != MSize;
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &SizeFound)))
+		GS_GOTO_CLEAN();
+	if (SizeFound != MSize)
+		GS_ERR_CLEAN(1);
+	if (OffsetNew)
+		*OffsetNew = Offset;
+clean:
+	return r;
 }
 
-int aux_frame_type_interrupt_requested(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew) {
-	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "SERV_AUX_INTERRUPT_REQUESTED");
-}
-
-int aux_frame_type_request_latest_commit_tree(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+int aux_frame_read_frametype(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	GsFrameType *oFrameType)
 {
-	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "REQUEST_LATEST_COMMIT_TREE");
+	int r = 0;
+	GsFrameType FrameType = {};
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_read_buf(DataStart, DataLength, Offset, &Offset, (uint8_t *)FrameType.mTypeName, GS_FRAME_HEADER_STR_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, &FrameType.mTypeNum)))
+		GS_GOTO_CLEAN();
+	if (OffsetNew)
+		*OffsetNew = Offset;
+	if (oFrameType)
+		*oFrameType = FrameType;
+clean:
+	return r;
 }
 
-int aux_frame_type_response_latest_commit_tree(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+int aux_frame_write_frametype(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	GsFrameType *FrameType)
 {
-	return aux_frame_write_type_str(DataStart, DataLength, Offset, OffsetNew, "RESPONSE_LATEST_COMMIT_TREE");
+	int r = 0;
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, (uint8_t *)FrameType->mTypeName, GS_FRAME_HEADER_STR_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, FrameType->mTypeNum)))
+		GS_GOTO_CLEAN();
+	if (OffsetNew)
+		*OffsetNew = Offset;
+clean:
+	return r;
 }
 
-int aux_frame_full_serv_aux_interrupt_requested(
+int aux_frame_ensure_frametype(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const GsFrameType &FrameType) {
+	int r = 0;
+	GsFrameType FoundFrameType = {};
+	if (!!(r = aux_frame_read_frametype(DataStart, DataLength, Offset, &Offset, &FoundFrameType)))
+		GS_GOTO_CLEAN();
+	if (! aux_frametype_equals(FoundFrameType, FrameType))
+		GS_ERR_CLEAN(1);
+clean:
+	return r;
+}
+
+int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer)
 {
 	int r = 0;
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
 	std::string Buffer;
 	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
 	uint32_t Offset = 0;
-	if (!!(r = aux_frame_type_interrupt_requested((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, 0)))
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
 		GS_GOTO_CLEAN();
 	if (oBuffer)
 		oBuffer->swap(Buffer);
@@ -172,16 +259,17 @@ clean:
 	return r;
 }
 
-int aux_frame_full_request_latest_commit_tree(
+int aux_frame_full_write_request_latest_commit_tree(
 	std::string *oBuffer)
 {
 	int r = 0;
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
 	std::string Buffer;
 	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
 	uint32_t Offset = 0;
-	if (!!(r = aux_frame_type_request_latest_commit_tree((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, 0)))
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
 		GS_GOTO_CLEAN();
 	if (oBuffer)
 		oBuffer->swap(Buffer);
@@ -189,17 +277,20 @@ clean:
 	return r;
 }
 
-int aux_frame_full_response_latest_commit_tree(
+int aux_frame_full_write_response_latest_commit_tree(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize)
 {
 	int r = 0;
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
 	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + OidSize);
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_SIZE);
 	uint32_t Offset = 0;
-	if (!!(r = aux_frame_type_response_latest_commit_tree((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset)))
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
 		GS_GOTO_CLEAN();
-	assert(OidSize == 20);
+	assert(OidSize == GS_PAYLOAD_OID_SIZE);
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, GS_PAYLOAD_OID_SIZE)))
+		GS_GOTO_CLEAN();
 	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
 	if (oBuffer)
@@ -512,9 +603,9 @@ int serv_host_service(ENetHost *server) {
 			uint32_t Offset = 0;
 
 			Offset = 0;
-			int typeLCT = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "REQUEST_LATEST_COMMIT_TREE");
+			int typeLCT = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE));
 			Offset = 0;
-			int typeIRQ = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "SERV_AUX_INTERRUPT_REQUESTED");
+			int typeIRQ = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED));
 			if (!!typeLCT && !!typeIRQ)
 				GS_ERR_CLEAN(1);
 
@@ -608,7 +699,7 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 	ENetPeer *peer = NULL;
 
 	uint32_t Offset = 0;
-	if (!!(r = aux_frame_full_serv_aux_interrupt_requested(&BufferFrameInterruptRequested)))
+	if (!!(r = aux_frame_full_write_serv_aux_interrupt_requested(&BufferFrameInterruptRequested)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
@@ -715,7 +806,7 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 
 	uint32_t Offset = 0;
 
-	if (!!(r = aux_frame_full_request_latest_commit_tree(&Buffer)))
+	if (!!(r = aux_frame_full_write_request_latest_commit_tree(&Buffer)))
 		GS_GOTO_CLEAN();
 	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
@@ -723,9 +814,13 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	Offset = 0;
 	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_read_type_str_ensure(Packet->data, Packet->dataLength, Offset, &Offset, "RESPONSE_LATEST_COMMIT_TREE")))
+
+	// FIXME: handle timeout (Packet will be null)
+
+	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE))))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 20)))
+
+	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_SIZE)))
 		GS_GOTO_CLEAN();
 
 clean:
