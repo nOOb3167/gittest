@@ -282,7 +282,7 @@ int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> 
 	
 	ENetEvent event;
 
-	for ((retcode = enet_host_service(host, &event, 0))
+	for ((retcode = enet_host_service(host, &event, TimeoutMs))
 		; retcode > 0
 		; (retcode = enet_host_check_events(host, &event)))
 	{
