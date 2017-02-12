@@ -39,8 +39,8 @@
 
 #define GS_PAYLOAD_OID_LEN 20
 
-#define GS_DBG_CLEAN {}
-//#define GS_DBG_CLEAN { assert(0); }
+//#define GS_DBG_CLEAN {}
+#define GS_DBG_CLEAN { assert(0); }
 //#define GS_DBG_CLEAN { DebugBreak(); }
 
 #define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
@@ -192,10 +192,10 @@ int aux_frame_read_size(
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
 		GS_GOTO_CLEAN();
 	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
-	if (OffsetNew)
-		*OffsetNew = Offset + SizeOfSize;
 	if (oSize)
 		*oSize = Size;
+	if (OffsetNew)
+		*OffsetNew = Offset + SizeOfSize;
 clean:
 	return r;
 }
@@ -240,10 +240,10 @@ int aux_frame_read_frametype(
 		GS_GOTO_CLEAN();
 	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, &FrameType.mTypeNum)))
 		GS_GOTO_CLEAN();
-	if (OffsetNew)
-		*OffsetNew = Offset;
 	if (oFrameType)
 		*oFrameType = FrameType;
+	if (OffsetNew)
+		*OffsetNew = Offset;
 clean:
 	return r;
 }
@@ -305,6 +305,30 @@ int aux_frame_write_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
+	if (OffsetNew)
+		*OffsetNew = Offset;
+clean:
+	return r;
+}
+
+int aux_frame_read_oid_vec(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	std::vector<git_oid> *oOidVec)
+{
+	int r = 0;
+	std::vector<git_oid> OidVec;
+	uint32_t OidNum = 0;
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum)))
+		GS_GOTO_CLEAN();
+	// FIXME: hmmm, almost unbounded allocation, from a single uint32_t read off the network
+	OidVec.resize(OidNum);
+	for (uint32_t i = 0; i < OidNum; i++) {
+		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, &OidVec[i])))
+			GS_GOTO_CLEAN();
+	}
+	if (oOidVec)
+		oOidVec->swap(OidVec);
+	if (OffsetNew)
+		*OffsetNew = Offset;
 clean:
 	return r;
 }
@@ -313,11 +337,15 @@ int aux_frame_write_oid_vec(uint8_t *DataStart, uint32_t DataLength, uint32_t Of
 	git_oid *oOidVec, uint32_t OidNum, uint32_t OidSize)
 {
 	int r = 0;
+	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, OidNum)))
+		GS_GOTO_CLEAN();
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 	for (uint32_t i = 0; i < OidNum; i++) {
-		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, oOidVec[i].id, OidSize)))
+		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, (oOidVec + i)->id, OidSize)))
 			GS_GOTO_CLEAN();
 	}
+	if (OffsetNew)
+		*OffsetNew = Offset;
 clean:
 	return r;
 }
@@ -403,7 +431,7 @@ int aux_frame_full_write_response_treelist(
 {
 	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
-	uint32_t PayloadSize = GS_PAYLOAD_OID_LEN * OidVec->size();
+	uint32_t PayloadSize = GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN * OidVec->size();
 	std::string Buffer;
 	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
 	uint32_t Offset = 0;
@@ -1025,6 +1053,10 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
+	uint32_t IgnoreSize = 0;
+
+	std::vector<git_oid> Treelist;
+
 	if (!ServHostName || !ConfRepoTOpenPath)
 		GS_ERR_CLEAN(1);
 
@@ -1083,6 +1115,12 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	// FIXME: handle timeout
 
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &Treelist)))
 		GS_GOTO_CLEAN();
 
 clean:
