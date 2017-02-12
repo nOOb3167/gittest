@@ -22,6 +22,7 @@
 /*
 * = Packet size vs Frame size =
 * currently sizes are checked against Packet size, instead of the size field of the sent Frame.
+* = Inferred size vs Explicit size for frame vector serialization =
 */
 
 #define GS_PORT 3756
@@ -50,6 +51,7 @@
 #define GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE 1
 #define GS_FRAME_TYPE_RESPONSE_LATEST_COMMIT_TREE 2
 #define GS_FRAME_TYPE_REQUEST_TREELIST 3
+#define GS_FRAME_TYPE_RESPONSE_TREELIST 4
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -64,6 +66,7 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE),
 	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),
 	GS_FRAME_TYPE_DECL(REQUEST_TREELIST),
+	GS_FRAME_TYPE_DECL(RESPONSE_TREELIST),
 };
 
 template<typename T>
@@ -282,8 +285,6 @@ int aux_frame_read_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset,
 	git_oid Oid = {};
 	uint8_t OidBuf[GIT_OID_RAWSZ] = {};
 	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_PAYLOAD_OID_LEN)))
-		GS_GOTO_CLEAN();
 	if (!!(r = aux_frame_read_buf(DataStart, DataLength, Offset, &Offset, OidBuf, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 	/* FIXME: LUL GOOD API NO SIZE PARAMETER IMPLEMENTED AS RAW MEMCPY */
@@ -293,6 +294,30 @@ int aux_frame_read_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset,
 		git_oid_cpy(oOid, &Oid);
 	if (OffsetNew)
 		*OffsetNew = Offset;
+clean:
+	return r;
+}
+
+int aux_frame_write_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint8_t *Oid, uint32_t OidSize)
+{
+	int r = 0;
+	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, Oid, OidSize)))
+		GS_GOTO_CLEAN();
+clean:
+	return r;
+}
+
+int aux_frame_write_oid_vec(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	git_oid *oOidVec, uint32_t OidNum, uint32_t OidSize)
+{
+	int r = 0;
+	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	for (uint32_t i = 0; i < OidNum; i++) {
+		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, oOidVec[i].id, OidSize)))
+			GS_GOTO_CLEAN();
+	}
 clean:
 	return r;
 }
@@ -308,9 +333,9 @@ int aux_frame_full_aux_write_oid(
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, GS_PAYLOAD_OID_LEN)))
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, OidSize)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
+	if (!!(r = aux_frame_write_oid((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
 	if (oBuffer)
 		oBuffer->swap(Buffer);
@@ -370,6 +395,29 @@ int aux_frame_full_write_request_treelist(
 	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
+}
+
+int aux_frame_full_write_response_treelist(
+	std::string *oBuffer,
+	std::vector<git_oid> *OidVec)
+{
+	int r = 0;
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
+	uint32_t PayloadSize = GS_PAYLOAD_OID_LEN * OidVec->size();
+	std::string Buffer;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+	uint32_t Offset = 0;
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
+		GS_GOTO_CLEAN();
+	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
 }
 
 /* FIXME: race condition between server startup and client connection.
@@ -518,6 +566,15 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
 				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_full_write_response_treelist(&ResponseBuffer, &Treelist)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
+				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			{
+				GS_GOTO_CLEAN();
+			}
 		}
 		break;
 
@@ -1017,6 +1074,15 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOidT.id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
+		GS_GOTO_CLEAN();
+
+	Offset = 0;
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: handle timeout
+
+	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
 		GS_GOTO_CLEAN();
 
 clean:
