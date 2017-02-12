@@ -19,6 +19,11 @@
 
 #include <gittest.h>
 
+/*
+* = Packet size vs Frame size =
+* currently sizes are checked against Packet size, instead of the size field of the sent Frame.
+*/
+
 #define GS_PORT 3756
 
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
@@ -31,7 +36,7 @@
 #define GS_FRAME_HEADER_LEN (GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)
 #define GS_FRAME_SIZE_LEN 4
 
-#define GS_PAYLOAD_OID_SIZE 20
+#define GS_PAYLOAD_OID_LEN 20
 
 #define GS_DBG_CLEAN {}
 //#define GS_DBG_CLEAN { assert(0); }
@@ -44,6 +49,7 @@
 #define GS_FRAME_TYPE_SERV_AUX_INTERRUPT_REQUESTED 0
 #define GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE 1
 #define GS_FRAME_TYPE_RESPONSE_LATEST_COMMIT_TREE 2
+#define GS_FRAME_TYPE_REQUEST_TREELIST 3
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -57,6 +63,7 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED),
 	GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE),
 	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),
+	GS_FRAME_TYPE_DECL(REQUEST_TREELIST),
 };
 
 template<typename T>
@@ -268,6 +275,49 @@ clean:
 	return r;
 }
 
+int aux_frame_read_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	git_oid *oOid)
+{
+	int r = 0;
+	git_oid Oid = {};
+	uint8_t OidBuf[GIT_OID_RAWSZ] = {};
+	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_PAYLOAD_OID_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_read_buf(DataStart, DataLength, Offset, &Offset, OidBuf, GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+	/* FIXME: LUL GOOD API NO SIZE PARAMETER IMPLEMENTED AS RAW MEMCPY */
+	assert(sizeof(unsigned char) == sizeof(uint8_t));
+	git_oid_fromraw(&Oid, (unsigned char *)OidBuf);
+	if (oOid)
+		git_oid_cpy(oOid, &Oid);
+	if (OffsetNew)
+		*OffsetNew = Offset;
+clean:
+	return r;
+}
+
+int aux_frame_full_aux_write_oid(
+	std::string *oBuffer,
+	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize)
+{
+	int r = 0;
+	std::string Buffer;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN);
+	uint32_t Offset = 0;
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+		GS_GOTO_CLEAN();
+	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, GS_PAYLOAD_OID_LEN)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
+		GS_GOTO_CLEAN();
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
+}
+
 int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer)
 {
@@ -310,20 +360,16 @@ int aux_frame_full_write_response_latest_commit_tree(
 {
 	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
-	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_SIZE);
-	uint32_t Offset = 0;
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-	assert(OidSize == GS_PAYLOAD_OID_SIZE);
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, GS_PAYLOAD_OID_SIZE)))
-		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
-		GS_GOTO_CLEAN();
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-clean:
-	return r;
+	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
+}
+
+int aux_frame_full_write_request_treelist(
+	std::string *oBuffer,
+	uint8_t *Oid, uint32_t OidSize)
+{
+	int r = 0;
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
+	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }
 
 /* FIXME: race condition between server startup and client connection.
@@ -403,6 +449,17 @@ void ServAuxData::InterruptRequestedDequeueMT_() {
 int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> ServWorkerData) {
 	int r = 0;
 
+	git_repository *Repository = NULL;
+
+	const char *ConfRefName = aux_config_key(ServKeyVal, "RefName");
+	const char *ConfRepoOpenPath = aux_config_key(ServKeyVal, "ConfRepoOpenPath");
+
+	if (!ConfRefName || !ConfRepoOpenPath)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = aux_repository_open(ConfRepoOpenPath, &Repository)))
+		GS_GOTO_CLEAN();
+
 	while (true) {
 		sp<ServWorkerRequestData> Request;
 
@@ -426,14 +483,16 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 		{
 			std::string ResponseBuffer;
 			uint32_t Offset = OffsetSize;
+			git_oid CommitHeadOid = {};
+			git_oid TreeHeadOid = {};
 
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			uint8_t Oid[GS_PAYLOAD_OID_SIZE] = {};
-			memset(Oid, 0x10, sizeof Oid);
+			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName, &CommitHeadOid, &TreeHeadOid)))
+				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, Oid, sizeof Oid)))
+			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
@@ -441,6 +500,24 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			{
 				GS_GOTO_CLEAN();
 			}
+		}
+		break;
+
+		case GS_FRAME_TYPE_REQUEST_TREELIST:
+		{
+			std::string ResponseBuffer;
+			uint32_t Offset = OffsetSize;
+			git_oid TreeOid = {};
+			std::vector<git_oid> Treelist;
+
+			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, &TreeOid)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
+				GS_GOTO_CLEAN();
 		}
 		break;
 
@@ -456,6 +533,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 	}
 
 clean:
+	if (Repository)
+		git_repository_free(Repository);
 
 	return r;
 }
@@ -877,10 +956,23 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	gs_packet_t Packet;
 
 	const char *ServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
+	const char *ConfRefName = aux_config_key(ClntKeyVal, "RefName");
+	const char *ConfRepoTOpenPath = aux_config_key(ClntKeyVal, "ConfRepoTOpenPath");
 	uint32_t ServPort = 0;
 
-	if (!ServHostName)
+	git_repository *RepositoryT = NULL;
+
+	uint32_t Offset = 0;
+
+	git_oid TreeHeadOid = {};
+	git_oid CommitHeadOidT = {};
+	git_oid TreeHeadOidT = {};
+
+	if (!ServHostName || !ConfRepoTOpenPath)
 		GS_ERR_CLEAN(1);
+
+	if (!!(r = aux_repository_open(ConfRepoTOpenPath, &RepositoryT)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ServPort)))
 		GS_GOTO_CLEAN();
@@ -892,8 +984,6 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		GS_GOTO_CLEAN();
 
 	printf("[clnt] Client connection succeeded.\n");
-
-	uint32_t Offset = 0;
 
 	if (!!(r = aux_frame_full_write_request_latest_commit_tree(&Buffer)))
 		GS_GOTO_CLEAN();
@@ -909,7 +999,24 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_SIZE)))
+	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, &TreeHeadOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, ConfRefName, &CommitHeadOidT, &TreeHeadOidT)))
+		GS_GOTO_CLEAN();
+
+	if (git_oid_cmp(&TreeHeadOidT, &TreeHeadOid) == 0) {
+		char buf[GIT_OID_HEXSZ] = {};
+		git_oid_fmt(buf, &CommitHeadOidT);
+		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+	}
+
+	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOidT.id, GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
 
 clean:
@@ -921,6 +1028,9 @@ clean:
 
 	if (client)
 		enet_host_destroy(client);
+
+	if (RepositoryT)
+		git_repository_free(RepositoryT);
 
 	return r;
 }
