@@ -52,6 +52,8 @@
 #define GS_FRAME_TYPE_RESPONSE_LATEST_COMMIT_TREE 2
 #define GS_FRAME_TYPE_REQUEST_TREELIST 3
 #define GS_FRAME_TYPE_RESPONSE_TREELIST 4
+#define GS_FRAME_TYPE_REQUEST_TREES 5
+#define GS_FRAME_TYPE_RESPONSE_TREES 6
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -67,6 +69,8 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),
 	GS_FRAME_TYPE_DECL(REQUEST_TREELIST),
 	GS_FRAME_TYPE_DECL(RESPONSE_TREELIST),
+	GS_FRAME_TYPE_DECL(REQUEST_TREES),
+	GS_FRAME_TYPE_DECL(RESPONSE_TREES),
 };
 
 template<typename T>
@@ -371,6 +375,66 @@ clean:
 	return r;
 }
 
+int aux_frame_full_aux_write_oid_vec(
+	std::string *oBuffer,
+	GsFrameType *FrameType, std::vector<git_oid> *OidVec)
+{
+	int r = 0;
+
+	std::string Buffer;
+	uint32_t PayloadSize = 0;
+	uint32_t Offset = 0;
+
+	PayloadSize = GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN * OidVec->size();
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
+}
+
+int aux_frame_full_aux_write_paired_vec(
+	std::string *oBuffer,
+	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
+{
+	int r = 0;
+
+	std::string Buffer;
+	uint32_t PayloadSize = 0;
+	uint32_t Offset = 0;
+
+	PayloadSize = GS_FRAME_SIZE_LEN + SizeBufferTree->size() + ObjectBufferTree->size();
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
+		GS_GOTO_CLEAN();
+
+	assert(SizeBufferTree->size() == ObjectBufferTree->size());
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size())))
+		GS_GOTO_CLEAN();
+
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+clean:
+	return r;
+}
+
 int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer)
 {
@@ -411,7 +475,6 @@ int aux_frame_full_write_response_latest_commit_tree(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize)
 {
-	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }
@@ -420,7 +483,6 @@ int aux_frame_full_write_request_treelist(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize)
 {
-	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }
@@ -429,23 +491,24 @@ int aux_frame_full_write_response_treelist(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec)
 {
-	int r = 0;
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
-	uint32_t PayloadSize = GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN * OidVec->size();
-	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
-	uint32_t Offset = 0;
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
-		GS_GOTO_CLEAN();
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
-	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ)))
-		GS_GOTO_CLEAN();
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-clean:
-	return r;
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+}
+
+int aux_frame_full_write_request_trees(
+	std::string *oBuffer,
+	std::vector<git_oid> *OidVec)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+}
+
+int aux_frame_full_write_response_trees(
+	std::string *oBuffer,
+	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
+	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree);
 }
 
 /* FIXME: race condition between server startup and client connection.
@@ -596,6 +659,38 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_treelist(&ResponseBuffer, &Treelist)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
+				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		case GS_FRAME_TYPE_REQUEST_TREES:
+		{
+			std::string ResponseBuffer;
+			uint32_t Offset = OffsetSize;
+			uint32_t IgnoreSize = 0;
+			std::vector<git_oid> TreelistRequested;
+			std::string SizeBufferTree;
+			std::string ObjectBufferTree;
+			uint32_t PairedVecLen = 0;
+
+			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &TreelistRequested)))
+				GS_GOTO_CLEAN();
+
+			PairedVecLen = TreelistRequested.size();
+
+			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, PairedVecLen, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
@@ -1056,6 +1151,7 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	uint32_t IgnoreSize = 0;
 
 	std::vector<git_oid> Treelist;
+	std::vector<git_oid> MissingTreelist;
 
 	if (!ServHostName || !ConfRepoTOpenPath)
 		GS_ERR_CLEAN(1);
@@ -1121,6 +1217,23 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &Treelist)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_missing_trees(RepositoryT, &Treelist, &MissingTreelist)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_request_trees(&Buffer, &MissingTreelist)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
+		GS_GOTO_CLEAN();
+
+	Offset = 0;
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: handle timeout
+
+	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
 
 clean:
