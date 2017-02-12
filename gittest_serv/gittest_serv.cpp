@@ -64,7 +64,12 @@ using sp = ::std::shared_ptr<T>;
 
 typedef ::std::shared_ptr<ENetPacket> gs_packet_t;
 
-class ServWorkerRequestData {};
+class ServWorkerRequestData {
+public:
+	ENetHost *mHost;
+	ENetPeer *mPeer;
+	gs_packet_t mPacket;
+};
 
 class ServWorkerData {
 public:
@@ -74,7 +79,7 @@ public:
 		mWorkerDataCond(new std::condition_variable)
 	{}
 
-	void RequestEnqueue(sp<ServWorkerRequestData> RequestData);
+	void RequestEnqueue(const sp<ServWorkerRequestData> &RequestData);
 	void RequestDequeue(sp<ServWorkerRequestData> *oRequestData);
 
 private:
@@ -104,8 +109,28 @@ private:
 	sp<std::condition_variable> mAuxDataCond;
 };
 
+
+int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
+
+
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(packet, [](ENetPacket *xpacket) { enet_packet_destroy(xpacket); });
+}
+
+int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, const gs_packet_t &Packet, sp<ServWorkerRequestData> *oServWorkerRequestData) {
+	int r = 0;
+
+	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData);
+	ServWorkerRequestData->mHost = host;
+	ServWorkerRequestData->mPeer = peer;
+	ServWorkerRequestData->mPacket = Packet;
+
+	if (oServWorkerRequestData)
+		*oServWorkerRequestData = ServWorkerRequestData;
+
+clean:
+
+	return r;
 }
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
@@ -237,6 +262,8 @@ int aux_frame_ensure_frametype(uint8_t *DataStart, uint32_t DataLength, uint32_t
 		GS_GOTO_CLEAN();
 	if (! aux_frametype_equals(FoundFrameType, FrameType))
 		GS_ERR_CLEAN(1);
+	if (OffsetNew)
+		*OffsetNew = Offset;
 clean:
 	return r;
 }
@@ -325,7 +352,7 @@ clean:
 	return r;
 }
 
-void ServWorkerData::RequestEnqueue(sp<ServWorkerRequestData> RequestData) {
+void ServWorkerData::RequestEnqueue(const sp<ServWorkerRequestData> &RequestData) {
 	{
 		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
 		mWorkerQueue->push_back(RequestData);
@@ -373,8 +400,60 @@ void ServAuxData::InterruptRequestedDequeueMT_() {
 	mInterruptRequested = false;
 }
 
-int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
+int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> ServWorkerData) {
 	int r = 0;
+
+	while (true) {
+		sp<ServWorkerRequestData> Request;
+
+		ServWorkerData->RequestDequeue(&Request);
+
+		const gs_packet_t &Packet = Request->mPacket;
+
+		uint32_t OffsetStart = 0;
+		uint32_t OffsetSize = 0;
+
+		GsFrameType FoundFrameType = {};
+
+		if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, OffsetStart, &OffsetSize, &FoundFrameType)))
+			GS_GOTO_CLEAN();
+
+		printf("[worker] packet received [%.*s]\n", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+
+		switch (FoundFrameType.mTypeNum)
+		{
+		case GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE:
+		{
+			std::string ResponseBuffer;
+			uint32_t Offset = OffsetSize;
+
+			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
+				GS_GOTO_CLEAN();
+
+			uint8_t Oid[GS_PAYLOAD_OID_SIZE] = {};
+			memset(Oid, 0x10, sizeof Oid);
+
+			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, Oid, sizeof Oid)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
+				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		default:
+		{
+			printf("[worker] unknown frametype received [%.*s]\n", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+			if (1)
+				GS_ERR_CLEAN(1);
+		}
+		break;
+		}
+
+	}
 
 clean:
 
@@ -575,7 +654,7 @@ clean:
 	return r;
 }
 
-int serv_host_service(ENetHost *server) {
+int serv_host_service(ENetHost *server, const sp<ServWorkerData> &ServWorkerData) {
 	int r = 0;
 
 	std::vector<ENetEvent> Events;
@@ -597,19 +676,29 @@ int serv_host_service(ENetHost *server) {
 
 		case ENET_EVENT_TYPE_RECEIVE:
 		{
-			printf("[serv] received packet\n");
+			ENetPeer *peer = Events[i].peer;
 
-			gs_packet_t Packet = aux_gs_make_packet(Events[i].packet);
-			uint32_t Offset = 0;
+			const GsFrameType &FrameTypeInterruptRequested = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
+			GsFrameType FoundFrameType = {};
 
-			Offset = 0;
-			int typeLCT = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE));
-			Offset = 0;
-			int typeIRQ = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED));
-			if (!!typeLCT && !!typeIRQ)
-				GS_ERR_CLEAN(1);
+			if (!!(r = aux_frame_read_frametype(Events[i].packet->data, Events[i].packet->dataLength, 0, NULL, &FoundFrameType)))
+				GS_GOTO_CLEAN();
 
-			printf("[serv] received packet type [%s]\n", (char *)Packet->data);
+			/* filter out interrupt requested frames and only dispatch other */
+
+			if (! aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested)) {
+				
+				printf("[serv] packet received\n");
+
+				gs_packet_t Packet = aux_gs_make_packet(Events[i].packet);
+
+				sp<ServWorkerRequestData> ServWorkerRequestData;
+
+				if (!!(r = aux_make_serv_worker_request_data(server, peer, Packet, &ServWorkerRequestData)))
+					GS_GOTO_CLEAN();
+
+				ServWorkerData->RequestEnqueue(ServWorkerRequestData);
+			}
 		}
 		break;
 
@@ -765,7 +854,7 @@ int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerD
 		GS_GOTO_CLEAN();
 
 	while (true) {
-		if (!!(r = serv_host_service(server)))
+		if (!!(r = serv_host_service(server, ServWorkerData)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -836,9 +925,9 @@ clean:
 	return r;
 }
 
-void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
+void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> ServWorkerData) {
 	int r = 0;
-	if (!!(r = serv_worker_thread_func(ServKeyVal, ServWorkerData)))
+	if (!!(r = serv_worker_thread_func(ServKeyVal, ServAuxData, ServWorkerData)))
 		assert(0);
 	for (;;) {}
 }
@@ -878,7 +967,7 @@ int stuff2() {
 		sp<ServWorkerData> ServWorkerData(new ServWorkerData);
 		sp<ServAuxData> ServAuxData(new ServAuxData);
 
-		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServWorkerData));
+		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, ServWorkerData));
 		sp<std::thread> ServerAuxThread(new std::thread(serv_aux_thread_func_f, ServKeyVal, ServAuxData));
 		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, ServWorkerData));
 		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, ServAuxData));
