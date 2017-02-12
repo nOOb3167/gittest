@@ -1,4 +1,8 @@
 #ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif _MSC_VER
+
+#ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif /* _MSC_VER */
 
@@ -386,23 +390,21 @@ int serv_serialize_blobs(git_repository *Repository, std::vector<git_oid> *BlobO
 	return aux_serialize_objects(Repository, BlobOid, GIT_OBJ_BLOB, oSizeBuffer, oBlobBuffer);
 }
 
-int aux_deserialize_sizebuffer(std::string *SizeBuffer, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize) {
+int aux_deserialize_sizebuffer(uint8_t *DataStart, uint32_t DataLength, uint32_t OffsetSizeBuffer, uint32_t SizeVecLen, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize) {
 	int r = 0;
 
 	std::vector<uint32_t> SizeVector;
 	size_t CumulativeSize = 0;
 
 	assert(sizeof(uint32_t) == 4);
-	if (SizeBuffer->size() % 4 != 0)
-	{
-		r = 1; goto clean;
-	}
+	if (SizeVecLen % 4 != 0)
+		{ r = 1; goto clean; }
 
-	uint32_t NumBuffer = (uint32_t)(SizeBuffer->size() / sizeof(uint32_t));
+	assert(DataStart + OffsetSizeBuffer + SizeVecLen * sizeof(uint32_t) <= DataStart + DataLength);
 
-	SizeVector.resize(NumBuffer);
-	for (uint32_t i = 0; i < NumBuffer; i++) {
-		aux_LE_to_uint32(&SizeVector[i], SizeBuffer->data() + i * sizeof(uint32_t), 4);
+	SizeVector.resize(SizeVecLen);
+	for (uint32_t i = 0; i < SizeVecLen; i++) {
+		aux_LE_to_uint32(&SizeVector[i], (char *)(DataStart + OffsetSizeBuffer + i * sizeof(uint32_t)), 4);
 		CumulativeSize += SizeVector[i];
 	}
 
@@ -417,8 +419,10 @@ clean:
 }
 
 int aux_deserialize_objects_odb(
-	git_odb *OdbT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
-	std::vector<git_oid> *oWrittenObjectOid)
+	git_odb *OdbT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid)
 {
 	int r = 0;
 
@@ -426,17 +430,17 @@ int aux_deserialize_objects_odb(
 	std::vector<uint32_t> SizeVector;
 	size_t CumulativeSize = 0;
 
-	if (!!(r = aux_deserialize_sizebuffer(SizeBuffer, &SizeVector, &CumulativeSize)))
+	if (!!(r = aux_deserialize_sizebuffer(DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer, PairedVecLen, &SizeVector, &CumulativeSize)))
 		goto clean;
 
-	assert(ObjectBuffer->size() == CumulativeSize);
+	assert(DataStartObjectBuffer + OffsetObjectBuffer + CumulativeSize <= DataStartObjectBuffer + DataLengthObjectBuffer);
 
 	WrittenObjectOid.resize(SizeVector.size());
 	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
 		git_oid FreshOid = {};
 		/* supposedly git_odb_stream_write recommended */
 		// FIXME: assuming contiguous std::string etc
-		if (!!(r = git_odb_write(&FreshOid, OdbT, ObjectBuffer->data() + idx, SizeVector[i], WrittenObjectType)))
+		if (!!(r = git_odb_write(&FreshOid, OdbT, DataStartObjectBuffer + OffsetObjectBuffer + idx, SizeVector[i], WrittenObjectType)))
 			goto clean;
 		git_oid_cpy(&WrittenObjectOid[i], &FreshOid);
 	}
@@ -450,8 +454,10 @@ clean:
 }
 
 int aux_deserialize_objects(
-	git_repository *RepositoryT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
-	std::vector<git_oid> *oWrittenObjectOid)
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid)
 {
 	int r = 0;
 
@@ -462,8 +468,14 @@ int aux_deserialize_objects(
 	if (!!(r = git_repository_odb(&OdbT, RepositoryT)))
 		goto clean;
 
-	if (!!(r = aux_deserialize_objects_odb(OdbT, SizeBuffer, ObjectBuffer, WrittenObjectType, &WrittenObjectOid)))
+	if (!!(r = aux_deserialize_objects_odb(
+		OdbT,
+		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
+		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
+		PairedVecLen, WrittenObjectType, &WrittenObjectOid)))
+	{
 		goto clean;
+	}
 
 	if (oWrittenObjectOid)
 		oWrittenObjectOid->swap(WrittenObjectOid);
@@ -475,16 +487,42 @@ clean:
 	return r;
 }
 
-int aux_clnt_deserialize_trees(git_odb *OdbT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree) {
-	return aux_deserialize_objects_odb(OdbT, SizeBuffer, TreeBuffer, GIT_OBJ_TREE, oDeserializedTree);
+int aux_clnt_deserialize_trees(
+	git_odb *OdbT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedTree)
+{
+	return aux_deserialize_objects_odb(OdbT,
+		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
+		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
+		PairedVecLen, GIT_OBJ_TREE, oDeserializedTree);
 }
 
-int clnt_deserialize_trees(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree) {
-	return aux_deserialize_objects(RepositoryT, SizeBuffer, TreeBuffer, GIT_OBJ_TREE, oDeserializedTree);
+int clnt_deserialize_trees(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedTree)
+{
+	return aux_deserialize_objects(
+		RepositoryT,
+		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
+		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
+		PairedVecLen, GIT_OBJ_TREE, oDeserializedTree);
 }
 
-int clnt_deserialize_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *BlobBuffer, std::vector<git_oid> *oDeserializedBlob) {
-	return aux_deserialize_objects(RepositoryT, SizeBuffer, BlobBuffer, GIT_OBJ_BLOB, oDeserializedBlob);
+int clnt_deserialize_blobs(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedBlob)
+{
+	return aux_deserialize_objects(
+		RepositoryT,
+		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
+		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
+		PairedVecLen, GIT_OBJ_BLOB, oDeserializedBlob);
 }
 
 int clnt_missing_trees(git_repository *RepositoryT, std::vector<git_oid> *Treelist, std::vector<git_oid> *oMissingTreeList) {
@@ -596,7 +634,12 @@ clean:
 	return r;
 }
 
-int clnt_missing_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oMissingBloblist) {
+int clnt_missing_blobs_bare(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oMissingBloblist)
+{
 	int r = 0;
 
 	std::vector<git_oid> DeserializedTree;
@@ -619,8 +662,14 @@ int clnt_missing_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std
 	if (!!(r = git_repository_odb(&RepositoryTOdb, RepositoryT)))
 		goto clean;
 
-	if (!!(r = aux_clnt_deserialize_trees(RepositoryMemoryOdb, SizeBuffer, TreeBuffer, &DeserializedTree)))
+	if (!!(r = aux_clnt_deserialize_trees(
+		RepositoryMemoryOdb,
+		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
+		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
+		PairedVecLen, &DeserializedTree)))
+	{
 		goto clean;
+	}
 
 	TreeMem_TreeT.resize(DeserializedTree.size());
 	for (uint32_t i = 0; i < DeserializedTree.size(); i++) {
@@ -665,6 +714,14 @@ clean:
 		git_repository_free(RepositoryMemory);
 
 	return r;
+}
+
+int clnt_missing_blobs(git_repository *RepositoryT, uint32_t PairedVecLen, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oMissingBloblist) {
+	return clnt_missing_blobs_bare(
+		RepositoryT,
+		(uint8_t *)SizeBuffer->data(), SizeBuffer->size(), 0,
+		(uint8_t *)TreeBuffer->data(), TreeBuffer->size(), 0,
+		PairedVecLen, oMissingBloblist);
 }
 
 int aux_commit_buffer_checkexist_dummy(git_odb *OdbT, git_buf *CommitBuf, uint32_t *oExists, git_oid *oCommitOid) {
@@ -899,17 +956,28 @@ int stuff(const confmap_t &KeyVal) {
 	if (!!(r = serv_serialize_trees(Repository, &MissingTreelist, &SizeBufferTree, &ObjectBufferTree)))
 		goto clean;
 
-	if (!!(r = clnt_missing_blobs(RepositoryT, &SizeBufferTree, &ObjectBufferTree, &MissingBloblist)))
+	if (!!(r = clnt_missing_blobs(RepositoryT, MissingTreelist.size(), &SizeBufferTree, &ObjectBufferTree, &MissingBloblist)))
 		goto clean;
 
 	if (!!(r = serv_serialize_blobs(Repository, &MissingBloblist, &SizeBufferBlob, &ObjectBufferBlob)))
 		goto clean;
 
-	if (!!(r = clnt_deserialize_trees(RepositoryT, &SizeBufferTree, &ObjectBufferTree, &WrittenTree)))
+	if (!!(r = clnt_deserialize_trees(
+		RepositoryT,
+		(uint8_t *)SizeBufferTree.data(), SizeBufferTree.size(), 0,
+		(uint8_t *)ObjectBufferTree.data(), ObjectBufferTree.size(), 0,
+		MissingTreelist.size(), &WrittenTree)))
+	{
 		goto clean;
+	}
 
-	if (!!(r = clnt_deserialize_blobs(RepositoryT, &SizeBufferBlob, &ObjectBufferBlob, &WrittenBlob)))
+	if (!!(r = clnt_deserialize_blobs(RepositoryT,
+		(uint8_t *)SizeBufferBlob.data(), SizeBufferBlob.size(), 0,
+		(uint8_t *)ObjectBufferBlob.data(), ObjectBufferBlob.size(), 0,
+		MissingBloblist.size(), &WrittenBlob)))
+	{
 		goto clean;
+	}
 
 	assert(!Treelist.empty());
 	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);

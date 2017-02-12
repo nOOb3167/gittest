@@ -41,23 +41,44 @@ int aux_serialize_objects(
 	std::string *oSizeBuffer, std::string *oObjectBuffer);
 int serv_serialize_trees(git_repository *Repository, std::vector<git_oid> *TreeOid, std::string *oSizeBuffer, std::string *oTreeBuffer);
 int serv_serialize_blobs(git_repository *Repository, std::vector<git_oid> *BlobOid, std::string *oSizeBuffer, std::string *oBlobBuffer);
-int aux_deserialize_sizebuffer(std::string *SizeBuffer, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize);
+int aux_deserialize_sizebuffer(uint8_t *DataStart, uint32_t DataLength, uint32_t OffsetSizeBuffer, uint32_t SizeVecLen, std::vector<uint32_t> *oSizeVector, size_t *oCumulativeSize);
 int aux_deserialize_objects_odb(
-	git_odb *OdbT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
-	std::vector<git_oid> *oWrittenObjectOid);
+	git_odb *OdbT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid);
 int aux_deserialize_objects(
-	git_repository *RepositoryT, std::string *SizeBuffer, std::string *ObjectBuffer, git_otype WrittenObjectType,
-	std::vector<git_oid> *oWrittenObjectOid);
-int aux_clnt_deserialize_trees(git_odb *OdbT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree);
-int clnt_deserialize_trees(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oDeserializedTree);
-int clnt_deserialize_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *BlobBuffer, std::vector<git_oid> *oDeserializedBlob);
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid);
+int aux_clnt_deserialize_trees(
+	git_odb *OdbT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedTree);
+int clnt_deserialize_trees(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedTree);
+int clnt_deserialize_blobs(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedBlob);
 int clnt_missing_trees(git_repository *RepositoryT, std::vector<git_oid> *Treelist, std::vector<git_oid> *oMissingTreeList);
 int aux_memory_repository_new(git_repository **oRepositoryMemory);
 int aux_clnt_dual_lookup_expect_missing(
 	git_repository *RepositoryMemory, git_repository *RepositoryT,
 	git_oid *TreeOid,
 	git_tree **oTreeMem, git_tree **oTreeT);
-int clnt_missing_blobs(git_repository *RepositoryT, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oMissingBloblist);
+int clnt_missing_blobs_bare(
+	git_repository *RepositoryT,
+	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
+	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
+	uint32_t PairedVecLen, std::vector<git_oid> *oMissingBloblist);
+int clnt_missing_blobs(git_repository *RepositoryT, uint32_t PairedVecLen, std::string *SizeBuffer, std::string *TreeBuffer, std::vector<git_oid> *oMissingBloblist);
 int aux_commit_buffer_checkexist_dummy(git_odb *OdbT, git_buf *CommitBuf, uint32_t *oExists, git_oid *oCommitOid);
 int aux_commit_buffer_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_buf *oCommitBuf);
 int aux_commit_commit_dummy(git_odb *OdbT, git_buf *CommitBuf, git_oid *oCommitOid);

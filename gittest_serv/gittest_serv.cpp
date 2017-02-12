@@ -54,6 +54,8 @@
 #define GS_FRAME_TYPE_RESPONSE_TREELIST 4
 #define GS_FRAME_TYPE_REQUEST_TREES 5
 #define GS_FRAME_TYPE_RESPONSE_TREES 6
+#define GS_FRAME_TYPE_REQUEST_BLOBS 7
+#define GS_FRAME_TYPE_RESPONSE_BLOBS 8
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -71,6 +73,8 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(RESPONSE_TREELIST),
 	GS_FRAME_TYPE_DECL(REQUEST_TREES),
 	GS_FRAME_TYPE_DECL(RESPONSE_TREES),
+	GS_FRAME_TYPE_DECL(REQUEST_BLOBS),
+	GS_FRAME_TYPE_DECL(RESPONSE_BLOBS),
 };
 
 template<typename T>
@@ -402,6 +406,35 @@ clean:
 	return r;
 }
 
+int aux_frame_full_aux_read_paired_vec_noalloc(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint32_t *oPairedVecLen, uint32_t *oOffsetSizeBuffer, uint32_t *oOffsetObjectBuffer)
+{
+	int r = 0;
+
+	uint32_t PairedVecLen = 0;
+	uint32_t OffsetSizeBuffer = 0;
+	uint32_t OffsetObjectBuffer = 0;
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &PairedVecLen)))
+		GS_GOTO_CLEAN();
+
+	OffsetSizeBuffer = Offset;
+
+	OffsetObjectBuffer = Offset + GS_FRAME_SIZE_LEN * PairedVecLen;
+
+	if (oPairedVecLen)
+		*oPairedVecLen = PairedVecLen;
+	if (oOffsetSizeBuffer)
+		*oOffsetSizeBuffer = OffsetSizeBuffer;
+	if (oOffsetObjectBuffer)
+		*oOffsetObjectBuffer = OffsetObjectBuffer;
+	if (OffsetNew)
+		*OffsetNew = Offset;
+clean:
+	return r;
+}
+
 int aux_frame_full_aux_write_paired_vec(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
@@ -509,6 +542,22 @@ int aux_frame_full_write_response_trees(
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
 	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree);
+}
+
+int aux_frame_full_write_request_blobs(
+	std::string *oBuffer,
+	std::vector<git_oid> *OidVec)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+}
+
+int aux_frame_full_write_response_blobs(
+	std::string *oBuffer,
+	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOBS);
+	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
 }
 
 /* FIXME: race condition between server startup and client connection.
@@ -691,6 +740,38 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, PairedVecLen, &SizeBufferTree, &ObjectBufferTree)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
+				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		case GS_FRAME_TYPE_REQUEST_BLOBS:
+		{
+			std::string ResponseBuffer;
+			uint32_t Offset = OffsetSize;
+			uint32_t IgnoreSize = 0;
+			std::vector<git_oid> BloblistRequested;
+			std::string SizeBufferBlob;
+			std::string ObjectBufferBlob;
+			uint32_t PairedVecLen = 0;
+
+			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &BloblistRequested)))
+				GS_GOTO_CLEAN();
+
+			PairedVecLen = BloblistRequested.size();
+
+			if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, PairedVecLen, &SizeBufferBlob, &ObjectBufferBlob)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
@@ -1130,10 +1211,12 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	ENetAddress address = {};
 	ENetHost *client = NULL;
 	ENetPeer *peer = NULL;
-	ENetPacket *packet = NULL;
 
 	std::string Buffer;
 	gs_packet_t Packet;
+	/* two packets need extended lifetime / are to be used with noalloc read functions */
+	gs_packet_t PacketTree;
+	gs_packet_t PacketBlob;
 
 	const char *ServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
 	const char *ConfRefName = aux_config_key(ClntKeyVal, "RefName");
@@ -1152,6 +1235,18 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 
 	std::vector<git_oid> Treelist;
 	std::vector<git_oid> MissingTreelist;
+
+	uint32_t BufferTreeLen = 0;
+	uint32_t OffsetSizeBufferTree = 0;
+	uint32_t OffsetObjectBufferTree = 0;
+
+	std::vector<git_oid> MissingBloblist;
+
+	uint32_t BufferBlobLen = 0;
+	uint32_t OffsetSizeBufferBlob = 0;
+	uint32_t OffsetObjectBufferBlob = 0;
+
+	std::vector<git_oid> WrittenBlob;
 
 	if (!ServHostName || !ConfRepoTOpenPath)
 		GS_ERR_CLEAN(1);
@@ -1227,19 +1322,78 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
 
+	/* NOTE: NOALLOC - PacketTree Lifetime start */
 	Offset = 0;
-	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &PacketTree)))
 		GS_GOTO_CLEAN();
 
 	// FIXME: handle timeout
 
-	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
+	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
 
-clean:
-	if (packet)
-		enet_packet_destroy(packet);
+	if (!!(r = aux_frame_read_size(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+		GS_GOTO_CLEAN();
 
+	/* NOTE: NOALLOC - PacketTree Offsets use start */
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketTree->data, PacketTree->dataLength, Offset, &Offset,
+		&BufferTreeLen, &OffsetSizeBufferTree, &OffsetObjectBufferTree)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = clnt_missing_blobs_bare(
+		RepositoryT,
+		PacketTree->data, PacketTree->dataLength, OffsetSizeBufferTree,
+		PacketTree->data, PacketTree->dataLength, OffsetObjectBufferTree, MissingTreelist.size(), &MissingBloblist)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_frame_full_write_request_blobs(&Buffer, &MissingBloblist)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: NOALLOC - PacketBlob Lifetime start */
+	Offset = 0;
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &PacketBlob)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: handle timeout
+
+	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: NOALLOC - PacketBlob Offsets use start */
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset,
+		&BufferBlobLen, &OffsetSizeBufferBlob, &OffsetObjectBufferBlob)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = clnt_deserialize_blobs(
+		RepositoryT,
+		PacketBlob->data, PacketBlob->dataLength, OffsetSizeBufferBlob,
+		PacketBlob->data, PacketBlob->dataLength, OffsetObjectBufferBlob,
+		MissingBloblist.size(), &WrittenBlob)))
+	{
+		goto clean;
+	}
+
+	if (!!(r = clnt_deserialize_trees(
+		RepositoryT,
+		PacketTree->data, PacketTree->dataLength, OffsetSizeBufferTree,
+		PacketTree->data, PacketTree->dataLength, OffsetObjectBufferTree,
+		MissingTreelist.size(), &WrittenBlob)))
+	{
+		goto clean;
+	}
+
+clean:
 	if (peer)
 		enet_peer_reset(peer);
 
