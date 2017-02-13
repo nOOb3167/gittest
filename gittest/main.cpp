@@ -396,10 +396,6 @@ int aux_deserialize_sizebuffer(uint8_t *DataStart, uint32_t DataLength, uint32_t
 	std::vector<uint32_t> SizeVector;
 	size_t CumulativeSize = 0;
 
-	assert(sizeof(uint32_t) == 4);
-	if (SizeVecLen % 4 != 0)
-		{ r = 1; goto clean; }
-
 	assert(DataStart + OffsetSizeBuffer + SizeVecLen * sizeof(uint32_t) <= DataStart + DataLength);
 
 	SizeVector.resize(SizeVecLen);

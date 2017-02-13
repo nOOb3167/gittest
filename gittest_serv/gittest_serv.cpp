@@ -1294,7 +1294,7 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	if (git_oid_cmp(&TreeHeadOidT, &TreeHeadOid) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &CommitHeadOidT);
-		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+		printf("[clnt] Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
 	}
 
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
@@ -1384,7 +1384,7 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		PacketBlob->data, PacketBlob->dataLength, OffsetObjectBufferBlob,
 		MissingBloblist.size(), &WrittenBlob)))
 	{
-		goto clean;
+		GS_GOTO_CLEAN();
 	}
 
 	if (!!(r = clnt_deserialize_trees(
@@ -1393,15 +1393,17 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		PacketTree->data, PacketTree->dataLength, OffsetObjectBufferTree,
 		MissingTreelist.size(), &WrittenTree)))
 	{
-		goto clean;
+		GS_GOTO_CLEAN();
 	}
 
 	assert(!Treelist.empty());
 	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
 	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
-		goto clean;
+		GS_GOTO_CLEAN();
 	if (!!(r = clnt_commit_setref(RepositoryT, ConfRefName, &CreatedCommitOid)))
-		goto clean;
+		GS_GOTO_CLEAN();
+
+	printf("[clnt] done\n");
 
 clean:
 	if (peer)
