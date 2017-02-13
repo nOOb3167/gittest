@@ -1247,6 +1247,10 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	uint32_t OffsetObjectBufferBlob = 0;
 
 	std::vector<git_oid> WrittenBlob;
+	std::vector<git_oid> WrittenTree;
+
+	git_oid LastReverseToposortAkaFirstToposort = {};
+	git_oid CreatedCommitOid = {};
 
 	if (!ServHostName || !ConfRepoTOpenPath)
 		GS_ERR_CLEAN(1);
@@ -1388,10 +1392,17 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		RepositoryT,
 		PacketTree->data, PacketTree->dataLength, OffsetSizeBufferTree,
 		PacketTree->data, PacketTree->dataLength, OffsetObjectBufferTree,
-		MissingTreelist.size(), &WrittenBlob)))
+		MissingTreelist.size(), &WrittenTree)))
 	{
 		goto clean;
 	}
+
+	assert(!Treelist.empty());
+	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
+	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
+		goto clean;
+	if (!!(r = clnt_commit_setref(RepositoryT, ConfRefName, &CreatedCommitOid)))
+		goto clean;
 
 clean:
 	if (peer)
