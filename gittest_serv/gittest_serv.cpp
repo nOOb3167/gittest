@@ -30,7 +30,7 @@
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
 #define GS_CONNECT_NUMRETRY   5
 #define GS_CONNECT_TIMEOUT_MS 1000
-#define GS_RECEIVE_TIMEOUT_MS 5000
+#define GS_RECEIVE_TIMEOUT_MS 500000
 
 #define GS_FRAME_HEADER_STR_LEN 40
 #define GS_FRAME_HEADER_NUM_LEN 4
@@ -454,7 +454,6 @@ int aux_frame_full_aux_write_paired_vec(
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
 
-	assert(SizeBufferTree->size() == ObjectBufferTree->size());
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
 		GS_GOTO_CLEAN();
 	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
@@ -1298,7 +1297,7 @@ int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
 	}
 
-	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOidT.id, GIT_OID_RAWSZ)))
+	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 	if (!!(r = aux_packet_full_send(client, peer, ServAuxData.get(), Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
