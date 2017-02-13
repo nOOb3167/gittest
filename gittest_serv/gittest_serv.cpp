@@ -83,7 +83,7 @@ GsFrameType GsFrameTypes[] = {
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
-typedef ::std::shared_ptr<ENetPacket> gs_packet_t;
+typedef ::std::shared_ptr<ENetPacket *> gs_packet_t;
 
 class ServWorkerRequestData {
 public:
@@ -135,7 +135,7 @@ int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxDat
 
 
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
-	return gs_packet_t(packet, [](ENetPacket *xpacket) { enet_packet_destroy(xpacket); });
+	return gs_packet_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
 }
 
 int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, const gs_packet_t &Packet, sp<ServWorkerRequestData> *oServWorkerRequestData) {
@@ -655,7 +655,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 
 		ServWorkerData->RequestDequeue(&Request);
 
-		const gs_packet_t &Packet = Request->mPacket;
+		ENetPacket * const &Packet = *Request->mPacket;
 
 		uint32_t OffsetStart = 0;
 		uint32_t OffsetSize = 0;
@@ -1279,7 +1279,7 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 	if (! State->mWrittenBlob || ! State->mWrittenTree)
 		{ Code = 5; goto s5; }
 	if (true)
-		{ Code = 6; }
+		{ Code = 6; goto s6; }
 
 s0:
 	if (State->mConnection)
@@ -1297,6 +1297,7 @@ s4:
 	if (State->mWrittenBlob || State->mWrittenTree)
 		GS_ERR_CLEAN(1);
 s5:
+s6:
 
 	if (oCode)
 		*oCode = Code;
@@ -1356,7 +1357,7 @@ int clnt_state_2_noown(
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t Packet;
+	gs_packet_t GsPacket = aux_gs_make_packet(NULL);
 	uint32_t Offset = 0;
 
 	git_oid CommitHeadOidT = {};
@@ -1367,8 +1368,10 @@ int clnt_state_2_noown(
 	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &Packet = *GsPacket;
 
 	if (! Packet)
 		GS_ERR_CLEAN(1);
@@ -1403,7 +1406,7 @@ int clnt_state_3_noown(
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t Packet;
+	gs_packet_t GsPacket = aux_gs_make_packet(NULL);
 	uint32_t Offset = 0;
 	uint32_t IgnoreSize = 0;
 
@@ -1412,8 +1415,10 @@ int clnt_state_3_noown(
 	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &Packet = *GsPacket;
 
 	if (! Packet)
 		GS_ERR_CLEAN(1);
@@ -1443,7 +1448,6 @@ int clnt_state_4_noown(
 	int r = 0;
 
 	std::string Buffer;
-	const gs_packet_t &PacketTree = *oPacketTree;
 	uint32_t Offset = 0;
 	uint32_t IgnoreSize = 0;
 
@@ -1458,6 +1462,8 @@ int clnt_state_4_noown(
 
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, oPacketTree)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketTree = **oPacketTree;
 
 	if (! PacketTree)
 		GS_ERR_CLEAN(1);
@@ -1492,13 +1498,13 @@ clean:
 int clnt_state_5_noown(
 	git_repository *RepositoryT, ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData,
 	std::vector<git_oid> *MissingTreelist, std::vector<git_oid> *MissingBloblist,
-	const gs_packet_t &PacketTree, uint32_t OffsetSizeBufferTree, uint32_t OffsetObjectBufferTree,
+	const gs_packet_t &GsPacketTree, uint32_t OffsetSizeBufferTree, uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob, std::vector<git_oid> *oWrittenTree)
 {
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t PacketBlob;
+	gs_packet_t GsPacketBlob;
 	uint32_t Offset = 0;
 	uint32_t IgnoreSize = 0;
 
@@ -1513,8 +1519,10 @@ int clnt_state_5_noown(
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &PacketBlob)))
+	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketBlob = *GsPacketBlob;
 
 	if (! PacketBlob)
 		GS_ERR_CLEAN(1);
@@ -1541,6 +1549,8 @@ int clnt_state_5_noown(
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	ENetPacket * const &PacketTree = *GsPacketTree;
 
 	if (!!(r = clnt_deserialize_trees(
 		RepositoryT,
@@ -1683,12 +1693,12 @@ int clnt_state_4_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, 
 	const sp<gs_host_peer_pair_t> &Connection = State->mConnection;
 	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
 
-	gs_packet_t PacketTree;  // FIXME: NULL SHARED_PTR GETS ASSIGNED LATER
+	gs_packet_t PacketTree = aux_gs_make_packet(NULL);
 
 	uint32_t OffsetSizeBufferTree;
 	uint32_t OffsetObjectBufferTree;
 
-	PacketWithOffset TmpTreePacketWithOffset = {};
+	sp<PacketWithOffset> TmpTreePacketWithOffset(new PacketWithOffset);
 
 	if (!!(r = clnt_state_4_noown(
 		RepositoryT, Connection->first, Connection->second, ServAuxData.get(),
@@ -1697,12 +1707,12 @@ int clnt_state_4_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, 
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = aux_make_packet_with_offset(PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, &TmpTreePacketWithOffset)))
+	if (!!(r = aux_make_packet_with_offset(PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, TmpTreePacketWithOffset.get())))
 		GS_GOTO_CLEAN();
 
 	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 5, a,
 		{ a.mMissingBloblist = MissingBloblist;
-		  *a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
+		  a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
 
 clean:
 
@@ -1830,10 +1840,10 @@ int clnt_thread_func____(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxDat
 	ENetPeer *peer = NULL;
 
 	std::string Buffer;
-	gs_packet_t Packet;
+	gs_packet_t GsPacket;
 	/* two packets need extended lifetime / are to be used with noalloc read functions */
-	gs_packet_t PacketTree;
-	gs_packet_t PacketBlob;
+	gs_packet_t GsPacketTree;
+	gs_packet_t GsPacketBlob;
 
 	const char *ServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
 	const char *ConfRefName = aux_config_key(ClntKeyVal, "RefName");
@@ -1892,8 +1902,10 @@ int clnt_thread_func____(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxDat
 		GS_GOTO_CLEAN();
 
 	Offset = 0;
-	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &Packet = *GsPacket;
 
 	// FIXME: handle timeout (Packet will be null)
 
@@ -1921,7 +1933,7 @@ int clnt_thread_func____(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxDat
 		GS_GOTO_CLEAN();
 
 	Offset = 0;
-	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &Packet)))
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
 		GS_GOTO_CLEAN();
 
 	// FIXME: handle timeout
@@ -1945,8 +1957,10 @@ int clnt_thread_func____(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxDat
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 	Offset = 0;
-	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &PacketTree)))
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &GsPacketTree)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketTree = *GsPacketTree;
 
 	// FIXME: handle timeout
 
@@ -1978,8 +1992,10 @@ int clnt_thread_func____(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxDat
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 	Offset = 0;
-	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &PacketBlob)))
+	if (!!(r = aux_host_service_one_type_receive(client, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
 		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketBlob = *GsPacketBlob;
 
 	// FIXME: handle timeout
 
