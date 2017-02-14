@@ -169,6 +169,19 @@ const char * aux_config_key(const confmap_t &KeyVal, const char *Key) {
 	return it->second.c_str();
 }
 
+/* returned value copied */
+int aux_config_key_ex(const confmap_t &KeyVal, const char *Key, std::string *oVal) {
+	const confmap_t::const_iterator &it = KeyVal.find(Key);
+	if (it == KeyVal.end())
+		return 1;
+	{
+		std::string Val(it->second);
+		if (oVal)
+			oVal->swap(Val);
+	}
+	return 0;
+}
+
 int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oVal) {
 	assert(sizeof(uint32_t) <= sizeof(long long));
 	const confmap_t::const_iterator &it = KeyVal.find(Key);
