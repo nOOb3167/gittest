@@ -32,6 +32,7 @@
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
 #define GS_CONNECT_NUMRETRY   5
 #define GS_CONNECT_TIMEOUT_MS 1000
+#define GS_CONNECT_NUMRECONNECT 5
 #define GS_RECEIVE_TIMEOUT_MS 500000
 
 #define GS_FRAME_HEADER_STR_LEN 40
@@ -1227,6 +1228,13 @@ int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_
 	return 0;
 }
 
+struct ClntStateReconnect {
+	uint32_t NumReconnections;
+	uint32_t NumReconnectionsLeft;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
+
 struct ClntState {
 	sp<git_repository *> mRepositoryT;
 
@@ -1255,6 +1263,22 @@ struct ClntState {
 	    GS_ERR_CLEAN(9999);                                                                             \
 	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
 	    GS_ERR_CLEAN(9998); }
+
+int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
+	ClntStateReconnect StateReconnect;
+	StateReconnect.NumReconnections = GS_CONNECT_NUMRECONNECT;
+	StateReconnect.NumReconnectionsLeft = StateReconnect.NumReconnections;
+	if (oStateReconnect)
+		*oStateReconnect = StateReconnect;
+	return 0;
+}
+
+int clnt_state_make_default(ClntState *oState) {
+	ClntState State;
+	if (oState)
+		*oState = State;
+	return 0;
+}
 
 int clnt_state_cpy(ClntState *dst, const ClntState *src) {
 	*dst = *src;
@@ -1815,16 +1839,94 @@ clean:
 	return r;
 }
 
+int aux_host_peer_pair_reset(sp<gs_host_peer_pair_t> *ioConnection) {
+	if (*ioConnection != NULL) {
+		ENetHost * const oldhost = (*ioConnection)->first;
+		ENetPeer * const oldpeer = (*ioConnection)->second;
+
+		*ioConnection = sp<gs_host_peer_pair_t>();
+
+		enet_peer_disconnect_now(oldpeer, NULL);
+		enet_host_destroy(oldhost);
+	}
+
+	return 0;
+}
+
+int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pair_t> *ioConnection) {
+	int r = 0;
+
+	std::string ConfServHostName;
+	uint32_t ConfServPort = 0;
+
+	ENetAddress address = {};
+	ENetHost *newhost = NULL;
+	ENetPeer *newpeer = NULL;
+
+	if (!!(r = aux_config_key_ex(ClntKeyVal, "ConfServHostName", &ConfServHostName)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ConfServPort)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_peer_pair_reset(ioConnection)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_address_create_hostname(ConfServPort, ConfServHostName.c_str(), &address)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &newhost, &newpeer)))
+		GS_GOTO_CLEAN();
+
+	if (ioConnection)
+		*ioConnection = std::make_shared<gs_host_peer_pair_t>(newhost, newpeer);
+
+clean:
+	if (!!r) {
+		if (newpeer)
+			enet_peer_disconnect_now(newpeer, NULL);
+
+		if (newhost)
+			enet_host_destroy(newhost);
+	}
+
+	return r;
+}
+
+int clnt_state_crank_reconnecter(
+	const sp<ClntState> &State, ClntStateReconnect *ioStateReconnect,
+	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData)
+{
+	int r = 0;
+
+	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData))) {
+		printf("reco+\n");
+		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
+			GS_GOTO_CLEAN();
+		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
+			GS_GOTO_CLEAN();
+		printf("reco-\n");
+	}
+
+clean:
+
+	return r;
+}
+
 int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 
 	sp<ClntState> State(new ClntState);
+	sp<ClntStateReconnect> StateReconnect(new ClntStateReconnect);
+
+	if (!!(r = clnt_state_make_default(State.get())))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_state_reconnect_make_default(StateReconnect.get())))
+		GS_GOTO_CLEAN();
 
 	while (true) {
-
-		if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_crank_reconnecter(State, StateReconnect.get(), ClntKeyVal, ServAuxData)))
 			GS_GOTO_CLEAN();
-
 	}
 
 clean:
