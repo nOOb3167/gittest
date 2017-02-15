@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include <memory>
+#include <utility>  // std::move
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -85,12 +86,30 @@ template<typename T>
 using sp = ::std::shared_ptr<T>;
 
 typedef ::std::shared_ptr<ENetPacket *> gs_packet_t;
+typedef ::std::unique_ptr<ENetPacket *, void (*)(ENetPacket **)> gs_packet_unique_t;
+
+gs_packet_unique_t gs_packet_unique_t_null();
 
 class ServWorkerRequestData {
 public:
+	ServWorkerRequestData(gs_packet_unique_t *ioPacket, ENetHost *Host, ENetPeer *Peer)
+		: mPacket(gs_packet_unique_t_null()),
+		mHost(Host),
+		mPeer(Peer)
+	{
+		mPacket = std::move(*ioPacket);
+	}
+
+public:
+	gs_packet_unique_t mPacket;
+
+private:
 	ENetHost *mHost;
 	ENetPeer *mPeer;
-	gs_packet_t mPacket;
+
+	friend int aux_make_serv_worker_request_data_for_response(
+		ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData);
+	friend void aux_serv_worker_request_data_getprivate(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer);
 };
 
 class ServWorkerData {
@@ -103,6 +122,7 @@ public:
 
 	void RequestEnqueue(const sp<ServWorkerRequestData> &RequestData);
 	void RequestDequeue(sp<ServWorkerRequestData> *oRequestData);
+	void RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> > *oRequestData);
 
 private:
 	sp<std::deque<sp<ServWorkerRequestData> > > mWorkerQueue;
@@ -131,21 +151,37 @@ private:
 	sp<std::condition_variable> mAuxDataCond;
 };
 
+class FullConnectionClient {
+public:
+	FullConnectionClient(const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread)
+		: ThreadAux(ThreadAux),
+		Thread(Thread)
+	{}
+
+private:
+	sp<std::thread> ThreadAux;
+	sp<std::thread> Thread;
+};
 
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
-
+int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
 
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
 }
 
-int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, const gs_packet_t &Packet, sp<ServWorkerRequestData> *oServWorkerRequestData) {
+gs_packet_unique_t aux_gs_make_packet_unique(ENetPacket *packet) {
+	return gs_packet_unique_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
+}
+
+gs_packet_unique_t gs_packet_unique_t_null() {
+	return gs_packet_unique_t(nullptr, [](ENetPacket **xpacket) { /* dummy */ });
+}
+
+int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData) {
 	int r = 0;
 
-	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData);
-	ServWorkerRequestData->mHost = host;
-	ServWorkerRequestData->mPeer = peer;
-	ServWorkerRequestData->mPacket = Packet;
+	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData(ioPacket, host, peer));
 
 	if (oServWorkerRequestData)
 		*oServWorkerRequestData = ServWorkerRequestData;
@@ -153,6 +189,31 @@ int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, const gs_p
 clean:
 
 	return r;
+}
+
+int aux_make_serv_worker_request_data_for_response(
+	ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData(
+		ioPacket, RequestBeingResponded->mHost, RequestBeingResponded->mPeer));
+
+	if (oServWorkerRequestData)
+		*oServWorkerRequestData = ServWorkerRequestData;
+
+clean:
+
+	return r;
+}
+
+void aux_serv_worker_request_data_getprivate(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer) {
+
+	if (oHost)
+		*oHost = Request->mHost;
+
+	if (oPeer)
+		*oPeer = Request->mPeer;
 }
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
@@ -610,6 +671,14 @@ void ServWorkerData::RequestDequeue(sp<ServWorkerRequestData> *oRequestData) {
 		oRequestData->swap(RequestData);
 }
 
+void ServWorkerData::RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> > *oRequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		oRequestData->clear();
+		oRequestData->swap(*mWorkerQueue);
+	}
+}
+
 void ServAuxData::InterruptRequestedEnqueue() {
 	{
 		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
@@ -637,7 +706,7 @@ void ServAuxData::InterruptRequestedDequeueMT_() {
 	mInterruptRequested = false;
 }
 
-int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> ServWorkerData) {
+int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
 
 	git_repository *Repository = NULL;
@@ -654,7 +723,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 	while (true) {
 		sp<ServWorkerRequestData> Request;
 
-		ServWorkerData->RequestDequeue(&Request);
+		WorkerDataRecv->RequestDequeue(&Request);
 
 		ENetPacket * const &Packet = *Request->mPacket;
 
@@ -686,8 +755,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
-				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
 			{
 				GS_GOTO_CLEAN();
 			}
@@ -713,8 +782,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			if (!!(r = aux_frame_full_write_response_treelist(&ResponseBuffer, &Treelist)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
-				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
 			{
 				GS_GOTO_CLEAN();
 			}
@@ -745,8 +814,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, PairedVecLen, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
-				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
 			{
 				GS_GOTO_CLEAN();
 			}
@@ -777,8 +846,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, PairedVecLen, &SizeBufferBlob, &ObjectBufferBlob)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_packet_full_send(Request->mHost, Request->mPeer, ServAuxData.get(),
-				ResponseBuffer.data(), ResponseBuffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
 			{
 				GS_GOTO_CLEAN();
 			}
@@ -817,6 +886,55 @@ int aux_enet_host_create_serv(uint32_t EnetAddressPort, ENetHost **oServer) {
 
 	if (oServer)
 		*oServer = host;
+
+clean:
+	if (!!r) {
+		if (host)
+			enet_host_destroy(host);
+	}
+
+	return r;
+}
+
+int aux_enet_host_client_create_addr(ENetHost **oHost, ENetAddress *oAddressHost) {
+	/**
+	* https://msdn.microsoft.com/en-us/library/windows/desktop/ms738543(v=vs.85).aspx
+	* To apply the INTERRUPT_REQUESTED workaround to a socket,
+	* a local connection (from a second socket) is required.
+	* To establish that local connection, the socket must have an address assigned.
+	* Address assignment occurs if the first socket is bound,
+	* either explicitly (call to bind) or 'implicitly'
+	* (call to connect, (also recvfrom and some others?)).
+	* The socket being bound allows its address to be retrieved via getsockname.
+	* enet codepath through enet_host_create only calls bind and getsockname if
+	* the ENetAddress parameter is specified (non-null).
+	*
+	* As we are creating a client socket, we do not wish to bind to a specific port.
+	* (to allow multiple client connections be established from the same host, for example)
+	* To 'request' a dynamically assigned port via the ENetAddress structure,
+	* set port value as ENET_PORT_ANY (aka zero).
+	*
+	* Once enet_host_create completes, the assigned port can be retrieved via
+	* ENetHost->address.
+	*/
+
+	int r = 0;
+
+	ENetAddress address = {};
+	ENetHost *host = NULL;
+
+	address.host = ENET_HOST_ANY;
+	address.port = ENET_PORT_ANY;
+
+	// FIXME: two peer limit (for connection, and for INTERRUPT_REQUESTED workaround local connection)
+	if (!!(host = enet_host_create(&address, 2, 1, 0, 0)))
+		GS_ERR_CLEAN(1);
+
+	if (oHost)
+		*oHost = host;
+
+	if (oAddressHost)
+		*oAddressHost = host->address;
 
 clean:
 	if (!!r) {
@@ -921,6 +1039,35 @@ clean:
 	return r;
 }
 
+int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize) {
+	int r = 0;
+
+	ENetPacket *Packet = NULL;
+	gs_packet_unique_t GsPacket = gs_packet_unique_t_null();
+	sp<ServWorkerRequestData> RequestResponseData;
+
+	if (!(Packet = enet_packet_create(Data, DataSize, ENET_PACKET_FLAG_RELIABLE)))
+		GS_ERR_CLEAN(1);
+
+	GsPacket = aux_gs_make_packet_unique(Packet);
+	Packet = NULL; /* lost ownership */
+
+	if (!!(r = aux_make_serv_worker_request_data_for_response(Request, &GsPacket, &RequestResponseData)))
+		GS_GOTO_CLEAN();
+
+	WorkerDataSend->RequestEnqueue(RequestResponseData);
+
+	ServAuxData->InterruptRequestedEnqueue();
+
+clean:
+	if (!!r) {
+		if (Packet)
+			enet_packet_destroy(Packet);
+	}
+
+	return r;
+}
+
 int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_packet_t *oPacket) {
 	/* NOTE: special errorhandling */
 
@@ -997,7 +1144,7 @@ clean:
 	return r;
 }
 
-int serv_host_service(ENetHost *server, const sp<ServWorkerData> &ServWorkerData) {
+int serv_host_service(ENetHost *server, const sp<ServWorkerData> &WorkerDataRecv, const sp<ServWorkerData> &WorkerDataSend) {
 	int r = 0;
 
 	std::vector<ENetEvent> Events;
@@ -1033,14 +1180,46 @@ int serv_host_service(ENetHost *server, const sp<ServWorkerData> &ServWorkerData
 				
 				printf("[serv] packet received\n");
 
-				gs_packet_t Packet = aux_gs_make_packet(Events[i].packet);
+				gs_packet_unique_t Packet = aux_gs_make_packet_unique(Events[i].packet);
 
 				sp<ServWorkerRequestData> ServWorkerRequestData;
 
-				if (!!(r = aux_make_serv_worker_request_data(server, peer, Packet, &ServWorkerRequestData)))
+				if (!!(r = aux_make_serv_worker_request_data(server, peer, &Packet, &ServWorkerRequestData)))
 					GS_GOTO_CLEAN();
 
-				ServWorkerData->RequestEnqueue(ServWorkerRequestData);
+				WorkerDataRecv->RequestEnqueue(ServWorkerRequestData);
+			}
+
+			/* check out if any send requests need servicing */
+
+			{
+				std::deque<sp<ServWorkerRequestData> > RequestedSends;
+
+				WorkerDataSend->RequestDequeueAllOpt(&RequestedSends);
+
+				for (uint32_t i = 0; i < RequestedSends.size(); i++) {
+					ENetHost *GotHost = NULL;
+					ENetPeer *GotPeer = NULL;
+
+					aux_serv_worker_request_data_getprivate(RequestedSends[i].get(), &GotHost, &GotPeer);
+
+					// FIXME: assuming reconnection is a thing, how to assure host and peer are still valid?
+					//   likely want to clear outstanding requests on the worker queues before a reconnect.
+					//   for now at least assure host from the request is the same as passed to this function.
+					assert(GotHost == server);
+
+					/* ownership of packet is lost after enet_peer_send */
+					ENetPacket *Packet = *RequestedSends[i]->mPacket.release();
+
+					if (enet_peer_send(GotPeer, 0, Packet) < 0)
+						GS_GOTO_CLEAN();
+				}
+
+				/* absolutely no reason to flush if nothing was sent */
+				/* notice we are flushing 'server', above find an assert equaling against RequestedSends host */
+
+				if (RequestedSends.size())
+					enet_host_flush(server);
 			}
 		}
 		break;
@@ -1118,28 +1297,15 @@ clean:
 	return r;
 }
 
-int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
+int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
 
 	std::string BufferFrameInterruptRequested;
 
-	uint32_t ServPort = 0;
-	uint32_t ServHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
-	ENetAddress address = {};
-
 	ENetHost *client = NULL;
 	ENetPeer *peer = NULL;
 
-	uint32_t Offset = 0;
 	if (!!(r = aux_frame_full_write_serv_aux_interrupt_requested(&BufferFrameInterruptRequested)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
-		GS_GOTO_CLEAN();
-
-	assert(ServHostIp == ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24));
-
-	if (!!(r = aux_enet_address_create_ip(ServPort, ServHostIp, &address)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &client, &peer)))
@@ -1157,22 +1323,22 @@ int serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxDat
 
 		if (IsInterruptRequested) {
 			/* NOTE: searching enet source for uses of ENET_PACKET_FLAG_NO_ALLOCATE turns out a fun easter egg:
-			 *   enet_packet_resize essentially chokes and sets new size without validation so never call that */
+			*   enet_packet_resize essentially chokes and sets new size without validation so never call that */
 
 			ENetPacket *packet = enet_packet_create(
 				BufferFrameInterruptRequested.data(), BufferFrameInterruptRequested.size(), ENET_PACKET_FLAG_NO_ALLOCATE);
 
 			/* NOTE: enet tutorial claims that enet_packet_destroy need not be called after packet handoff via enet_peer_send.
-			 *   but reading enet source reveals obvious leaks on some error conditions. (undistinguishable observing return code) */
+			*   but reading enet source reveals obvious leaks on some error conditions. (undistinguishable observing return code) */
 
 			if (enet_peer_send(peer, 0, packet) < 0)
 				GS_ERR_CLEAN(1);
 
 			/* enet packet sends are ensured sufficiently by enet_host_flush. only receives require serv_aux_host_service.
-			 * however serv_aux send only, does not really receive anything. serv_aux_host_service just helps crank internal
-			 * enet state such as acknowledgment packets.
-			 * FIXME: refactor to only call serv_aux_host_service every GS_SERV_AUX_ARBITRARY_TIMEOUT_MS ms
-			 *   instead of after every IsInterruptRequested. */
+			* however serv_aux send only, does not really receive anything. serv_aux_host_service just helps crank internal
+			* enet state such as acknowledgment packets.
+			* FIXME: refactor to only call serv_aux_host_service every GS_SERV_AUX_ARBITRARY_TIMEOUT_MS ms
+			*   instead of after every IsInterruptRequested. */
 
 			enet_host_flush(client);
 		}
@@ -1183,7 +1349,30 @@ clean:
 	return r;
 }
 
-int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
+int serv_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
+	int r = 0;
+
+	uint32_t ServPort = 0;
+	uint32_t ServHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
+	ENetAddress address = {};
+
+	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
+		GS_GOTO_CLEAN();
+
+	assert(ServHostIp == ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24));
+
+	if (!!(r = aux_enet_address_create_ip(ServPort, ServHostIp, &address)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
 
 	ENetHost *server = NULL;
@@ -1197,7 +1386,7 @@ int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerD
 		GS_GOTO_CLEAN();
 
 	while (true) {
-		if (!!(r = serv_host_service(server, ServWorkerData)))
+		if (!!(r = serv_host_service(server, WorkerDataRecv, WorkerDataSend)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -1934,23 +2123,30 @@ clean:
 	return r;
 }
 
-void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> ServWorkerData) {
+void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
-	if (!!(r = serv_worker_thread_func(ServKeyVal, ServAuxData, ServWorkerData)))
+	if (!!(r = serv_worker_thread_func(ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend)))
 		assert(0);
 	for (;;) {}
 }
 
-void serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
+void serv_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
-	if (!!(r = serv_aux_thread_func(ServKeyVal, ServAuxData)))
+	if (!!(r = serv_serv_aux_thread_func(ServKeyVal, ServAuxData)))
 		assert(0);
 	for (;;) {}
 }
 
-void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> ServWorkerData) {
+void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
-	if (!!(r = serv_thread_func(ServKeyVal, ServWorkerData)))
+	if (!!(r = aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address)))
+		assert(0);
+	for (;;) {}
+}
+
+void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+	int r = 0;
+	if (!!(r = serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
 		assert(0);
 	for (;;) {}
 }
@@ -1960,6 +2156,34 @@ void clnt_thread_func_f(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData
 	if (!!(r = clnt_thread_func(ClntKeyVal, ServAuxData)))
 		assert(0);
 	for (;;) {}
+}
+
+int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionClient> *oConnectionClient) {
+	int r = 0;
+
+	sp<FullConnectionClient> ConnectionClient;
+
+	ENetHost *host = NULL;
+	ENetAddress AddressHost = {};
+
+	if (!!(r = aux_enet_host_client_create_addr(&host, &AddressHost)))
+		GS_GOTO_CLEAN();
+
+	{
+		sp<ServAuxData> ClientServAuxData(new ServAuxData);
+
+		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, ClientServAuxData, AddressHost));
+		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, ClientServAuxData));
+
+		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientAuxThread, ClientThread));
+	}
+
+	if (oConnectionClient)
+		*oConnectionClient = ConnectionClient;
+
+clean:
+
+	return r;
 }
 
 int stuff2() {
@@ -1973,12 +2197,13 @@ int stuff2() {
 	ClntKeyVal = ServKeyVal;
 
 	{
-		sp<ServWorkerData> ServWorkerData(new ServWorkerData);
+		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
+		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
 		sp<ServAuxData> ServAuxData(new ServAuxData);
 
-		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, ServWorkerData));
-		sp<std::thread> ServerAuxThread(new std::thread(serv_aux_thread_func_f, ServKeyVal, ServAuxData));
-		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, ServWorkerData));
+		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend));
+		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, ServAuxData));
+		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, WorkerDataRecv, WorkerDataSend));
 		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, ServAuxData));
 
 		ServerThread->join();
