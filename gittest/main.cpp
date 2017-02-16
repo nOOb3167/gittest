@@ -248,15 +248,11 @@ int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, 
 	if (!!(r = git_commit_tree(&TreeHead, CommitHead)))
 		goto clean;
 
-	{
-		const git_oid *TreeHeadOid = git_tree_id(TreeHead);
+	if (oCommitHeadOid)
+		git_oid_cpy(oCommitHeadOid, &CommitHeadOid);
 
-		if (oCommitHeadOid)
-			git_oid_cpy(oCommitHeadOid, &CommitHeadOid);
-
-		if (oTreeHeadOid)
-			git_oid_cpy(oTreeHeadOid, TreeHeadOid);
-	}
+	if (oTreeHeadOid)
+		git_oid_cpy(oTreeHeadOid, git_tree_id(TreeHead));
 
 clean:
 	if (TreeHead)

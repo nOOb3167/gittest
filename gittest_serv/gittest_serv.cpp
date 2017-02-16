@@ -323,48 +323,77 @@ bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
 
 int aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace) {
 	int r = 0;
+
 	if (! ((TotalLength >= Offset) && (TotalLength - Offset) >= WantedSpace))
 		GS_ERR_CLEAN(1);
+
 clean:
+
 	return r;
 }
 
-int aux_frame_read_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
+int aux_frame_read_buf(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t DataOffset, uint32_t *DataOffsetNew,
+	uint8_t *BufStart, uint32_t BufLength, uint32_t BufOffset, uint32_t NumToRead)
+{
 	int r = 0;
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, BufLen)))
+
+	if (!!(r = aux_frame_enough_space(DataLength, DataOffset, NumToRead)))
 		GS_GOTO_CLEAN();
-	memcpy(Buf, DataStart + Offset, BufLen);
-	if (OffsetNew)
-		*OffsetNew = Offset + BufLen;
+
+	if (!!(r = aux_frame_enough_space(BufLength, BufOffset, NumToRead)))
+		GS_GOTO_CLEAN();
+
+	memcpy(BufStart + BufOffset, DataStart + DataOffset, NumToRead);
+
+	if (DataOffsetNew)
+		*DataOffsetNew = DataOffset + NumToRead;
+
 clean:
+
 	return r;
 }
 
 int aux_frame_write_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
 	int r = 0;
+
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, BufLen)))
 		GS_GOTO_CLEAN();
+
 	memcpy(DataStart + Offset, Buf, BufLen);
+
 	if (OffsetNew)
 		*OffsetNew = Offset + BufLen;
+
 clean:
+
 	return r;
 }
 
 int aux_frame_read_size(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	uint32_t SizeOfSize, uint32_t *oSize)
+	uint32_t SizeOfSize, uint32_t *oSize, uint32_t *oDataLengthLimit)
 {
 	int r = 0;
+
 	uint32_t Size = 0;
+
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
 		GS_GOTO_CLEAN();
+
 	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
+
 	if (oSize)
 		*oSize = Size;
+
+	if (oDataLengthLimit)
+		*oDataLengthLimit = Offset + SizeOfSize + Size;
+
 	if (OffsetNew)
 		*OffsetNew = Offset + SizeOfSize;
+
 clean:
+
 	return r;
 }
 
@@ -373,26 +402,38 @@ int aux_frame_write_size(
 	uint32_t SizeOfSize, uint32_t Size)
 {
 	int r = 0;
+
 	assert(SizeOfSize == sizeof(uint32_t));
+
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
 		GS_GOTO_CLEAN();
+
 	aux_uint32_to_LE(Size, (char *)(DataStart + Offset), SizeOfSize);
+
 	if (OffsetNew)
 		*OffsetNew = Offset + SizeOfSize;
+
 clean:
+
 	return r;
 }
 
 int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
 	int r = 0;
+
 	uint32_t SizeFound = 0;
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &SizeFound)))
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &SizeFound, NULL)))
 		GS_GOTO_CLEAN();
+
 	if (SizeFound != MSize)
 		GS_ERR_CLEAN(1);
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
@@ -401,18 +442,30 @@ int aux_frame_read_frametype(
 	GsFrameType *oFrameType)
 {
 	int r = 0;
+
 	GsFrameType FrameType = {};
+
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_read_buf(DataStart, DataLength, Offset, &Offset, (uint8_t *)FrameType.mTypeName, GS_FRAME_HEADER_STR_LEN)))
+
+	if (!!(r = aux_frame_read_buf(
+		DataStart, DataLength, Offset, &Offset,
+		(uint8_t *)FrameType.mTypeName, GS_FRAME_HEADER_STR_LEN, 0, GS_FRAME_HEADER_STR_LEN)))
+	{
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, &FrameType.mTypeNum)))
+	}
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, &FrameType.mTypeNum, NULL)))
 		GS_GOTO_CLEAN();
+
 	if (oFrameType)
 		*oFrameType = FrameType;
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
@@ -421,100 +474,149 @@ int aux_frame_write_frametype(
 	GsFrameType *FrameType)
 {
 	int r = 0;
+
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, (uint8_t *)FrameType->mTypeName, GS_FRAME_HEADER_STR_LEN)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, FrameType->mTypeNum)))
 		GS_GOTO_CLEAN();
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
-int aux_frame_ensure_frametype(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, const GsFrameType &FrameType) {
+int aux_frame_ensure_frametype(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	const GsFrameType &FrameType)
+{
 	int r = 0;
+
 	GsFrameType FoundFrameType = {};
+
 	if (!!(r = aux_frame_read_frametype(DataStart, DataLength, Offset, &Offset, &FoundFrameType)))
 		GS_GOTO_CLEAN();
+
 	if (! aux_frametype_equals(FoundFrameType, FrameType))
 		GS_ERR_CLEAN(1);
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
-int aux_frame_read_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+int aux_frame_read_oid(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	git_oid *oOid)
 {
 	int r = 0;
+
 	git_oid Oid = {};
 	uint8_t OidBuf[GIT_OID_RAWSZ] = {};
+
 	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
-	if (!!(r = aux_frame_read_buf(DataStart, DataLength, Offset, &Offset, OidBuf, GIT_OID_RAWSZ)))
+
+	if (!!(r = aux_frame_read_buf(
+		DataStart, DataLength, Offset, &Offset,
+		OidBuf, GIT_OID_RAWSZ, 0, GIT_OID_RAWSZ)))
+	{
 		GS_GOTO_CLEAN();
+	}
+
 	/* FIXME: LUL GOOD API NO SIZE PARAMETER IMPLEMENTED AS RAW MEMCPY */
 	assert(sizeof(unsigned char) == sizeof(uint8_t));
 	git_oid_fromraw(&Oid, (unsigned char *)OidBuf);
+
 	if (oOid)
 		git_oid_cpy(oOid, &Oid);
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
-int aux_frame_write_oid(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+int aux_frame_write_oid(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint8_t *Oid, uint32_t OidSize)
 {
 	int r = 0;
+
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+
 	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
-int aux_frame_read_oid_vec(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+int aux_frame_read_oid_vec(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	std::vector<git_oid> *oOidVec)
 {
 	int r = 0;
+
 	std::vector<git_oid> OidVec;
 	uint32_t OidNum = 0;
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum)))
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum, NULL)))
 		GS_GOTO_CLEAN();
+
 	// FIXME: hmmm, almost unbounded allocation, from a single uint32_t read off the network
 	OidVec.resize(OidNum);
 	for (uint32_t i = 0; i < OidNum; i++) {
 		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, &OidVec[i])))
 			GS_GOTO_CLEAN();
 	}
+
 	if (oOidVec)
 		oOidVec->swap(OidVec);
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
-int aux_frame_write_oid_vec(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *oOidVec, uint32_t OidNum, uint32_t OidSize)
+int aux_frame_write_oid_vec(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	git_oid *OidVec, uint32_t OidNum, uint32_t OidSize)
 {
 	int r = 0;
+
 	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, OidNum)))
 		GS_GOTO_CLEAN();
+
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+
 	for (uint32_t i = 0; i < OidNum; i++) {
-		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, (oOidVec + i)->id, OidSize)))
+		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, (OidVec + i)->id, OidSize)))
 			GS_GOTO_CLEAN();
 	}
+
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
 clean:
+
 	return r;
 }
 
@@ -523,25 +625,36 @@ int aux_frame_full_aux_write_oid(
 	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize)
 {
 	int r = 0;
+
 	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN);
+	uint32_t PayloadSize = 0;
 	uint32_t Offset = 0;
+
+	PayloadSize = OidSize;
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN);
+
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
+
 	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, OidSize)))
+
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_oid((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
+
 	if (oBuffer)
 		oBuffer->swap(Buffer);
+
 clean:
+
 	return r;
 }
 
 int aux_frame_full_aux_write_oid_vec(
 	std::string *oBuffer,
-	GsFrameType *FrameType, std::vector<git_oid> *OidVec)
+	GsFrameType *FrameType, git_oid *OidVec, uint32_t OidNum, uint32_t OidSize)
 {
 	int r = 0;
 
@@ -549,20 +662,25 @@ int aux_frame_full_aux_write_oid_vec(
 	uint32_t PayloadSize = 0;
 	uint32_t Offset = 0;
 
-	PayloadSize = GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN * OidVec->size();
+	PayloadSize = GS_FRAME_SIZE_LEN + OidNum * OidSize;
 	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+
+	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ)))
+
+	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec, OidNum, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
 	if (oBuffer)
 		oBuffer->swap(Buffer);
+
 clean:
+
 	return r;
 }
 
@@ -575,23 +693,45 @@ int aux_frame_full_aux_read_paired_vec_noalloc(
 	uint32_t PairedVecLen = 0;
 	uint32_t OffsetSizeBuffer = 0;
 	uint32_t OffsetObjectBuffer = 0;
+	uint32_t OffsetEnd = 0;
 
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &PairedVecLen)))
+	uint32_t CumulativeSize = 0;
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &PairedVecLen, NULL)))
 		GS_GOTO_CLEAN();
 
 	OffsetSizeBuffer = Offset;
 
-	OffsetObjectBuffer = Offset + GS_FRAME_SIZE_LEN * PairedVecLen;
+	OffsetObjectBuffer = OffsetSizeBuffer + GS_FRAME_SIZE_LEN * PairedVecLen;
+
+	if (!!(r = aux_frame_enough_space(DataLength, OffsetSizeBuffer, GS_FRAME_SIZE_LEN * PairedVecLen)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < PairedVecLen; i++) {
+		uint32_t FoundSize = 0;
+		aux_LE_to_uint32(&FoundSize, (char *)(DataStart + OffsetSizeBuffer + GS_FRAME_SIZE_LEN * i), GS_FRAME_SIZE_LEN);
+		CumulativeSize += FoundSize;
+	}
+
+	if (!!(r = aux_frame_enough_space(DataLength, OffsetObjectBuffer, CumulativeSize)))
+		GS_GOTO_CLEAN();
+
+	OffsetEnd = OffsetObjectBuffer + CumulativeSize;
 
 	if (oPairedVecLen)
 		*oPairedVecLen = PairedVecLen;
+
 	if (oOffsetSizeBuffer)
 		*oOffsetSizeBuffer = OffsetSizeBuffer;
+
 	if (oOffsetObjectBuffer)
 		*oOffsetObjectBuffer = OffsetObjectBuffer;
+
 	if (OffsetNew)
-		*OffsetNew = Offset;
+		*OffsetNew = OffsetEnd;
+
 clean:
+
 	return r;
 }
 
@@ -607,23 +747,29 @@ int aux_frame_full_aux_write_paired_vec(
 
 	PayloadSize = GS_FRAME_SIZE_LEN + SizeBufferTree->size() + ObjectBufferTree->size();
 	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+
 	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
 
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size())))
 		GS_GOTO_CLEAN();
 
 	if (oBuffer)
 		oBuffer->swap(Buffer);
+
 clean:
+
 	return r;
 }
 
@@ -631,17 +777,25 @@ int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer)
 {
 	int r = 0;
+
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
+
 	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
 	uint32_t Offset = 0;
+
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
 		GS_GOTO_CLEAN();
+
 	if (oBuffer)
 		oBuffer->swap(Buffer);
+
 clean:
+
 	return r;
 }
 
@@ -649,17 +803,25 @@ int aux_frame_full_write_request_latest_commit_tree(
 	std::string *oBuffer)
 {
 	int r = 0;
+
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
+
 	std::string Buffer;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
 	uint32_t Offset = 0;
+
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+
 	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
 		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
 		GS_GOTO_CLEAN();
+
 	if (oBuffer)
 		oBuffer->swap(Buffer);
+
 clean:
+
 	return r;
 }
 
@@ -668,6 +830,7 @@ int aux_frame_full_write_response_latest_commit_tree(
 	uint8_t *Oid, uint32_t OidSize)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
+
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }
 
@@ -676,6 +839,7 @@ int aux_frame_full_write_request_treelist(
 	uint8_t *Oid, uint32_t OidSize)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
+
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }
 
@@ -684,7 +848,8 @@ int aux_frame_full_write_response_treelist(
 	std::vector<git_oid> *OidVec)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
 }
 
 int aux_frame_full_write_request_trees(
@@ -692,7 +857,8 @@ int aux_frame_full_write_request_trees(
 	std::vector<git_oid> *OidVec)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
 }
 
 int aux_frame_full_write_response_trees(
@@ -700,6 +866,7 @@ int aux_frame_full_write_response_trees(
 	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
+
 	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree);
 }
 
@@ -708,7 +875,8 @@ int aux_frame_full_write_request_blobs(
 	std::vector<git_oid> *OidVec)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec);
+
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
 }
 
 int aux_frame_full_write_response_blobs(
@@ -716,6 +884,7 @@ int aux_frame_full_write_response_blobs(
 	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOBS);
+
 	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
 }
 
@@ -725,9 +894,8 @@ int aux_frame_full_write_response_blobs(
 int aux_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
 	int r = 0;
 
-	ENetEvent event = {};
-
 	int retcode = 0;
+	ENetEvent event = {};
 
 	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
 		GS_ERR_CLEAN(1);
@@ -801,18 +969,23 @@ void ServAuxData::InterruptRequestedDequeueMT_() {
 	mInterruptRequested = false;
 }
 
-int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+int serv_worker_thread_func(const confmap_t &ServKeyVal,
+	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend)
+{
 	int r = 0;
 
 	git_repository *Repository = NULL;
 
-	const char *ConfRefName = aux_config_key(ServKeyVal, "RefName");
-	const char *ConfRepoOpenPath = aux_config_key(ServKeyVal, "ConfRepoOpenPath");
+	std::string ConfRefName;
+	std::string ConfRepoOpenPath;
 
-	if (!ConfRefName || !ConfRepoOpenPath)
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_config_key_ex(ServKeyVal, "RefName", &ConfRefName)))
+		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(ConfRepoOpenPath, &Repository)))
+	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoOpenPath", &ConfRepoOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(ConfRepoOpenPath.c_str(), &Repository)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -844,7 +1017,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName, &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName.c_str(), &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
@@ -889,24 +1062,21 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 		{
 			std::string ResponseBuffer;
 			uint32_t Offset = OffsetSize;
-			uint32_t IgnoreSize = 0;
+			uint32_t LengthLimit = 0;
 			std::vector<git_oid> TreelistRequested;
 			std::string SizeBufferTree;
 			std::string ObjectBufferTree;
-			uint32_t PairedVecLen = 0;
 
-			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &TreelistRequested)))
+			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &TreelistRequested)))
 				GS_GOTO_CLEAN();
-
-			PairedVecLen = TreelistRequested.size();
 
 			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, PairedVecLen, &SizeBufferTree, &ObjectBufferTree)))
+			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, TreelistRequested.size(), &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -921,24 +1091,21 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAux
 		{
 			std::string ResponseBuffer;
 			uint32_t Offset = OffsetSize;
-			uint32_t IgnoreSize = 0;
+			uint32_t LengthLimit = 0;
 			std::vector<git_oid> BloblistRequested;
 			std::string SizeBufferBlob;
 			std::string ObjectBufferBlob;
-			uint32_t PairedVecLen = 0;
 
-			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, &BloblistRequested)))
+			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BloblistRequested)))
 				GS_GOTO_CLEAN();
-
-			PairedVecLen = BloblistRequested.size();
 
 			if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, PairedVecLen, &SizeBufferBlob, &ObjectBufferBlob)))
+			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -1163,10 +1330,10 @@ clean:
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags) {
 	int r = 0;
 
+	ENetPacket *packet = NULL;
+
 	/* only flag expected to be useful with this function is ENET_PACKET_FLAG_RELIABLE, really */
 	assert((EnetPacketFlags & ~(ENET_PACKET_FLAG_RELIABLE)) == 0);
-
-	ENetPacket *packet = NULL;
 
 	if (!(packet = enet_packet_create(Data, DataSize, EnetPacketFlags)))
 		GS_ERR_CLEAN(1);
@@ -1190,7 +1357,7 @@ int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxDat
 	int r = 0;
 
 	ENetPacket *Packet = NULL;
-	gs_packet_unique_t GsPacket = gs_packet_unique_t_null();
+	gs_packet_unique_t GsPacket;
 	sp<ServWorkerRequestData> RequestResponseData;
 
 	if (!(Packet = enet_packet_create(Data, DataSize, ENET_PACKET_FLAG_RELIABLE)))
@@ -1255,7 +1422,6 @@ int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_pac
 	int r = 0;
 
 	int retcode = 0;
-
 	ENetEvent event = {};
 	gs_packet_t Packet;
 
@@ -1265,11 +1431,15 @@ int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_pac
 		GS_ERR_CLEAN(1);
 
 	Packet = aux_gs_make_packet(event.packet);
+	// FIXME: really allowed to set fields within an ENetPacket?
+	event.packet = NULL; /* lost ownership */
 
 	if (oPacket)
 		*oPacket = Packet;
 
 clean:
+	if (event.packet)
+		enet_packet_destroy(event.packet);
 
 	return r;
 }
@@ -1280,10 +1450,8 @@ int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> 
 	/* NOTE: special errorhandling */
 
 	int retcode = 0;
-
+	ENetEvent event = {};
 	std::vector<ENetEvent> Events;
-	
-	ENetEvent event;
 
 	for ((retcode = enet_host_service(host, &event, TimeoutMs))
 		; retcode > 0
@@ -1775,7 +1943,7 @@ int clnt_state_3_noown(
 	std::string Buffer;
 	gs_packet_unique_t GsPacket;
 	uint32_t Offset = 0;
-	uint32_t IgnoreSize = 0;
+	uint32_t LengthLimit = 0;
 
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
@@ -1794,10 +1962,10 @@ int clnt_state_3_noown(
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid_vec(Packet->data, Packet->dataLength, Offset, &Offset, oTreelist)))
+	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, oTreelist)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_missing_trees(RepositoryT, oTreelist, oMissingTreelist)))
@@ -1813,13 +1981,14 @@ int clnt_state_4_noown(
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *oMissingBloblist, gs_packet_unique_t *oPacketTree, uint32_t *oOffsetSizeBufferTree, uint32_t *oOffsetObjectBufferTree)
+	std::vector<git_oid> *oMissingBloblist,
+	gs_packet_unique_t *oPacketTree, uint32_t *oOffsetSizeBufferTree, uint32_t *oOffsetObjectBufferTree)
 {
 	int r = 0;
 
 	std::string Buffer;
 	uint32_t Offset = 0;
-	uint32_t IgnoreSize = 0;
+	uint32_t LengthLimit = 0;
 
 	uint32_t BufferTreeLen;
 
@@ -1842,12 +2011,12 @@ int clnt_state_4_noown(
 	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+	if (!!(r = aux_frame_read_size(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketTree Offsets use start */
 
-	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketTree->data, PacketTree->dataLength, Offset, &Offset,
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketTree->data, LengthLimit, Offset, &Offset,
 		&BufferTreeLen, oOffsetSizeBufferTree, oOffsetObjectBufferTree)))
 	{
 		GS_GOTO_CLEAN();
@@ -1855,8 +2024,8 @@ int clnt_state_4_noown(
 
 	if (!!(r = clnt_missing_blobs_bare(
 		RepositoryT,
-		PacketTree->data, PacketTree->dataLength, *oOffsetSizeBufferTree,
-		PacketTree->data, PacketTree->dataLength, *oOffsetObjectBufferTree, MissingTreelist->size(), oMissingBloblist)))
+		PacketTree->data, LengthLimit, *oOffsetSizeBufferTree,
+		PacketTree->data, LengthLimit, *oOffsetObjectBufferTree, MissingTreelist->size(), oMissingBloblist)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -1879,7 +2048,7 @@ int clnt_state_5_noown(
 	std::string Buffer;
 	gs_packet_unique_t GsPacketBlob;
 	uint32_t Offset = 0;
-	uint32_t IgnoreSize = 0;
+	uint32_t LengthLimit = 0;
 
 	uint32_t BufferBlobLen;
 	uint32_t OffsetSizeBufferBlob;
@@ -1904,12 +2073,12 @@ int clnt_state_5_noown(
 	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &IgnoreSize)))
+	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketBlob Offsets use start */
 
-	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset,
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketBlob->data, LengthLimit, Offset, &Offset,
 		&BufferBlobLen, &OffsetSizeBufferBlob, &OffsetObjectBufferBlob)))
 	{
 		GS_GOTO_CLEAN();
@@ -1917,8 +2086,8 @@ int clnt_state_5_noown(
 
 	if (!!(r = clnt_deserialize_blobs(
 		RepositoryT,
-		PacketBlob->data, PacketBlob->dataLength, OffsetSizeBufferBlob,
-		PacketBlob->data, PacketBlob->dataLength, OffsetObjectBufferBlob,
+		PacketBlob->data, LengthLimit, OffsetSizeBufferBlob,
+		PacketBlob->data, LengthLimit, OffsetObjectBufferBlob,
 		MissingBloblist->size(), oWrittenBlob)))
 	{
 		GS_GOTO_CLEAN();
@@ -1926,6 +2095,7 @@ int clnt_state_5_noown(
 
 	ENetPacket * const &PacketTree = *GsPacketTree;
 
+	// FIXME: using full size (PacketTree->dataLength) instead of LengthLimit of PacketTree (NOT of PacketBlob!)
 	if (!!(r = clnt_deserialize_trees(
 		RepositoryT,
 		PacketTree->data, PacketTree->dataLength, OffsetSizeBufferTree,
@@ -1945,12 +2115,12 @@ int clnt_state_0_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, 
 
 	sp<git_repository *> RepositoryT(new git_repository *);
 
-	const char *ConfRepoTOpenPath = aux_config_key(ClntKeyVal, "ConfRepoTOpenPath");
+	std::string ConfRepoTOpenPath;
 
-	if (!ConfRepoTOpenPath)
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_config_key_ex(ClntKeyVal, "ConfRepoTOpenPath", &ConfRepoTOpenPath)))
+		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_state_0_noown(ConfRepoTOpenPath, RepositoryT.get())))
+	if (!!(r = clnt_state_0_noown(ConfRepoTOpenPath.c_str(), RepositoryT.get())))
 		GS_GOTO_CLEAN();
 
 	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
@@ -1984,7 +2154,8 @@ int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
 	sp<git_oid> TreeHeadOid(new git_oid);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-	const char *ConfRefName = aux_config_key(ClntKeyVal, "RefName");
+
+	std::string ConfRefName;
 
 	std::string Buffer;
 	gs_packet_t Packet;
@@ -1993,11 +2164,11 @@ int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
-	if (!ConfRefName)
-		GS_ERR_CLEAN(1);
+	if (!!(r = aux_config_key_ex(ClntKeyVal, "RefName", &ConfRefName)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_state_2_noown(
-		ConfRefName, RepositoryT,
+		ConfRefName.c_str(), RepositoryT,
 		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		TreeHeadOid.get())))
 	{
