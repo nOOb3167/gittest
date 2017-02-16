@@ -65,6 +65,21 @@
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
 
+/* is this really neccessary? */
+#define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
+		{ ClntState VARNAME_TMPSTATE;                                                                       \
+      if (!!clnt_state_cpy(& (VARNAME_TMPSTATE), (PTR_VARNAME_CLNTSTATE)))                              \
+        GS_ERR_CLEAN(9998);                                                                             \
+	  	  { STATEMENTBLOCK }                                                                                \
+	  if (!!clnt_state_code_ensure(& (VARNAME_TMPSTATE), (CODE)))                                       \
+	    GS_ERR_CLEAN(9999);                                                                             \
+	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
+	    GS_ERR_CLEAN(9998); }
+
+typedef std::pair<ENetHost *, ENetPeer *> gs_host_peer_pair_t;
+
+struct ClntState;
+
 struct GsFrameType {
 	char mTypeName[GS_FRAME_HEADER_STR_LEN];
 	uint32_t mTypeNum;
@@ -85,20 +100,69 @@ GsFrameType GsFrameTypes[] = {
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
+struct gs_packet_unique_t_deleter {
+	void operator()(ENetPacket **xpacket) const {
+		if (xpacket)
+			if (*xpacket)  /* NOTE: reading enet source, enet_packet_destroy can be called with null, but check */
+				enet_packet_destroy(*xpacket);
+		delete xpacket;
+	}
+};
+
 typedef ::std::shared_ptr<ENetPacket *> gs_packet_t;
-typedef ::std::unique_ptr<ENetPacket *, void (*)(ENetPacket **)> gs_packet_unique_t;
+typedef ::std::unique_ptr<ENetPacket *, gs_packet_unique_t_deleter> gs_packet_unique_t;
 
 gs_packet_unique_t gs_packet_unique_t_null();
+
+struct PacketWithOffset {
+	gs_packet_t mPacket;
+	uint32_t mOffsetSize;
+	uint32_t mOffsetObject;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
+
+struct PacketUniqueWithOffset {
+	gs_packet_unique_t mPacket;
+	uint32_t mOffsetSize;
+	uint32_t mOffsetObject;
+
+	/* choosing unique_ptr member variable was a bad idea as evidenced by 6(!) functions below */
+
+	PacketUniqueWithOffset() {}
+	~PacketUniqueWithOffset() {}
+
+	PacketUniqueWithOffset(const PacketUniqueWithOffset &other) = delete;
+	PacketUniqueWithOffset & operator=(const PacketUniqueWithOffset &other) = delete;
+
+	PacketUniqueWithOffset(PacketUniqueWithOffset &&other)
+		: mPacket(std::move(other.mPacket)),
+		mOffsetSize(other.mOffsetSize),
+		mOffsetObject(other.mOffsetObject)
+	{}
+
+	PacketUniqueWithOffset & operator=(PacketUniqueWithOffset &&other) {
+		if (this != &other)
+		{
+			mPacket = std::move(other.mPacket);
+			mOffsetSize = other.mOffsetSize;
+			mOffsetObject = other.mOffsetObject;
+		}
+		return *this;
+	}
+};
 
 class ServWorkerRequestData {
 public:
 	ServWorkerRequestData(gs_packet_unique_t *ioPacket, ENetHost *Host, ENetPeer *Peer)
-		: mPacket(gs_packet_unique_t_null()),
+		: mPacket(),
 		mHost(Host),
 		mPeer(Peer)
 	{
 		mPacket = std::move(*ioPacket);
 	}
+
+	bool isReconnectRequest() { return ! mPacket; }
 
 public:
 	gs_packet_unique_t mPacket;
@@ -151,31 +215,62 @@ private:
 	sp<std::condition_variable> mAuxDataCond;
 };
 
+struct ClntStateReconnect {
+	uint32_t NumReconnections;
+	uint32_t NumReconnectionsLeft;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
+
+struct ClntState {
+	sp<git_repository *> mRepositoryT;
+
+	sp<git_oid> mTreeHeadOid;
+
+	sp<std::vector<git_oid> > mTreelist;
+	sp<std::vector<git_oid> > mMissingTreelist;
+
+	sp<std::vector<git_oid> >  mMissingBloblist;
+	sp<PacketUniqueWithOffset> mTreePacketWithOffset;
+
+	sp<std::vector<git_oid> > mWrittenBlob;
+	sp<std::vector<git_oid> > mWrittenTree;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
+
 class FullConnectionClient {
 public:
-	FullConnectionClient(const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread)
-		: ThreadAux(ThreadAux),
+	FullConnectionClient(const sp<std::thread> &ThreadWorker, const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread)
+		: ThreadWorker(ThreadWorker),
+		ThreadAux(ThreadAux),
 		Thread(Thread)
 	{}
 
 private:
+	sp<std::thread> ThreadWorker;
 	sp<std::thread> ThreadAux;
 	sp<std::thread> Thread;
 };
 
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
+int clnt_state_make_default(ClntState *oState);
+int clnt_state_crank(
+	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend);
 
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
 }
 
 gs_packet_unique_t aux_gs_make_packet_unique(ENetPacket *packet) {
-	return gs_packet_unique_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
+	return gs_packet_unique_t(new ENetPacket *(packet), gs_packet_unique_t_deleter());
 }
 
 gs_packet_unique_t gs_packet_unique_t_null() {
-	return gs_packet_unique_t(nullptr, [](ENetPacket **xpacket) { /* dummy */ });
+	return gs_packet_unique_t(nullptr, gs_packet_unique_t_deleter());
 }
 
 int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData) {
@@ -872,6 +967,34 @@ clean:
 	return r;
 }
 
+int clnt_worker_thread_func(const confmap_t &ClntKeyVal,
+	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend,
+	ENetHost *clnt, ENetPeer *peer)
+{
+	int r = 0;
+
+	sp<ClntState> State(new ClntState);
+
+	gs_packet_unique_t NullPacket;
+	sp<ServWorkerRequestData> RequestForSend(new ServWorkerRequestData(&NullPacket, clnt, peer));
+
+	if (!!(r = clnt_state_make_default(State.get())))
+		GS_GOTO_CLEAN();
+
+	while (true) {
+		if (!!(r = clnt_state_crank(State, ClntKeyVal,
+			ServAuxData, WorkerDataRecv.get(), WorkerDataSend.get(),
+			RequestForSend.get())))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+
+clean:
+
+	return r;
+}
+
 int aux_enet_host_create_serv(uint32_t EnetAddressPort, ENetHost **oServer) {
 	int r = 0;
 
@@ -923,11 +1046,15 @@ int aux_enet_host_client_create_addr(ENetHost **oHost, ENetAddress *oAddressHost
 	ENetAddress address = {};
 	ENetHost *host = NULL;
 
-	address.host = ENET_HOST_ANY;
+	uint32_t ClntHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
+	// FIXME: want ENET_HOST_ANY (0) but then host->address will also have 0 as host
+	//   whereas I'll need a connectable host for client's servaux
+	//address.host = ENET_HOST_ANY;
+	address.host = ClntHostIp;
 	address.port = ENET_PORT_ANY;
 
 	// FIXME: two peer limit (for connection, and for INTERRUPT_REQUESTED workaround local connection)
-	if (!!(host = enet_host_create(&address, 2, 1, 0, 0)))
+	if (!(host = enet_host_create(&address, 2, 1, 0, 0)))
 		GS_ERR_CLEAN(1);
 
 	if (oHost)
@@ -940,6 +1067,26 @@ clean:
 	if (!!r) {
 		if (host)
 			enet_host_destroy(host);
+	}
+
+	return r;
+}
+
+int aux_enet_host_connect_addr(ENetHost *host, ENetAddress *address, ENetPeer **oPeer) {
+	int r = 0;
+
+	ENetPeer *peer = NULL;
+
+	if (!(peer = enet_host_connect(host, address, 1, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (oPeer)
+		*oPeer = peer;
+
+clean:
+	if (!!r) {
+		if (peer)
+			enet_peer_disconnect_now(peer, NULL);
 	}
 
 	return r;
@@ -1064,6 +1211,40 @@ clean:
 		if (Packet)
 			enet_packet_destroy(Packet);
 	}
+
+	return r;
+}
+
+int aux_packet_request_dequeue(ServWorkerData *WorkerDataRecv, sp<ServWorkerRequestData> *oRequestForRecv) {
+	int r = 0;
+
+	sp<ServWorkerRequestData> RequestForRecv;
+
+	WorkerDataRecv->RequestDequeue(&RequestForRecv);
+
+	if (RequestForRecv->isReconnectRequest())
+		GS_ERR_CLEAN(1);
+
+	if (oRequestForRecv)
+		*oRequestForRecv = RequestForRecv;
+
+clean:
+
+	return r;
+}
+
+int aux_packet_request_dequeue_packet(ServWorkerData *WorkerDataRecv, gs_packet_unique_t *oPacket) {
+	int r = 0;
+
+	sp<ServWorkerRequestData> RequestForRecv;
+
+	if (!!(r = aux_packet_request_dequeue(WorkerDataRecv, &RequestForRecv)))
+		GS_GOTO_CLEAN();
+
+	if (oPacket)
+		*oPacket = std::move(RequestForRecv->mPacket);
+
+clean:
 
 	return r;
 }
@@ -1372,7 +1553,20 @@ clean:
 	return r;
 }
 
-int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+int aux_serv_thread_func(ENetHost *host, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+	int r = 0;
+
+	while (true) {
+		if (!!(r = serv_host_service(host, WorkerDataRecv, WorkerDataSend)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int serv_serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
 
 	ENetHost *server = NULL;
@@ -1385,10 +1579,8 @@ int serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataR
 	if (!!(r = aux_enet_host_create_serv(ServPort, &server)))
 		GS_GOTO_CLEAN();
 
-	while (true) {
-		if (!!(r = serv_host_service(server, WorkerDataRecv, WorkerDataSend)))
-			GS_GOTO_CLEAN();
-	}
+	if (!!(r = aux_serv_thread_func(server, WorkerDataRecv, WorkerDataSend)))
+		GS_GOTO_CLEAN();
 
 clean:
 	if (server)
@@ -1397,15 +1589,16 @@ clean:
 	return r;
 }
 
-typedef std::pair<ENetHost *, ENetPeer *> gs_host_peer_pair_t;
+int clnt_serv_thread_func(const confmap_t &ClntKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host) {
+	int r = 0;
 
-struct PacketWithOffset {
-	gs_packet_t mPacket;
-	uint32_t mOffsetSize;
-	uint32_t mOffsetObject;
+	if (!!(r = aux_serv_thread_func(host, WorkerDataRecv, WorkerDataSend)))
+		GS_GOTO_CLEAN();
 
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
+clean:
+
+	return r;
+}
 
 int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_t OffsetObject, PacketWithOffset *oPacketWithOffset) {
 	PacketWithOffset ret;
@@ -1417,41 +1610,16 @@ int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_
 	return 0;
 }
 
-struct ClntStateReconnect {
-	uint32_t NumReconnections;
-	uint32_t NumReconnectionsLeft;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-struct ClntState {
-	sp<git_repository *> mRepositoryT;
-
-	sp<gs_host_peer_pair_t> mConnection;
-
-	sp<git_oid> mTreeHeadOid;
-
-	sp<std::vector<git_oid> > mTreelist;
-	sp<std::vector<git_oid> > mMissingTreelist;
-
-	sp<std::vector<git_oid> > mMissingBloblist;
-	sp<PacketWithOffset>      mTreePacketWithOffset;
-
-	sp<std::vector<git_oid> > mWrittenBlob;
-	sp<std::vector<git_oid> > mWrittenTree;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-#define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
-	{ ClntState VARNAME_TMPSTATE;                                                                       \
-      if (!!clnt_state_cpy(& (VARNAME_TMPSTATE), (PTR_VARNAME_CLNTSTATE)))                              \
-        GS_ERR_CLEAN(9998);                                                                             \
-	  { STATEMENTBLOCK }                                                                                \
-	  if (!!clnt_state_code_ensure(& (VARNAME_TMPSTATE), (CODE)))                                       \
-	    GS_ERR_CLEAN(9999);                                                                             \
-	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
-	    GS_ERR_CLEAN(9998); }
+/* http://en.cppreference.com/w/cpp/language/move_assignment */
+int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t OffsetSize, uint32_t OffsetObject, PacketUniqueWithOffset *oPacketWithOffset) {
+	PacketUniqueWithOffset ret;
+	ret.mPacket = std::move(*ioPacket);
+	ret.mOffsetSize = OffsetSize;
+	ret.mOffsetObject = OffsetObject;
+	if (oPacketWithOffset)
+		*oPacketWithOffset = std::move(ret);
+	return 0;
+}
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
 	ClntStateReconnect StateReconnect;
@@ -1481,8 +1649,8 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 
 	if (! State->mRepositoryT)
 		{ Code = 0; goto s0; }
-	if (! State->mConnection)
-		{ Code = 1; goto s1; }
+	//if (0) /* FIXME: unused - refactor */
+	//	{ Code = 1; goto s1; }
 	if (! State->mTreeHeadOid)
 		{ Code = 2; goto s2; }
 	if (! State->mTreelist || ! State->mMissingTreelist)
@@ -1495,9 +1663,6 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 		{ Code = 6; goto s6; }
 
 s0:
-	if (State->mConnection)
-		GS_ERR_CLEAN(1);
-s1:
 	if (State->mTreeHeadOid)
 		GS_ERR_CLEAN(1);
 s2:
@@ -1547,30 +1712,16 @@ clean:
 	return r;
 }
 
-int clnt_state_1_noown(uint32_t ConfServPort, const char *ConfServHostName, ENetHost **oHost, ENetPeer **oPeer) {
-	int r = 0;
-
-	ENetAddress address = {};
-
-	if (!!(r = aux_enet_address_create_hostname(ConfServPort, ConfServHostName, &address)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, oHost, oPeer)))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
 int clnt_state_2_noown(
-	const char *ConfRefName, git_repository *RepositoryT, ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData,
+	const char *ConfRefName, git_repository *RepositoryT,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend,
 	git_oid *oTreeHeadOid)
 {
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t GsPacket = aux_gs_make_packet(NULL);
+	gs_packet_unique_t GsPacket;
 	uint32_t Offset = 0;
 
 	git_oid CommitHeadOidT = {};
@@ -1578,10 +1729,11 @@ int clnt_state_2_noown(
 
 	if (!!(r = aux_frame_full_write_request_latest_commit_tree(&Buffer)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
+
+	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
+	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacket)))
 		GS_GOTO_CLEAN();
 
 	ENetPacket * const &Packet = *GsPacket;
@@ -1613,22 +1765,25 @@ clean:
 }
 
 int clnt_state_3_noown(
-	git_repository *RepositoryT, ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData,
+	git_repository *RepositoryT,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend,
 	git_oid *TreeHeadOid, std::vector<git_oid> *oTreelist, std::vector<git_oid> *oMissingTreelist)
 {
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t GsPacket = aux_gs_make_packet(NULL);
+	gs_packet_unique_t GsPacket;
 	uint32_t Offset = 0;
 	uint32_t IgnoreSize = 0;
 
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
+
+	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacket)))
+	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacket)))
 		GS_GOTO_CLEAN();
 
 	ENetPacket * const &Packet = *GsPacket;
@@ -1654,9 +1809,11 @@ clean:
 }
 
 int clnt_state_4_noown(
-	git_repository *RepositoryT, ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData,
+	git_repository *RepositoryT,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend,
 	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *oMissingBloblist, gs_packet_t *oPacketTree, uint32_t *oOffsetSizeBufferTree, uint32_t *oOffsetObjectBufferTree)
+	std::vector<git_oid> *oMissingBloblist, gs_packet_unique_t *oPacketTree, uint32_t *oOffsetSizeBufferTree, uint32_t *oOffsetObjectBufferTree)
 {
 	int r = 0;
 
@@ -1668,12 +1825,13 @@ int clnt_state_4_noown(
 
 	if (!!(r = aux_frame_full_write_request_trees(&Buffer, MissingTreelist)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
+
+	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, oPacketTree)))
+	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, oPacketTree)))
 		GS_GOTO_CLEAN();
 
 	ENetPacket * const &PacketTree = **oPacketTree;
@@ -1709,15 +1867,17 @@ clean:
 }
 
 int clnt_state_5_noown(
-	git_repository *RepositoryT, ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData,
+	git_repository *RepositoryT,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend,
 	std::vector<git_oid> *MissingTreelist, std::vector<git_oid> *MissingBloblist,
-	const gs_packet_t &GsPacketTree, uint32_t OffsetSizeBufferTree, uint32_t OffsetObjectBufferTree,
+	const gs_packet_unique_t &GsPacketTree, uint32_t OffsetSizeBufferTree, uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob, std::vector<git_oid> *oWrittenTree)
 {
 	int r = 0;
 
 	std::string Buffer;
-	gs_packet_t GsPacketBlob;
+	gs_packet_unique_t GsPacketBlob;
 	uint32_t Offset = 0;
 	uint32_t IgnoreSize = 0;
 
@@ -1727,12 +1887,13 @@ int clnt_state_5_noown(
 
 	if (!!(r = aux_frame_full_write_request_blobs(&Buffer, MissingBloblist)))
 		GS_GOTO_CLEAN();
-	if (!!(r = aux_packet_full_send(host, peer, ServAuxData, Buffer.data(), Buffer.size(), 0)))
+
+	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
-	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
+	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacketBlob)))
 		GS_GOTO_CLEAN();
 
 	ENetPacket * const &PacketBlob = *GsPacketBlob;
@@ -1792,7 +1953,7 @@ int clnt_state_0_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, 
 	if (!!(r = clnt_state_0_noown(ConfRepoTOpenPath, RepositoryT.get())))
 		GS_GOTO_CLEAN();
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 1, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
 		{ a.mRepositoryT = RepositoryT; });
 
 clean:
@@ -1807,42 +1968,22 @@ clean:
 int clnt_state_1_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
 	int r = 0;
 
-	sp<gs_host_peer_pair_t> Connection(new gs_host_peer_pair_t(NULL, NULL));
-
-	const char *ConfServHostName = aux_config_key(ClntKeyVal, "ConfServHostName");
-	uint32_t ConfServPort = 0;
-
-	if (!ConfServHostName)
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = clnt_state_1_noown(ConfServPort, ConfServHostName, &Connection->first, &Connection->second)))
-		GS_GOTO_CLEAN();
-
 	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
-		{ a.mConnection = Connection; });
+		{ });
 
 clean:
-	if (!!r) {
-		if (Connection && Connection->second)
-			enet_peer_disconnect_now(Connection->second, NULL);
-
-		if (Connection && Connection->first)
-			enet_host_destroy(Connection->first);
-	}
 
 	return r;
 }
 
-int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
+{
 	int r = 0;
 
 	sp<git_oid> TreeHeadOid(new git_oid);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<gs_host_peer_pair_t> &Connection = State->mConnection;
 	const char *ConfRefName = aux_config_key(ClntKeyVal, "RefName");
 
 	std::string Buffer;
@@ -1856,7 +1997,8 @@ int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, 
 		GS_ERR_CLEAN(1);
 
 	if (!!(r = clnt_state_2_noown(
-		ConfRefName, RepositoryT, Connection->first, Connection->second, ServAuxData.get(),
+		ConfRefName, RepositoryT,
+		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		TreeHeadOid.get())))
 	{
 		GS_GOTO_CLEAN();
@@ -1870,18 +2012,20 @@ clean:
 	return r;
 }
 
-int clnt_state_3_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_3_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
+{
 	int r = 0;
 
 	sp<std::vector<git_oid> > Treelist(new std::vector<git_oid>);
 	sp<std::vector<git_oid> > MissingTreelist(new std::vector<git_oid>);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<gs_host_peer_pair_t> &Connection = State->mConnection;
 	const sp<git_oid> &TreeHeadOid = State->mTreeHeadOid;
 
 	if (!!(r = clnt_state_3_noown(
-		RepositoryT, Connection->first, Connection->second, ServAuxData.get(),
+		RepositoryT,
+		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		TreeHeadOid.get(), Treelist.get(), MissingTreelist.get())))
 	{
 		GS_GOTO_CLEAN();
@@ -1896,31 +2040,33 @@ clean:
 	return r;
 }
 
-int clnt_state_4_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_4_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
+{
 	int r = 0;
 
 	sp<std::vector<git_oid> > MissingBloblist(new std::vector<git_oid>);
-	sp<PacketWithOffset> PacketTreeWithOffset(new PacketWithOffset);
+	sp<PacketUniqueWithOffset> PacketTreeWithOffset(new PacketUniqueWithOffset);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<gs_host_peer_pair_t> &Connection = State->mConnection;
 	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
 
-	gs_packet_t PacketTree = aux_gs_make_packet(NULL);
+	gs_packet_unique_t PacketTree;
 
 	uint32_t OffsetSizeBufferTree;
 	uint32_t OffsetObjectBufferTree;
 
-	sp<PacketWithOffset> TmpTreePacketWithOffset(new PacketWithOffset);
+	sp<PacketUniqueWithOffset> TmpTreePacketWithOffset(new PacketUniqueWithOffset);
 
 	if (!!(r = clnt_state_4_noown(
-		RepositoryT, Connection->first, Connection->second, ServAuxData.get(),
+		RepositoryT,
+		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		MissingTreelist.get(), MissingBloblist.get(), &PacketTree, &OffsetSizeBufferTree, &OffsetObjectBufferTree)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = aux_make_packet_with_offset(PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, TmpTreePacketWithOffset.get())))
+	if (!!(r = aux_make_packet_unique_with_offset(&PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, TmpTreePacketWithOffset.get())))
 		GS_GOTO_CLEAN();
 
 	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 5, a,
@@ -1932,23 +2078,25 @@ clean:
 	return r;
 }
 
-int clnt_state_5_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_5_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
+{
 	int r = 0;
 
 	sp<std::vector<git_oid> > WrittenBlob(new std::vector<git_oid>);
 	sp<std::vector<git_oid> > WrittenTree(new std::vector<git_oid>);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<gs_host_peer_pair_t> &Connection = State->mConnection;
 	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
 	const sp<std::vector<git_oid> > &MissingBloblist = State->mMissingBloblist;
-	const sp<PacketWithOffset> &PacketTreeWithOffset = State->mTreePacketWithOffset;
-	const gs_packet_t &PacketTree = PacketTreeWithOffset->mPacket;
+	const sp<PacketUniqueWithOffset> &PacketTreeWithOffset = State->mTreePacketWithOffset;
+	const gs_packet_unique_t &PacketTree = PacketTreeWithOffset->mPacket;
 	const uint32_t &OffsetSizeBufferTree = PacketTreeWithOffset->mOffsetSize;
 	const uint32_t &OffsetObjectBufferTree = PacketTreeWithOffset->mOffsetObject;
 
 	if (!!(r = clnt_state_5_noown(
-		RepositoryT, Connection->first, Connection->second, ServAuxData.get(),
+		RepositoryT,
+		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		MissingTreelist.get(), MissingBloblist.get(),
 		PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree,
 		WrittenBlob.get(), WrittenTree.get())))
@@ -1965,7 +2113,11 @@ clean:
 	return r;
 }
 
-int clnt_state_crank(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_crank(
+	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend)
+{
 	int r = 0;
 
 	uint32_t Code = 0;
@@ -1983,6 +2135,7 @@ int clnt_state_crank(const sp<ClntState> &State, const confmap_t &ClntKeyVal, co
 
 	case 1:
 	{
+		assert(0); // FIXME: unused - refactor
 		if (!!(r = clnt_state_1_setup(State, ClntKeyVal, ServAuxData)))
 			GS_GOTO_CLEAN();
 	}
@@ -1990,29 +2143,41 @@ int clnt_state_crank(const sp<ClntState> &State, const confmap_t &ClntKeyVal, co
 
 	case 2:
 	{
-		if (!!(r = clnt_state_2_setup(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_2_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
 			GS_GOTO_CLEAN();
+		}
 	}
 	break;
 
 	case 3:
 	{
-		if (!!(r = clnt_state_3_setup(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_3_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
 			GS_GOTO_CLEAN();
+		}
 	}
 	break;
 
 	case 4:
 	{
-		if (!!(r = clnt_state_4_setup(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_4_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
 			GS_GOTO_CLEAN();
+		}
 	}
 	break;
 
 	case 5:
 	{
-		if (!!(r = clnt_state_5_setup(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_5_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
 			GS_GOTO_CLEAN();
+		}
 	}
 	break;
 
@@ -2081,46 +2246,28 @@ clean:
 	return r;
 }
 
+/* FIXME: presumably unusded - refactor */
 int clnt_state_crank_reconnecter(
 	const sp<ClntState> &State, ClntStateReconnect *ioStateReconnect,
-	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData)
+	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
+	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend)
 {
-	int r = 0;
-
-	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData))) {
-		printf("reco+\n");
-		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
-			GS_GOTO_CLEAN();
-		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
-			GS_GOTO_CLEAN();
-		printf("reco-\n");
-	}
-
-clean:
-
-	return r;
-}
-
-int clnt_thread_func(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
-	int r = 0;
-
-	sp<ClntState> State(new ClntState);
-	sp<ClntStateReconnect> StateReconnect(new ClntStateReconnect);
-
-	if (!!(r = clnt_state_make_default(State.get())))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = clnt_state_reconnect_make_default(StateReconnect.get())))
-		GS_GOTO_CLEAN();
-
-	while (true) {
-		if (!!(r = clnt_state_crank_reconnecter(State, StateReconnect.get(), ClntKeyVal, ServAuxData)))
-			GS_GOTO_CLEAN();
-	}
-
-clean:
-
-	return r;
+	assert(0);
+	return 1;
+//	int r = 0;
+//
+//	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend))) {
+//		printf("reco+\n");
+//		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
+//			GS_GOTO_CLEAN();
+//		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
+//			GS_GOTO_CLEAN();
+//		printf("reco-\n");
+//	}
+//
+//clean:
+//
+//	return r;
 }
 
 void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
@@ -2137,6 +2284,16 @@ void serv_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> Se
 	for (;;) {}
 }
 
+void clnt_worker_thread_func_f(const confmap_t &ServKeyVal,
+	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend,
+	ENetHost *clnt, ENetPeer *peer)
+{
+	int r = 0;
+	if (!!(r = clnt_worker_thread_func(ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend, clnt, peer)))
+		assert(0);
+	for (;;) {}
+}
+
 void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
 	if (!!(r = aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address)))
@@ -2146,16 +2303,41 @@ void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> Se
 
 void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
-	if (!!(r = serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
+	if (!!(r = serv_serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
 		assert(0);
 	for (;;) {}
 }
 
-void clnt_thread_func_f(const confmap_t &ClntKeyVal, sp<ServAuxData> ServAuxData) {
+void clnt_thread_func_f(const confmap_t &ClntKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host) {
 	int r = 0;
-	if (!!(r = clnt_thread_func(ClntKeyVal, ServAuxData)))
+	if (!!(r = clnt_serv_thread_func(ClntKeyVal, WorkerDataRecv, WorkerDataSend, host)))
 		assert(0);
 	for (;;) {}
+}
+
+int aux_full_create_connection_server(confmap_t ServKeyVal, sp<FullConnectionClient> *oConnectionClient) {
+	int r = 0;
+
+	sp<FullConnectionClient> ConnectionClient;
+
+	{
+		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
+		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
+		sp<ServAuxData> ServAuxData(new ServAuxData);
+
+		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend));
+		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, ServAuxData));
+		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, WorkerDataRecv, WorkerDataSend));
+
+		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ServerWorkerThread, ServerAuxThread, ServerThread));
+	}
+
+	if (oConnectionClient)
+		*oConnectionClient = ConnectionClient;
+
+clean:
+
+	return r;
 }
 
 int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionClient> *oConnectionClient) {
@@ -2163,19 +2345,35 @@ int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionCli
 
 	sp<FullConnectionClient> ConnectionClient;
 
-	ENetHost *host = NULL;
-	ENetAddress AddressHost = {};
+	uint32_t ServPort = 0;
 
-	if (!!(r = aux_enet_host_client_create_addr(&host, &AddressHost)))
+	ENetHost *clnt = NULL;
+	ENetAddress AddressClnt = {};
+	ENetAddress AddressServ = {};
+	ENetPeer *peer = NULL;
+
+	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ServPort)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_host_client_create_addr(&clnt, &AddressClnt)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_address_create_hostname(ServPort, "localhost", &AddressServ)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_host_connect_addr(clnt, &AddressServ, &peer)))
 		GS_GOTO_CLEAN();
 
 	{
-		sp<ServAuxData> ClientServAuxData(new ServAuxData);
+		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
+		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
+		sp<ServAuxData> ServAuxData(new ServAuxData);
 
-		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, ClientServAuxData, AddressHost));
-		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, ClientServAuxData));
+		sp<std::thread> ClientWorkerThread(new std::thread(clnt_worker_thread_func_f, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend, clnt, peer));
+		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, ServAuxData, AddressClnt));
+		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, WorkerDataRecv, WorkerDataSend, clnt));
 
-		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientAuxThread, ClientThread));
+		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientWorkerThread, ClientAuxThread, ClientThread));
 	}
 
 	if (oConnectionClient)
@@ -2192,23 +2390,21 @@ int stuff2() {
 	confmap_t ServKeyVal;
 	confmap_t ClntKeyVal;
 
+	sp<FullConnectionClient> FcsServ;
+	sp<FullConnectionClient> FcsClnt;
+
 	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &ServKeyVal)))
 		GS_GOTO_CLEAN();
 	ClntKeyVal = ServKeyVal;
 
-	{
-		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
-		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> ServAuxData(new ServAuxData);
+	if (!!(r = aux_full_create_connection_server(ServKeyVal, &FcsServ)))
+		GS_GOTO_CLEAN();
 
-		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend));
-		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, ServAuxData));
-		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, WorkerDataRecv, WorkerDataSend));
-		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, ServAuxData));
+	if (!!(r = aux_full_create_connection_client(ServKeyVal, &FcsClnt)))
+		GS_GOTO_CLEAN();
 
-		ServerThread->join();
-		ClientThread->join();
-	}
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 clean:
 
