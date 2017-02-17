@@ -19,9 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{9B754D4A-FAAE-4A0E-A745-4078D43B3AD3}</ProjectGuid>
+    <ProjectGuid>{055C39C6-A54D-4D9D-A92B-2D0E713CE81F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>gittest_serv</RootNamespace>
+    <RootNamespace>gittest_selfupdate</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -98,12 +98,10 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\gittest;C:\Users\Andrej\prog\libgit2\inst\include;C:\Users\Andrej\prog\enet\inst\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>C:\Users\Andrej\prog\libgit2\inst\lib\git2.lib;C:\Users\Andrej\prog\enet\inst\lib\static\enet.lib;ws2_32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -141,12 +139,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="gittest_serv.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\gittest\gittest.vcxproj">
-      <Project>{33a9893f-e1ca-4ba6-bd06-2da533dfcb0e}</Project>
-    </ProjectReference>
+    <ClCompile Include="gittest_selfupdate.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
