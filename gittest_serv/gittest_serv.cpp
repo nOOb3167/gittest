@@ -19,6 +19,9 @@
 #include <git2.h>
 
 #include <gittest.h>
+#include <frame.h>
+
+#include <gittest_serv.h>
 
 /*
 * = Packet size vs Frame size =
@@ -26,232 +29,9 @@
 * = Inferred size vs Explicit size for frame vector serialization =
 */
 
-#define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
-
-#define GS_PORT 3756
-
-#define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
-#define GS_CONNECT_NUMRETRY   5
-#define GS_CONNECT_TIMEOUT_MS 1000
-#define GS_CONNECT_NUMRECONNECT 5
-#define GS_RECEIVE_TIMEOUT_MS 500000
-
-#define GS_FRAME_HEADER_STR_LEN 40
-#define GS_FRAME_HEADER_NUM_LEN 4
-#define GS_FRAME_HEADER_LEN (GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)
-#define GS_FRAME_SIZE_LEN 4
-
-#define GS_PAYLOAD_OID_LEN 20
-
-//#define GS_DBG_CLEAN {}
-#define GS_DBG_CLEAN { assert(0); }
-//#define GS_DBG_CLEAN { DebugBreak(); }
-
-#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
-#define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
-#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto cleansub; }
-#define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
-
-#define GS_FRAME_TYPE_SERV_AUX_INTERRUPT_REQUESTED 0
-#define GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE 1
-#define GS_FRAME_TYPE_RESPONSE_LATEST_COMMIT_TREE 2
-#define GS_FRAME_TYPE_REQUEST_TREELIST 3
-#define GS_FRAME_TYPE_RESPONSE_TREELIST 4
-#define GS_FRAME_TYPE_REQUEST_TREES 5
-#define GS_FRAME_TYPE_RESPONSE_TREES 6
-#define GS_FRAME_TYPE_REQUEST_BLOBS 7
-#define GS_FRAME_TYPE_RESPONSE_BLOBS 8
-
-#define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
-#define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
-
-/* is this really neccessary? */
-#define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
-		{ ClntState VARNAME_TMPSTATE;                                                                       \
-      if (!!clnt_state_cpy(& (VARNAME_TMPSTATE), (PTR_VARNAME_CLNTSTATE)))                              \
-        GS_ERR_CLEAN(9998);                                                                             \
-	  	  { STATEMENTBLOCK }                                                                                \
-	  if (!!clnt_state_code_ensure(& (VARNAME_TMPSTATE), (CODE)))                                       \
-	    GS_ERR_CLEAN(9999);                                                                             \
-	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
-	    GS_ERR_CLEAN(9998); }
-
-typedef std::pair<ENetHost *, ENetPeer *> gs_host_peer_pair_t;
-
 struct ClntState;
 
-struct GsFrameType {
-	char mTypeName[GS_FRAME_HEADER_STR_LEN];
-	uint32_t mTypeNum;
-};
-
-GsFrameType GsFrameTypes[] = {
-	GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED),
-	GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE),
-	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),
-	GS_FRAME_TYPE_DECL(REQUEST_TREELIST),
-	GS_FRAME_TYPE_DECL(RESPONSE_TREELIST),
-	GS_FRAME_TYPE_DECL(REQUEST_TREES),
-	GS_FRAME_TYPE_DECL(RESPONSE_TREES),
-	GS_FRAME_TYPE_DECL(REQUEST_BLOBS),
-	GS_FRAME_TYPE_DECL(RESPONSE_BLOBS),
-};
-
-template<typename T>
-using sp = ::std::shared_ptr<T>;
-
-struct gs_packet_unique_t_deleter {
-	void operator()(ENetPacket **xpacket) const {
-		if (xpacket)
-			if (*xpacket)  /* NOTE: reading enet source, enet_packet_destroy can be called with null, but check */
-				enet_packet_destroy(*xpacket);
-		delete xpacket;
-	}
-};
-
-typedef ::std::shared_ptr<ENetPacket *> gs_packet_t;
-typedef ::std::unique_ptr<ENetPacket *, gs_packet_unique_t_deleter> gs_packet_unique_t;
-
 gs_packet_unique_t gs_packet_unique_t_null();
-
-struct PacketWithOffset {
-	gs_packet_t mPacket;
-	uint32_t mOffsetSize;
-	uint32_t mOffsetObject;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-struct PacketUniqueWithOffset {
-	gs_packet_unique_t mPacket;
-	uint32_t mOffsetSize;
-	uint32_t mOffsetObject;
-
-	/* choosing unique_ptr member variable was a bad idea as evidenced by 6(!) functions below */
-
-	PacketUniqueWithOffset() {}
-	~PacketUniqueWithOffset() {}
-
-	PacketUniqueWithOffset(const PacketUniqueWithOffset &other) = delete;
-	PacketUniqueWithOffset & operator=(const PacketUniqueWithOffset &other) = delete;
-
-	PacketUniqueWithOffset(PacketUniqueWithOffset &&other)
-		: mPacket(std::move(other.mPacket)),
-		mOffsetSize(other.mOffsetSize),
-		mOffsetObject(other.mOffsetObject)
-	{}
-
-	PacketUniqueWithOffset & operator=(PacketUniqueWithOffset &&other) {
-		if (this != &other)
-		{
-			mPacket = std::move(other.mPacket);
-			mOffsetSize = other.mOffsetSize;
-			mOffsetObject = other.mOffsetObject;
-		}
-		return *this;
-	}
-};
-
-class ServWorkerRequestData {
-public:
-	ServWorkerRequestData(gs_packet_unique_t *ioPacket, ENetHost *Host, ENetPeer *Peer)
-		: mPacket(),
-		mHost(Host),
-		mPeer(Peer)
-	{
-		mPacket = std::move(*ioPacket);
-	}
-
-	bool isReconnectRequest() { return ! mPacket; }
-
-public:
-	gs_packet_unique_t mPacket;
-
-private:
-	ENetHost *mHost;
-	ENetPeer *mPeer;
-
-	friend int aux_make_serv_worker_request_data_for_response(
-		ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData);
-	friend void aux_serv_worker_request_data_getprivate(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer);
-};
-
-class ServWorkerData {
-public:
-	ServWorkerData()
-		: mWorkerQueue(new std::deque<sp<ServWorkerRequestData> >),
-		mWorkerDataMutex(new std::mutex),
-		mWorkerDataCond(new std::condition_variable)
-	{}
-
-	void RequestEnqueue(const sp<ServWorkerRequestData> &RequestData);
-	void RequestDequeue(sp<ServWorkerRequestData> *oRequestData);
-	void RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> > *oRequestData);
-
-private:
-	sp<std::deque<sp<ServWorkerRequestData> > > mWorkerQueue;
-	sp<std::mutex> mWorkerDataMutex;
-	sp<std::condition_variable> mWorkerDataCond;
-};
-
-class ServAuxData {
-public:
-	ServAuxData()
-		: mInterruptRequested(0),
-		mAuxDataMutex(new std::mutex),
-		mAuxDataCond(new std::condition_variable)
-	{}
-
-	void InterruptRequestedEnqueue();
-	bool InterruptRequestedDequeueTimeout(const std::chrono::milliseconds &WaitForMillis);
-
-private:
-
-	void InterruptRequestedDequeueMT_();
-
-private:
-	int mInterruptRequested;
-	sp<std::mutex> mAuxDataMutex;
-	sp<std::condition_variable> mAuxDataCond;
-};
-
-struct ClntStateReconnect {
-	uint32_t NumReconnections;
-	uint32_t NumReconnectionsLeft;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-struct ClntState {
-	sp<git_repository *> mRepositoryT;
-
-	sp<git_oid> mTreeHeadOid;
-
-	sp<std::vector<git_oid> > mTreelist;
-	sp<std::vector<git_oid> > mMissingTreelist;
-
-	sp<std::vector<git_oid> >  mMissingBloblist;
-	sp<PacketUniqueWithOffset> mTreePacketWithOffset;
-
-	sp<std::vector<git_oid> > mWrittenBlob;
-	sp<std::vector<git_oid> > mWrittenTree;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-class FullConnectionClient {
-public:
-	FullConnectionClient(const sp<std::thread> &ThreadWorker, const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread)
-		: ThreadWorker(ThreadWorker),
-		ThreadAux(ThreadAux),
-		Thread(Thread)
-	{}
-
-private:
-	sp<std::thread> ThreadWorker;
-	sp<std::thread> ThreadAux;
-	sp<std::thread> Thread;
-};
 
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
@@ -260,6 +40,115 @@ int clnt_state_crank(
 	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
 	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend);
+
+void gs_packet_unique_t_deleter::operator()(ENetPacket **xpacket) const {
+		if (xpacket)
+			if (*xpacket)  /* NOTE: reading enet source, enet_packet_destroy can be called with null, but check */
+				enet_packet_destroy(*xpacket);
+		delete xpacket;
+}
+
+PacketUniqueWithOffset::PacketUniqueWithOffset(PacketUniqueWithOffset &&other)
+	: mPacket(std::move(other.mPacket)),
+	mOffsetSize(other.mOffsetSize),
+	mOffsetObject(other.mOffsetObject)
+{}
+
+PacketUniqueWithOffset & PacketUniqueWithOffset::operator=(PacketUniqueWithOffset &&other) {
+	if (this != &other)
+	{
+		mPacket = std::move(other.mPacket);
+		mOffsetSize = other.mOffsetSize;
+		mOffsetObject = other.mOffsetObject;
+	}
+	return *this;
+}
+
+ServWorkerRequestData::ServWorkerRequestData(gs_packet_unique_t *ioPacket, ENetHost *Host, ENetPeer *Peer)
+	: mPacket(),
+	mHost(Host),
+	mPeer(Peer)
+{
+	mPacket = std::move(*ioPacket);
+}
+
+bool ServWorkerRequestData::isReconnectRequest() {
+	return ! mPacket;
+}
+
+ServWorkerData::ServWorkerData()
+	: mWorkerQueue(new std::deque<sp<ServWorkerRequestData> >),
+	mWorkerDataMutex(new std::mutex),
+	mWorkerDataCond(new std::condition_variable)
+{}
+
+void ServWorkerData::RequestEnqueue(const sp<ServWorkerRequestData> &RequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		mWorkerQueue->push_back(RequestData);
+	}
+	mWorkerDataCond->notify_one();
+}
+
+void ServWorkerData::RequestDequeue(sp<ServWorkerRequestData> *oRequestData) {
+	sp<ServWorkerRequestData> RequestData;
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		mWorkerDataCond->wait(lock, [&]() { return !mWorkerQueue->empty(); });
+		assert(! mWorkerQueue->empty());
+		RequestData = mWorkerQueue->front();
+		mWorkerQueue->pop_front();
+	}
+	if (oRequestData)
+		oRequestData->swap(RequestData);
+}
+
+void ServWorkerData::RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> > *oRequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
+		oRequestData->clear();
+		oRequestData->swap(*mWorkerQueue);
+	}
+}
+
+ServAuxData::ServAuxData()
+	: mInterruptRequested(0),
+	mAuxDataMutex(new std::mutex),
+	mAuxDataCond(new std::condition_variable)
+{}
+
+void ServAuxData::InterruptRequestedEnqueue() {
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		mInterruptRequested = true;
+	}
+	mAuxDataCond->notify_one();
+}
+
+bool ServAuxData::InterruptRequestedDequeueTimeout(const std::chrono::milliseconds &WaitForMillis) {
+	/* @return: Interrupt (aka send message from serv_aux to serv counts as requested
+	*    if a thread sets mInterruptRequested and notifies us, or timeout expires but
+	*    mInterruptRequested still got set */
+
+	bool IsPredicateTrue = false;
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		IsPredicateTrue = mAuxDataCond->wait_for(lock, WaitForMillis, [&]() { return !!mInterruptRequested; });
+		if (IsPredicateTrue)
+			InterruptRequestedDequeueMT_();
+	}
+	return IsPredicateTrue;
+}
+
+void ServAuxData::InterruptRequestedDequeueMT_() {
+	mInterruptRequested = false;
+}
+
+FullConnectionClient::FullConnectionClient(const sp<std::thread> &ThreadWorker, const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread)
+	: ThreadWorker(ThreadWorker),
+	ThreadAux(ThreadAux),
+	Thread(Thread)
+{}
 
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
@@ -271,6 +160,41 @@ gs_packet_unique_t aux_gs_make_packet_unique(ENetPacket *packet) {
 
 gs_packet_unique_t gs_packet_unique_t_null() {
 	return gs_packet_unique_t(nullptr, gs_packet_unique_t_deleter());
+}
+
+int aux_host_peer_pair_reset(sp<gs_host_peer_pair_t> *ioConnection) {
+	if (*ioConnection != NULL) {
+		ENetHost * const oldhost = (*ioConnection)->first;
+		ENetPeer * const oldpeer = (*ioConnection)->second;
+
+		*ioConnection = sp<gs_host_peer_pair_t>();
+
+		enet_peer_disconnect_now(oldpeer, NULL);
+		enet_host_destroy(oldhost);
+	}
+
+	return 0;
+}
+
+int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_t OffsetObject, PacketWithOffset *oPacketWithOffset) {
+	PacketWithOffset ret;
+	ret.mPacket = Packet;
+	ret.mOffsetSize = OffsetSize;
+	ret.mOffsetObject = OffsetObject;
+	if (oPacketWithOffset)
+		*oPacketWithOffset = ret;
+	return 0;
+}
+
+/* http://en.cppreference.com/w/cpp/language/move_assignment */
+int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t OffsetSize, uint32_t OffsetObject, PacketUniqueWithOffset *oPacketWithOffset) {
+	PacketUniqueWithOffset ret;
+	ret.mPacket = std::move(*ioPacket);
+	ret.mOffsetSize = OffsetSize;
+	ret.mOffsetObject = OffsetObject;
+	if (oPacketWithOffset)
+		*oPacketWithOffset = std::move(ret);
+	return 0;
 }
 
 int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData) {
@@ -302,671 +226,13 @@ clean:
 	return r;
 }
 
-void aux_serv_worker_request_data_getprivate(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer) {
+void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer) {
 
 	if (oHost)
 		*oHost = Request->mHost;
 
 	if (oPeer)
 		*oPeer = Request->mPeer;
-}
-
-bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
-	assert(sizeof a.mTypeName == GS_FRAME_HEADER_STR_LEN);
-	bool eqstr = memcmp(a.mTypeName, b.mTypeName, GS_FRAME_HEADER_STR_LEN) == 0;
-	bool eqnum = a.mTypeNum == b.mTypeNum;
-	/* XOR basically */
-	if ((eqstr || eqnum) && (!eqstr || !eqnum))
-		assert(0);
-	return eqstr && eqnum;
-}
-
-int aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace) {
-	int r = 0;
-
-	if (! ((TotalLength >= Offset) && (TotalLength - Offset) >= WantedSpace))
-		GS_ERR_CLEAN(1);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_buf(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t DataOffset, uint32_t *DataOffsetNew,
-	uint8_t *BufStart, uint32_t BufLength, uint32_t BufOffset, uint32_t NumToRead)
-{
-	int r = 0;
-
-	if (!!(r = aux_frame_enough_space(DataLength, DataOffset, NumToRead)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_enough_space(BufLength, BufOffset, NumToRead)))
-		GS_GOTO_CLEAN();
-
-	memcpy(BufStart + BufOffset, DataStart + DataOffset, NumToRead);
-
-	if (DataOffsetNew)
-		*DataOffsetNew = DataOffset + NumToRead;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_write_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen) {
-	int r = 0;
-
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, BufLen)))
-		GS_GOTO_CLEAN();
-
-	memcpy(DataStart + Offset, Buf, BufLen);
-
-	if (OffsetNew)
-		*OffsetNew = Offset + BufLen;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_size(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	uint32_t SizeOfSize, uint32_t *oSize, uint32_t *oDataLengthLimit)
-{
-	int r = 0;
-
-	uint32_t Size = 0;
-
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
-		GS_GOTO_CLEAN();
-
-	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
-
-	if (oSize)
-		*oSize = Size;
-
-	if (oDataLengthLimit)
-		*oDataLengthLimit = Offset + SizeOfSize + Size;
-
-	if (OffsetNew)
-		*OffsetNew = Offset + SizeOfSize;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_write_size(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	uint32_t SizeOfSize, uint32_t Size)
-{
-	int r = 0;
-
-	assert(SizeOfSize == sizeof(uint32_t));
-
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
-		GS_GOTO_CLEAN();
-
-	aux_uint32_to_LE(Size, (char *)(DataStart + Offset), SizeOfSize);
-
-	if (OffsetNew)
-		*OffsetNew = Offset + SizeOfSize;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize) {
-	int r = 0;
-
-	uint32_t SizeFound = 0;
-
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &SizeFound, NULL)))
-		GS_GOTO_CLEAN();
-
-	if (SizeFound != MSize)
-		GS_ERR_CLEAN(1);
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_frametype(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	GsFrameType *oFrameType)
-{
-	int r = 0;
-
-	GsFrameType FrameType = {};
-
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_read_buf(
-		DataStart, DataLength, Offset, &Offset,
-		(uint8_t *)FrameType.mTypeName, GS_FRAME_HEADER_STR_LEN, 0, GS_FRAME_HEADER_STR_LEN)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, &FrameType.mTypeNum, NULL)))
-		GS_GOTO_CLEAN();
-
-	if (oFrameType)
-		*oFrameType = FrameType;
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_write_frametype(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	GsFrameType *FrameType)
-{
-	int r = 0;
-
-	if (!!(r = aux_frame_enough_space(DataLength, Offset, GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, (uint8_t *)FrameType->mTypeName, GS_FRAME_HEADER_STR_LEN)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_HEADER_NUM_LEN, FrameType->mTypeNum)))
-		GS_GOTO_CLEAN();
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_ensure_frametype(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	const GsFrameType &FrameType)
-{
-	int r = 0;
-
-	GsFrameType FoundFrameType = {};
-
-	if (!!(r = aux_frame_read_frametype(DataStart, DataLength, Offset, &Offset, &FoundFrameType)))
-		GS_GOTO_CLEAN();
-
-	if (! aux_frametype_equals(FoundFrameType, FrameType))
-		GS_ERR_CLEAN(1);
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_oid(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *oOid)
-{
-	int r = 0;
-
-	git_oid Oid = {};
-	uint8_t OidBuf[GIT_OID_RAWSZ] = {};
-
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
-
-	if (!!(r = aux_frame_read_buf(
-		DataStart, DataLength, Offset, &Offset,
-		OidBuf, GIT_OID_RAWSZ, 0, GIT_OID_RAWSZ)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	/* FIXME: LUL GOOD API NO SIZE PARAMETER IMPLEMENTED AS RAW MEMCPY */
-	assert(sizeof(unsigned char) == sizeof(uint8_t));
-	git_oid_fromraw(&Oid, (unsigned char *)OidBuf);
-
-	if (oOid)
-		git_oid_cpy(oOid, &Oid);
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_write_oid(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	uint8_t *Oid, uint32_t OidSize)
-{
-	int r = 0;
-
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-
-	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, Oid, OidSize)))
-		GS_GOTO_CLEAN();
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_read_oid_vec(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *oOidVec)
-{
-	int r = 0;
-
-	std::vector<git_oid> OidVec;
-	uint32_t OidNum = 0;
-
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum, NULL)))
-		GS_GOTO_CLEAN();
-
-	// FIXME: hmmm, almost unbounded allocation, from a single uint32_t read off the network
-	OidVec.resize(OidNum);
-	for (uint32_t i = 0; i < OidNum; i++) {
-		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, &OidVec[i])))
-			GS_GOTO_CLEAN();
-	}
-
-	if (oOidVec)
-		oOidVec->swap(OidVec);
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_write_oid_vec(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *OidVec, uint32_t OidNum, uint32_t OidSize)
-{
-	int r = 0;
-
-	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, OidNum)))
-		GS_GOTO_CLEAN();
-
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-
-	for (uint32_t i = 0; i < OidNum; i++) {
-		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, (OidVec + i)->id, OidSize)))
-			GS_GOTO_CLEAN();
-	}
-
-	if (OffsetNew)
-		*OffsetNew = Offset;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_aux_write_oid(
-	std::string *oBuffer,
-	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize)
-{
-	int r = 0;
-
-	std::string Buffer;
-	uint32_t PayloadSize = 0;
-	uint32_t Offset = 0;
-
-	PayloadSize = OidSize;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + GS_PAYLOAD_OID_LEN);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
-		GS_GOTO_CLEAN();
-
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_oid((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, Oid, OidSize)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_aux_write_oid_vec(
-	std::string *oBuffer,
-	GsFrameType *FrameType, git_oid *OidVec, uint32_t OidNum, uint32_t OidSize)
-{
-	int r = 0;
-
-	std::string Buffer;
-	uint32_t PayloadSize = 0;
-	uint32_t Offset = 0;
-
-	PayloadSize = GS_FRAME_SIZE_LEN + OidNum * OidSize;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
-
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec, OidNum, GIT_OID_RAWSZ)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_aux_read_paired_vec_noalloc(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	uint32_t *oPairedVecLen, uint32_t *oOffsetSizeBuffer, uint32_t *oOffsetObjectBuffer)
-{
-	int r = 0;
-
-	uint32_t PairedVecLen = 0;
-	uint32_t OffsetSizeBuffer = 0;
-	uint32_t OffsetObjectBuffer = 0;
-	uint32_t OffsetEnd = 0;
-
-	uint32_t CumulativeSize = 0;
-
-	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &PairedVecLen, NULL)))
-		GS_GOTO_CLEAN();
-
-	OffsetSizeBuffer = Offset;
-
-	OffsetObjectBuffer = OffsetSizeBuffer + GS_FRAME_SIZE_LEN * PairedVecLen;
-
-	if (!!(r = aux_frame_enough_space(DataLength, OffsetSizeBuffer, GS_FRAME_SIZE_LEN * PairedVecLen)))
-		GS_GOTO_CLEAN();
-
-	for (uint32_t i = 0; i < PairedVecLen; i++) {
-		uint32_t FoundSize = 0;
-		aux_LE_to_uint32(&FoundSize, (char *)(DataStart + OffsetSizeBuffer + GS_FRAME_SIZE_LEN * i), GS_FRAME_SIZE_LEN);
-		CumulativeSize += FoundSize;
-	}
-
-	if (!!(r = aux_frame_enough_space(DataLength, OffsetObjectBuffer, CumulativeSize)))
-		GS_GOTO_CLEAN();
-
-	OffsetEnd = OffsetObjectBuffer + CumulativeSize;
-
-	if (oPairedVecLen)
-		*oPairedVecLen = PairedVecLen;
-
-	if (oOffsetSizeBuffer)
-		*oOffsetSizeBuffer = OffsetSizeBuffer;
-
-	if (oOffsetObjectBuffer)
-		*oOffsetObjectBuffer = OffsetObjectBuffer;
-
-	if (OffsetNew)
-		*OffsetNew = OffsetEnd;
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_aux_write_paired_vec(
-	std::string *oBuffer,
-	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
-{
-	int r = 0;
-
-	std::string Buffer;
-	uint32_t PayloadSize = 0;
-	uint32_t Offset = 0;
-
-	PayloadSize = GS_FRAME_SIZE_LEN + SizeBufferTree->size() + ObjectBufferTree->size();
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
-
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size())))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_write_serv_aux_interrupt_requested(
-	std::string *oBuffer)
-{
-	int r = 0;
-
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
-
-	std::string Buffer;
-	uint32_t Offset = 0;
-
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_write_request_latest_commit_tree(
-	std::string *oBuffer)
-{
-	int r = 0;
-
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
-
-	std::string Buffer;
-	uint32_t Offset = 0;
-
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
-}
-
-int aux_frame_full_write_response_latest_commit_tree(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
-
-	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
-}
-
-int aux_frame_full_write_request_treelist(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
-
-	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
-}
-
-int aux_frame_full_write_response_treelist(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
-
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
-}
-
-int aux_frame_full_write_request_trees(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
-
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
-}
-
-int aux_frame_full_write_response_trees(
-	std::string *oBuffer,
-	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
-
-	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree);
-}
-
-int aux_frame_full_write_request_blobs(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
-
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
-}
-
-int aux_frame_full_write_response_blobs(
-	std::string *oBuffer,
-	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOBS);
-
-	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
-}
-
-/* FIXME: race condition between server startup and client connection.
- *   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
- *   the fix is having the connect be retried multiple times. */
-int aux_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
-	int r = 0;
-
-	int retcode = 0;
-	ENetEvent event = {};
-
-	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
-		GS_ERR_CLEAN(1);
-
-	assert(retcode >= 0);
-
-	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
-		GS_ERR_CLEAN(2);
-
-	if (oHasTimedOut)
-		*oHasTimedOut = (retcode == 0);
-
-clean:
-
-	return r;
-}
-
-void ServWorkerData::RequestEnqueue(const sp<ServWorkerRequestData> &RequestData) {
-	{
-		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
-		mWorkerQueue->push_back(RequestData);
-	}
-	mWorkerDataCond->notify_one();
-}
-
-void ServWorkerData::RequestDequeue(sp<ServWorkerRequestData> *oRequestData) {
-	sp<ServWorkerRequestData> RequestData;
-	{
-		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
-		mWorkerDataCond->wait(lock, [&]() { return !mWorkerQueue->empty(); });
-		assert(! mWorkerQueue->empty());
-		RequestData = mWorkerQueue->front();
-		mWorkerQueue->pop_front();
-	}
-	if (oRequestData)
-		oRequestData->swap(RequestData);
-}
-
-void ServWorkerData::RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> > *oRequestData) {
-	{
-		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
-		oRequestData->clear();
-		oRequestData->swap(*mWorkerQueue);
-	}
-}
-
-void ServAuxData::InterruptRequestedEnqueue() {
-	{
-		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
-		mInterruptRequested = true;
-	}
-	mAuxDataCond->notify_one();
-}
-
-bool ServAuxData::InterruptRequestedDequeueTimeout(const std::chrono::milliseconds &WaitForMillis) {
-	/* @return: Interrupt (aka send message from serv_aux to serv counts as requested
-	*    if a thread sets mInterruptRequested and notifies us, or timeout expires but
-	*    mInterruptRequested still got set */
-
-	bool IsPredicateTrue = false;
-	{
-		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
-		IsPredicateTrue = mAuxDataCond->wait_for(lock, WaitForMillis, [&]() { return !!mInterruptRequested; });
-		if (IsPredicateTrue)
-			InterruptRequestedDequeueMT_();
-	}
-	return IsPredicateTrue;
-}
-
-void ServAuxData::InterruptRequestedDequeueMT_() {
-	mInterruptRequested = false;
 }
 
 int serv_worker_thread_func(const confmap_t &ServKeyVal,
@@ -1467,127 +733,6 @@ int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> 
 	return retcode < 0;
 }
 
-int serv_aux_host_service(ENetHost *client) {
-	int r = 0;
-
-	std::vector<ENetEvent> Events;
-
-	if (!!(r = aux_host_service(client, 0, &Events)))
-		GS_GOTO_CLEAN();
-
-	for (uint32_t i = 0; i < Events.size(); i++) {
-		switch (Events[i].type)
-		{
-		case ENET_EVENT_TYPE_CONNECT:
-		case ENET_EVENT_TYPE_DISCONNECT:
-			break;
-		case ENET_EVENT_TYPE_RECEIVE:
-			assert(0);
-			enet_packet_destroy(Events[i].packet);
-			break;
-		}
-	}
-
-clean:
-
-	return r;
-}
-
-int serv_host_service(ENetHost *server, const sp<ServWorkerData> &WorkerDataRecv, const sp<ServWorkerData> &WorkerDataSend) {
-	int r = 0;
-
-	std::vector<ENetEvent> Events;
-
-	if (!!(r = aux_host_service(server, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Events)))
-		GS_GOTO_CLEAN();
-
-	for (uint32_t i = 0; i < Events.size(); i++) {
-		switch (Events[i].type)
-		{
-		case ENET_EVENT_TYPE_CONNECT:
-		{
-			printf("[serv] A new client connected from %x:%u.\n",
-				Events[i].peer->address.host,
-				Events[i].peer->address.port);
-			Events[i].peer->data = "Client information";
-		}
-		break;
-
-		case ENET_EVENT_TYPE_RECEIVE:
-		{
-			ENetPeer *peer = Events[i].peer;
-
-			const GsFrameType &FrameTypeInterruptRequested = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
-			GsFrameType FoundFrameType = {};
-
-			if (!!(r = aux_frame_read_frametype(Events[i].packet->data, Events[i].packet->dataLength, 0, NULL, &FoundFrameType)))
-				GS_GOTO_CLEAN();
-
-			/* filter out interrupt requested frames and only dispatch other */
-
-			if (! aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested)) {
-				
-				printf("[serv] packet received\n");
-
-				gs_packet_unique_t Packet = aux_gs_make_packet_unique(Events[i].packet);
-
-				sp<ServWorkerRequestData> ServWorkerRequestData;
-
-				if (!!(r = aux_make_serv_worker_request_data(server, peer, &Packet, &ServWorkerRequestData)))
-					GS_GOTO_CLEAN();
-
-				WorkerDataRecv->RequestEnqueue(ServWorkerRequestData);
-			}
-
-			/* check out if any send requests need servicing */
-
-			{
-				std::deque<sp<ServWorkerRequestData> > RequestedSends;
-
-				WorkerDataSend->RequestDequeueAllOpt(&RequestedSends);
-
-				for (uint32_t i = 0; i < RequestedSends.size(); i++) {
-					ENetHost *GotHost = NULL;
-					ENetPeer *GotPeer = NULL;
-
-					aux_serv_worker_request_data_getprivate(RequestedSends[i].get(), &GotHost, &GotPeer);
-
-					// FIXME: assuming reconnection is a thing, how to assure host and peer are still valid?
-					//   likely want to clear outstanding requests on the worker queues before a reconnect.
-					//   for now at least assure host from the request is the same as passed to this function.
-					assert(GotHost == server);
-
-					/* ownership of packet is lost after enet_peer_send */
-					ENetPacket *Packet = *RequestedSends[i]->mPacket.release();
-
-					if (enet_peer_send(GotPeer, 0, Packet) < 0)
-						GS_GOTO_CLEAN();
-				}
-
-				/* absolutely no reason to flush if nothing was sent */
-				/* notice we are flushing 'server', above find an assert equaling against RequestedSends host */
-
-				if (RequestedSends.size())
-					enet_host_flush(server);
-			}
-		}
-		break;
-
-		case ENET_EVENT_TYPE_DISCONNECT:
-		{
-			printf("[serv] %s disconnected.\n", Events[i].peer->data);
-			Events[i].peer->data = NULL;
-		}
-		break;
-
-		}
-	}
-
-clean:
-
-	return r;
-}
-
 int aux_host_connect(
 	ENetAddress *address,
 	uint32_t NumRetry, uint32_t RetryTimeoutMs,
@@ -1606,7 +751,7 @@ int aux_host_connect(
 		if (!!(r = aux_enet_host_create_connect_addr(address, &client, &peer)))
 			GS_GOTO_CLEANSUB();
 
-		if (!!(r = aux_connect_ensure_timeout(client, RetryTimeoutMs, &HasTimedOut)))
+		if (!!(r = aux_host_connect_ensure_timeout(client, RetryTimeoutMs, &HasTimedOut)))
 			GS_GOTO_CLEANSUB();
 
 		if (!HasTimedOut) {
@@ -1646,6 +791,57 @@ clean:
 	return r;
 }
 
+/* FIXME: race condition between server startup and client connection.
+*   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
+*   the fix is having the connect be retried multiple times. */
+int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
+	int r = 0;
+
+	int retcode = 0;
+	ENetEvent event = {};
+
+	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
+		GS_ERR_CLEAN(1);
+
+	assert(retcode >= 0);
+
+	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
+		GS_ERR_CLEAN(2);
+
+	if (oHasTimedOut)
+		*oHasTimedOut = (retcode == 0);
+
+clean:
+
+	return r;
+}
+
+int aux_serv_aux_host_service(ENetHost *client) {
+	int r = 0;
+
+	std::vector<ENetEvent> Events;
+
+	if (!!(r = aux_host_service(client, 0, &Events)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < Events.size(); i++) {
+		switch (Events[i].type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+		case ENET_EVENT_TYPE_DISCONNECT:
+			break;
+		case ENET_EVENT_TYPE_RECEIVE:
+			assert(0);
+			enet_packet_destroy(Events[i].packet);
+			break;
+		}
+	}
+
+clean:
+
+	return r;
+}
+
 int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
 
@@ -1662,7 +858,7 @@ int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAu
 
 	while (true) {
 
-		if (!!(r = serv_aux_host_service(client)))
+		if (!!(r = aux_serv_aux_host_service(client)))
 			GS_GOTO_CLEAN();
 
 		/* set a timeout to ensure serv_aux_host_service cranks the enet event loop regularly */
@@ -1721,11 +917,110 @@ clean:
 	return r;
 }
 
+int clnt_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
+	return aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address);
+}
+
+int aux_serv_host_service(ENetHost *server, const sp<ServWorkerData> &WorkerDataRecv, const sp<ServWorkerData> &WorkerDataSend) {
+	int r = 0;
+
+	std::vector<ENetEvent> Events;
+
+	if (!!(r = aux_host_service(server, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Events)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < Events.size(); i++) {
+		switch (Events[i].type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+		{
+			printf("[serv] A new client connected from %x:%u.\n",
+				Events[i].peer->address.host,
+				Events[i].peer->address.port);
+			Events[i].peer->data = "Client information";
+		}
+		break;
+
+		case ENET_EVENT_TYPE_RECEIVE:
+		{
+			ENetPeer *peer = Events[i].peer;
+
+			const GsFrameType &FrameTypeInterruptRequested = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
+			GsFrameType FoundFrameType = {};
+
+			if (!!(r = aux_frame_read_frametype(Events[i].packet->data, Events[i].packet->dataLength, 0, NULL, &FoundFrameType)))
+				GS_GOTO_CLEAN();
+
+			/* filter out interrupt requested frames and only dispatch other */
+
+			if (! aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested)) {
+
+				printf("[serv] packet received\n");
+
+				gs_packet_unique_t Packet = aux_gs_make_packet_unique(Events[i].packet);
+
+				sp<ServWorkerRequestData> ServWorkerRequestData;
+
+				if (!!(r = aux_make_serv_worker_request_data(server, peer, &Packet, &ServWorkerRequestData)))
+					GS_GOTO_CLEAN();
+
+				WorkerDataRecv->RequestEnqueue(ServWorkerRequestData);
+			}
+
+			/* check out if any send requests need servicing */
+
+			{
+				std::deque<sp<ServWorkerRequestData> > RequestedSends;
+
+				WorkerDataSend->RequestDequeueAllOpt(&RequestedSends);
+
+				for (uint32_t i = 0; i < RequestedSends.size(); i++) {
+					ENetHost *GotHost = NULL;
+					ENetPeer *GotPeer = NULL;
+
+					aux_get_serv_worker_request_private(RequestedSends[i].get(), &GotHost, &GotPeer);
+
+					// FIXME: assuming reconnection is a thing, how to assure host and peer are still valid?
+					//   likely want to clear outstanding requests on the worker queues before a reconnect.
+					//   for now at least assure host from the request is the same as passed to this function.
+					assert(GotHost == server);
+
+					/* ownership of packet is lost after enet_peer_send */
+					ENetPacket *Packet = *RequestedSends[i]->mPacket.release();
+
+					if (enet_peer_send(GotPeer, 0, Packet) < 0)
+						GS_GOTO_CLEAN();
+				}
+
+				/* absolutely no reason to flush if nothing was sent */
+				/* notice we are flushing 'server', above find an assert equaling against RequestedSends host */
+
+				if (RequestedSends.size())
+					enet_host_flush(server);
+			}
+		}
+		break;
+
+		case ENET_EVENT_TYPE_DISCONNECT:
+		{
+			printf("[serv] %s disconnected.\n", Events[i].peer->data);
+			Events[i].peer->data = NULL;
+		}
+		break;
+
+		}
+	}
+
+clean:
+
+	return r;
+}
+
 int aux_serv_thread_func(ENetHost *host, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
 
 	while (true) {
-		if (!!(r = serv_host_service(host, WorkerDataRecv, WorkerDataSend)))
+		if (!!(r = aux_serv_host_service(host, WorkerDataRecv, WorkerDataSend)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -1766,27 +1061,6 @@ int clnt_serv_thread_func(const confmap_t &ClntKeyVal, sp<ServWorkerData> Worker
 clean:
 
 	return r;
-}
-
-int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_t OffsetObject, PacketWithOffset *oPacketWithOffset) {
-	PacketWithOffset ret;
-	ret.mPacket = Packet;
-	ret.mOffsetSize = OffsetSize;
-	ret.mOffsetObject = OffsetObject;
-	if (oPacketWithOffset)
-		*oPacketWithOffset = ret;
-	return 0;
-}
-
-/* http://en.cppreference.com/w/cpp/language/move_assignment */
-int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t OffsetSize, uint32_t OffsetObject, PacketUniqueWithOffset *oPacketWithOffset) {
-	PacketUniqueWithOffset ret;
-	ret.mPacket = std::move(*ioPacket);
-	ret.mOffsetSize = OffsetSize;
-	ret.mOffsetObject = OffsetObject;
-	if (oPacketWithOffset)
-		*oPacketWithOffset = std::move(ret);
-	return 0;
 }
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
@@ -1867,6 +1141,149 @@ int clnt_state_code_ensure(ClntState *State, uint32_t WantedCode) {
 clean:
 
 	return r;
+}
+
+int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pair_t> *ioConnection) {
+	int r = 0;
+
+	std::string ConfServHostName;
+	uint32_t ConfServPort = 0;
+
+	ENetAddress address = {};
+	ENetHost *newhost = NULL;
+	ENetPeer *newpeer = NULL;
+
+	if (!!(r = aux_config_key_ex(ClntKeyVal, "ConfServHostName", &ConfServHostName)))
+		GS_GOTO_CLEAN();
+	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ConfServPort)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_peer_pair_reset(ioConnection)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_address_create_hostname(ConfServPort, ConfServHostName.c_str(), &address)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &newhost, &newpeer)))
+		GS_GOTO_CLEAN();
+
+	if (ioConnection)
+		*ioConnection = std::make_shared<gs_host_peer_pair_t>(newhost, newpeer);
+
+clean:
+	if (!!r) {
+		if (newpeer)
+			enet_peer_disconnect_now(newpeer, NULL);
+
+		if (newhost)
+			enet_host_destroy(newhost);
+	}
+
+	return r;
+}
+
+int clnt_state_crank(
+	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend)
+{
+	int r = 0;
+
+	uint32_t Code = 0;
+
+	if (!!(r = clnt_state_code(State.get(), &Code)))
+		GS_GOTO_CLEAN();
+
+	switch (Code) {
+	case 0:
+	{
+		if (!!(r = clnt_state_0_setup(State, ClntKeyVal, ServAuxData)))
+			GS_GOTO_CLEAN();
+	}
+	break;
+
+	case 1:
+	{
+		assert(0); // FIXME: unused - refactor
+		if (!!(r = clnt_state_1_setup(State, ClntKeyVal, ServAuxData)))
+			GS_GOTO_CLEAN();
+	}
+	break;
+
+	case 2:
+	{
+		if (!!(r = clnt_state_2_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+	break;
+
+	case 3:
+	{
+		if (!!(r = clnt_state_3_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+	break;
+
+	case 4:
+	{
+		if (!!(r = clnt_state_4_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+	break;
+
+	case 5:
+	{
+		if (!!(r = clnt_state_5_setup(State, ClntKeyVal,
+			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+	break;
+
+	default:
+	{
+		assert(0);
+	}
+	break;
+	}
+
+clean:
+
+	return r;
+}
+
+/* FIXME: presumably unused - refactor */
+int clnt_state_crank_reconnecter(
+	const sp<ClntState> &State, ClntStateReconnect *ioStateReconnect,
+	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
+	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend)
+{
+	assert(0);
+	return 1;
+	//	int r = 0;
+	//
+	//	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend))) {
+	//		printf("reco+\n");
+	//		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
+	//			GS_GOTO_CLEAN();
+	//		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
+	//			GS_GOTO_CLEAN();
+	//		printf("reco-\n");
+	//	}
+	//
+	//clean:
+	//
+	//	return r;
 }
 
 int clnt_state_0_noown(const char *ConfRepoTOpenPath, git_repository **oRepositoryT) {
@@ -2284,163 +1701,6 @@ clean:
 	return r;
 }
 
-int clnt_state_crank(
-	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
-	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
-	ServWorkerRequestData *RequestForSend)
-{
-	int r = 0;
-
-	uint32_t Code = 0;
-
-	if (!!(r = clnt_state_code(State.get(), &Code)))
-		GS_GOTO_CLEAN();
-
-	switch (Code) {
-	case 0:
-	{
-		if (!!(r = clnt_state_0_setup(State, ClntKeyVal, ServAuxData)))
-			GS_GOTO_CLEAN();
-	}
-	break;
-
-	case 1:
-	{
-		assert(0); // FIXME: unused - refactor
-		if (!!(r = clnt_state_1_setup(State, ClntKeyVal, ServAuxData)))
-			GS_GOTO_CLEAN();
-	}
-	break;
-
-	case 2:
-	{
-		if (!!(r = clnt_state_2_setup(State, ClntKeyVal,
-			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
-		{
-			GS_GOTO_CLEAN();
-		}
-	}
-	break;
-
-	case 3:
-	{
-		if (!!(r = clnt_state_3_setup(State, ClntKeyVal,
-			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
-		{
-			GS_GOTO_CLEAN();
-		}
-	}
-	break;
-
-	case 4:
-	{
-		if (!!(r = clnt_state_4_setup(State, ClntKeyVal,
-			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
-		{
-			GS_GOTO_CLEAN();
-		}
-	}
-	break;
-
-	case 5:
-	{
-		if (!!(r = clnt_state_5_setup(State, ClntKeyVal,
-			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
-		{
-			GS_GOTO_CLEAN();
-		}
-	}
-	break;
-
-	default:
-	{
-		assert(0);
-	}
-	break;
-	}
-
-clean:
-
-	return r;
-}
-
-int aux_host_peer_pair_reset(sp<gs_host_peer_pair_t> *ioConnection) {
-	if (*ioConnection != NULL) {
-		ENetHost * const oldhost = (*ioConnection)->first;
-		ENetPeer * const oldpeer = (*ioConnection)->second;
-
-		*ioConnection = sp<gs_host_peer_pair_t>();
-
-		enet_peer_disconnect_now(oldpeer, NULL);
-		enet_host_destroy(oldhost);
-	}
-
-	return 0;
-}
-
-int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pair_t> *ioConnection) {
-	int r = 0;
-
-	std::string ConfServHostName;
-	uint32_t ConfServPort = 0;
-
-	ENetAddress address = {};
-	ENetHost *newhost = NULL;
-	ENetPeer *newpeer = NULL;
-
-	if (!!(r = aux_config_key_ex(ClntKeyVal, "ConfServHostName", &ConfServHostName)))
-		GS_GOTO_CLEAN();
-	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_host_peer_pair_reset(ioConnection)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_enet_address_create_hostname(ConfServPort, ConfServHostName.c_str(), &address)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &newhost, &newpeer)))
-		GS_GOTO_CLEAN();
-
-	if (ioConnection)
-		*ioConnection = std::make_shared<gs_host_peer_pair_t>(newhost, newpeer);
-
-clean:
-	if (!!r) {
-		if (newpeer)
-			enet_peer_disconnect_now(newpeer, NULL);
-
-		if (newhost)
-			enet_host_destroy(newhost);
-	}
-
-	return r;
-}
-
-/* FIXME: presumably unusded - refactor */
-int clnt_state_crank_reconnecter(
-	const sp<ClntState> &State, ClntStateReconnect *ioStateReconnect,
-	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
-	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend)
-{
-	assert(0);
-	return 1;
-//	int r = 0;
-//
-//	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend))) {
-//		printf("reco+\n");
-//		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
-//			GS_GOTO_CLEAN();
-//		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
-//			GS_GOTO_CLEAN();
-//		printf("reco-\n");
-//	}
-//
-//clean:
-//
-//	return r;
-}
-
 void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
 	int r = 0;
 	if (!!(r = serv_worker_thread_func(ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend)))
@@ -2451,6 +1711,13 @@ void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> Serv
 void serv_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
 	int r = 0;
 	if (!!(r = serv_serv_aux_thread_func(ServKeyVal, ServAuxData)))
+		assert(0);
+	for (;;) {}
+}
+
+void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+	int r = 0;
+	if (!!(r = serv_serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
 		assert(0);
 	for (;;) {}
 }
@@ -2468,13 +1735,6 @@ void clnt_worker_thread_func_f(const confmap_t &ServKeyVal,
 void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
 	if (!!(r = aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address)))
-		assert(0);
-	for (;;) {}
-}
-
-void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
-	int r = 0;
-	if (!!(r = serv_serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
 		assert(0);
 	for (;;) {}
 }
