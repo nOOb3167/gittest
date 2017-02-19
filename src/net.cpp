@@ -18,10 +18,10 @@
 #include <enet/enet.h>
 #include <git2.h>
 
-#include <gittest.h>
-#include <frame.h>
+#include <gittest/gittest.h>
+#include <gittest/frame.h>
 
-#include <gittest_serv.h>
+#include <gittest/net.h>
 
 /*
 * = Packet size vs Frame size =
@@ -984,6 +984,8 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	if (oBufferUpdate)
 		oBufferUpdate->swap(BufferUpdate);
+
+	assert(0);
 
 clean:
 	if (peer)
@@ -2022,24 +2024,4 @@ int stuff2() {
 clean:
 
 	return r;
-}
-
-int main(int argc, char **argv) {
-	int r = 0;
-
-	if (!!(r = aux_gittest_init()))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = enet_initialize()))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = stuff2()))
-		GS_GOTO_CLEAN();
-
-clean:
-	if (!!r) {
-		assert(0);
-	}
-
-	return EXIT_SUCCESS;
 }

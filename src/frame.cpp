@@ -6,10 +6,10 @@
 #include <cstdint>
 #include <cstring>
 
-#include <gittest.h>
-#include <gittest_serv.h>
+#include <gittest/gittest.h>
+#include <gittest/net.h>
 
-#include <frame.h>
+#include <gittest/frame.h>
 
 GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED),

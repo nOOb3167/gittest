@@ -23,7 +23,7 @@
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
 #include <git2/sys/mempack.h>     /* in-memory backend */
 
-#include <gittest.h>
+#include <gittest/gittest.h>
 
 /*
 = git init =

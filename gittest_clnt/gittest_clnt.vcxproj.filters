@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\gittest_selfupdate.cpp">
+    <ClCompile Include="..\src\gittest_clnt.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
