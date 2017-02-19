@@ -9,8 +9,13 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <vector>
 
 #include <enet/enet.h>
+#include <git2.h>
+
+#include <gittest/misc.h>
+#include <gittest/frame.h>
 
 #define GS_PORT 3756
 
@@ -19,17 +24,6 @@
 #define GS_CONNECT_TIMEOUT_MS 1000
 #define GS_CONNECT_NUMRECONNECT 5
 #define GS_RECEIVE_TIMEOUT_MS 500000
-
-//#define GS_DBG_CLEAN {}
-#define GS_DBG_CLEAN { assert(0); }
-//#define GS_DBG_CLEAN { DebugBreak(); }
-
-#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
-#define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
-#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto cleansub; }
-#define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
-
-#define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 
 /* is this really neccessary? */
 #define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
@@ -176,6 +170,9 @@ int aux_make_serv_worker_request_data_for_response(
 	ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData);
 void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, ENetHost **oHost, ENetPeer **oPeer);
 
+int aux_serv_worker_thread_service_request_blobs(
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
+	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse);
 int serv_worker_thread_func(const confmap_t &ServKeyVal,
 	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend);
 int clnt_worker_thread_func(const confmap_t &ClntKeyVal,

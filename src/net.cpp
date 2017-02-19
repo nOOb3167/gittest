@@ -18,6 +18,7 @@
 #include <enet/enet.h>
 #include <git2.h>
 
+#include <gittest/misc.h>
 #include <gittest/gittest.h>
 #include <gittest/frame.h>
 
@@ -33,6 +34,7 @@ struct ClntState;
 
 gs_packet_unique_t gs_packet_unique_t_null();
 
+int aux_packet_bare_send(ENetHost *host, ENetPeer *peer, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
 int clnt_state_make_default(ClntState *oState);
@@ -235,16 +237,58 @@ void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, ENetHos
 		*oPeer = Request->mPeer;
 }
 
+int aux_serv_worker_thread_service_request_blobs(
+	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
+	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse)
+{
+	int r = 0;
+
+	std::string ResponseBuffer;
+	uint32_t Offset = OffsetSize;
+	uint32_t LengthLimit = 0;
+	std::vector<git_oid> BloblistRequested;
+	std::string SizeBufferBlob;
+	std::string ObjectBufferBlob;
+
+	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BloblistRequested)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_response_blobs(
+		&ResponseBuffer, FrameTypeResponse,
+		BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+		ServAuxData, WorkerDataSend, Request, ResponseBuffer.data(), ResponseBuffer.size())))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
 int serv_worker_thread_func(const confmap_t &ServKeyVal,
 	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
 
 	git_repository *Repository = NULL;
+	git_repository *RepositorySelfUpdate = NULL;
 
 	std::string ConfRefName;
 	std::string ConfRefNameSelfUpdate;
 	std::string ConfRepoOpenPath;
+	std::string ConfRepoSelfUpdateOpenPath;
 
 	if (!!(r = aux_config_key_ex(ServKeyVal, "RefName", &ConfRefName)))
 		GS_GOTO_CLEAN();
@@ -255,7 +299,13 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoOpenPath", &ConfRepoOpenPath)))
 		GS_GOTO_CLEAN();
 
+	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
+		GS_GOTO_CLEAN();
+
 	if (!!(r = aux_repository_open(ConfRepoOpenPath.c_str(), &Repository)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(ConfRepoSelfUpdateOpenPath.c_str(), &RepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -359,34 +409,27 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 
 		case GS_FRAME_TYPE_REQUEST_BLOBS:
 		{
-			std::string ResponseBuffer;
-			uint32_t Offset = OffsetSize;
-			uint32_t LengthLimit = 0;
-			std::vector<git_oid> BloblistRequested;
-			std::string SizeBufferBlob;
-			std::string ObjectBufferBlob;
-
-			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BloblistRequested)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
-				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
+			if (!!(r = aux_serv_worker_thread_service_request_blobs(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(),
+				Packet, OffsetSize, Repository, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
 			{
 				GS_GOTO_CLEAN();
 			}
 		}
 		break;
 
-		case GS_FRAME_TYPE_REQUEST_BLOB_SELFUPDATE:
+		case GS_FRAME_TYPE_REQUEST_BLOBS_SELFUPDATE:
+		{
+			if (!!(r = aux_serv_worker_thread_service_request_blobs(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(),
+				Packet, OffsetSize, RepositorySelfUpdate, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE))))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		case GS_FRAME_TYPE_REQUEST_LATEST_SELFUPDATE_BLOB:
 		{
 			std::string ResponseBuffer;
 			uint32_t Offset = OffsetSize;
@@ -397,13 +440,13 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefNameSelfUpdate.c_str(), &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, ConfRefNameSelfUpdate.c_str(), &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_oid_tree_blob_byname(Repository, &TreeHeadOid, "gittest_selfupdate.exe", &BlobSelfUpdateOid)))
+			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, "gittest_selfupdate.exe", &BlobSelfUpdateOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_blob_selfupdate(&ResponseBuffer, BlobSelfUpdateOid.id, GIT_OID_RAWSZ)))
+			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(&ResponseBuffer, BlobSelfUpdateOid.id, GIT_OID_RAWSZ)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -426,6 +469,9 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 	}
 
 clean:
+	if (RepositorySelfUpdate)
+		git_repository_free(RepositorySelfUpdate);
+
 	if (Repository)
 		git_repository_free(Repository);
 
@@ -625,7 +671,7 @@ clean:
 	return r;
 }
 
-int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags) {
+int aux_packet_bare_send(ENetHost *host, ENetPeer *peer, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags) {
 	int r = 0;
 
 	ENetPacket *packet = NULL;
@@ -642,11 +688,22 @@ int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxDat
 
 	enet_host_flush(host);
 
-	ServAuxData->InterruptRequestedEnqueue();
-
 clean:
 	if (packet)
 		enet_packet_destroy(packet);
+
+	return r;
+}
+
+int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags) {
+	int r = 0;
+
+	if (!!(aux_packet_bare_send(host, peer, Data, DataSize, EnetPacketFlags)))
+		GS_GOTO_CLEAN();
+
+	ServAuxData->InterruptRequestedEnqueue();
+
+clean:
 
 	return r;
 }
@@ -881,10 +938,13 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_enet_address_create_hostname(GS_PORT, HostName, &address)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_host_connect(0, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
+	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_full_write_request_blob_selfupdate(&Buffer)))
+	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(&Buffer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlobOid)))
@@ -894,7 +954,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	Offset = 0;
 
-	if (!!(r = aux_frame_ensure_frametype(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE))))
+	if (!!(r = aux_frame_ensure_frametype(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB))))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_read_size_ensure(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
@@ -913,7 +973,10 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		printf("[selfupdate] Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
 	}
 
-	if (!!(r = aux_frame_full_write_request_blobs(&Buffer, &BlobSelfUpdateOidVec)))
+	if (!!(r = aux_frame_full_write_request_blobs_selfupdate(&Buffer, &BlobSelfUpdateOidVec)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
@@ -923,7 +986,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	Offset = 0;
 
-	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
+	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE))))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &DataLengthLimit)))
@@ -931,7 +994,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(
 		PacketBlob->data, DataLengthLimit, Offset, &Offset,
-		&BlobPairedVecLen, &BlobOffsetSizeBuffer, &BlobOffsetSizeBuffer)))
+		&BlobPairedVecLen, &BlobOffsetSizeBuffer, &BlobOffsetObjectBuffer)))
 	{
 		GS_GOTO_CLEAN();
 	}

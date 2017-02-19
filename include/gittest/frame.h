@@ -24,8 +24,10 @@
 #define GS_FRAME_TYPE_RESPONSE_TREES 6
 #define GS_FRAME_TYPE_REQUEST_BLOBS 7
 #define GS_FRAME_TYPE_RESPONSE_BLOBS 8
-#define GS_FRAME_TYPE_REQUEST_BLOB_SELFUPDATE 9
-#define GS_FRAME_TYPE_RESPONSE_BLOB_SELFUPDATE 10
+#define GS_FRAME_TYPE_REQUEST_BLOBS_SELFUPDATE 9
+#define GS_FRAME_TYPE_RESPONSE_BLOBS_SELFUPDATE 10
+#define GS_FRAME_TYPE_REQUEST_LATEST_SELFUPDATE_BLOB 11
+#define GS_FRAME_TYPE_RESPONSE_LATEST_SELFUPDATE_BLOB 12
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -33,6 +35,8 @@
 struct GsFrameType {
 	char mTypeName[GS_FRAME_HEADER_STR_LEN];
 	uint32_t mTypeNum;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
@@ -113,12 +117,15 @@ int aux_frame_full_write_response_trees(
 int aux_frame_full_write_request_blobs(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
-int aux_frame_full_write_response_blobs(
+int aux_frame_full_write_request_blobs_selfupdate(
 	std::string *oBuffer,
+	std::vector<git_oid> *OidVec);
+int aux_frame_full_write_response_blobs(
+	std::string *oBuffer, const GsFrameType &FrameType,
 	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob);
-int aux_frame_full_write_request_blob_selfupdate(
+int aux_frame_full_write_request_latest_selfupdate_blob (
 	std::string *oBuffer);
-int aux_frame_full_write_response_blob_selfupdate(
+int aux_frame_full_write_response_latest_selfupdate_blob(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize);
 

@@ -21,8 +21,10 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(RESPONSE_TREES),
 	GS_FRAME_TYPE_DECL(REQUEST_BLOBS),
 	GS_FRAME_TYPE_DECL(RESPONSE_BLOBS),
-	GS_FRAME_TYPE_DECL(REQUEST_BLOB_SELFUPDATE),
-	GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE),
+	GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE),
+	GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE),
+	GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB),
+	GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB),
 };
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
@@ -582,28 +584,37 @@ int aux_frame_full_write_request_blobs(
 	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
 }
 
-int aux_frame_full_write_response_blobs(
+int aux_frame_full_write_request_blobs_selfupdate(
 	std::string *oBuffer,
-	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
+	std::vector<git_oid> *OidVec)
 {
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOBS);
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE);
 
-	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
+	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, OidVec->data(), OidVec->size(), GIT_OID_RAWSZ);
 }
 
-int aux_frame_full_write_request_blob_selfupdate(
+int aux_frame_full_write_response_blobs(
+	std::string *oBuffer, const GsFrameType &FrameType,
+	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
+{
+	GsFrameType FrameTypeTmp = FrameType;
+
+	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameTypeTmp, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
+}
+
+int aux_frame_full_write_request_latest_selfupdate_blob(
 	std::string *oBuffer)
 {
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOB_SELFUPDATE);
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB);
 
 	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
 }
 
-int aux_frame_full_write_response_blob_selfupdate(
+int aux_frame_full_write_response_latest_selfupdate_blob(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize)
 {
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE);
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB);
 
 	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }

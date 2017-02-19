@@ -1,8 +1,35 @@
 #include <cstdlib>
 #include <cassert>
+#include <cstdint>
+
+#include <string>
 
 #include <gittest/gittest.h>
 #include <gittest/net.h>
+#include <gittest/gittest_selfupdate.h>
+
+int startselfupdate(int argc, char **argv) {
+	int r = 0;
+
+	size_t LenFileNameCurrent;
+	char FileNameCurrentBuf[512];
+
+	uint32_t HaveUpdate = 0;
+	std::string BufferUpdate;
+
+	if (!!(r = gs_get_current_executable_filename(FileNameCurrentBuf, sizeof FileNameCurrentBuf, &LenFileNameCurrent)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_selfupdate_basic("localhost", FileNameCurrentBuf, &HaveUpdate, &BufferUpdate)))
+		GS_GOTO_CLEAN();
+
+	//if (!!(r = selfupdate_main(argc, argv)))
+	//	GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
 
 int startclnt() {
 	int r = 0;
@@ -32,6 +59,9 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = enet_initialize()))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = startselfupdate(argc, argv)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = startclnt()))

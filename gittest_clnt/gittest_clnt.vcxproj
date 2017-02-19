@@ -147,6 +147,9 @@
     <ProjectReference Include="..\gittest_net\gittest_net.vcxproj">
       <Project>{7499c0f6-d1c8-4a24-8694-c576ea3b8f20}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\gittest_selfupdate\gittest_selfupdate.vcxproj">
+      <Project>{055c39c6-a54d-4d9d-a92b-2d0e713ce81f}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\gittest_clnt.cpp" />

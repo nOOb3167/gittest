@@ -11,13 +11,13 @@
 
 #include <git2.h>
 
+#include <gittest/misc.h>
+
 struct oid_comparator_t {
 	bool operator()(const git_oid * const &a, const git_oid * const &b) {
 		return git_oid_cmp(a, b) < 0;
 	}
 };
-
-typedef ::std::map<::std::string, ::std::string> confmap_t;
 
 typedef ::std::set<const git_oid *, oid_comparator_t> toposet_t;
 typedef ::std::list<git_tree *> topolist_t;

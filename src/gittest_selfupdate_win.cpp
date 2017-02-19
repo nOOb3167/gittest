@@ -12,6 +12,8 @@
 
 #include <windows.h>
 
+#include <gittest/misc.h>
+
 //= win32 parent process =
 //http://stackoverflow.com/questions/185254/how-can-a-win32-process-get-the-pid-of-its-parent/558251#558251
 //  by pid
@@ -21,13 +23,6 @@
 //  handle duplication mentioned
 // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
 //  CREATE_NO_WINDOW - for no console handle
-
-#define GS_DBG_CLEAN { assert(0); }
-
-#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
-#define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
-#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto cleansub; }
-#define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
 
 #define GS_STR_CHILD_CONSTANT "CHILD"
 #define GS_STR_PARENT_FILENAME_EXPECTED "gittest_selfupdate.exe"
