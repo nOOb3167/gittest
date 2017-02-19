@@ -203,11 +203,13 @@ int aux_packet_request_dequeue_packet(ServWorkerData *WorkerDataRecv, gs_packet_
 
 int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_packet_t *oPacket);
 int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> *oEvents);
+int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut);
 int aux_host_connect(
 	ENetAddress *address,
 	uint32_t NumRetry, uint32_t RetryTimeoutMs,
 	ENetHost **oClient, ENetPeer **oPeer);
-int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut);
+
+int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfUpdate, uint32_t *oHaveUpdate, std::string *oBufferUpdate);
 
 int aux_serv_aux_host_service(ENetHost *client);
 int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);

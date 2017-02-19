@@ -228,6 +228,36 @@ void aux_topolist_print(const topolist_t &NodeListTopo) {
 	}
 }
 
+int aux_oid_tree_blob_byname(git_repository *Repository, git_oid *TreeOid, const char *WantedBlobName, git_oid *oBlobOid) {
+	int r = 0;
+
+	git_tree *Tree = NULL;
+
+	if (!!(r = git_tree_lookup(&Tree, Repository, TreeOid)))
+		goto clean;
+
+	const git_tree_entry *Entry = git_tree_entry_byname(Tree, WantedBlobName);
+
+	if (! Entry)
+		{ r = 1; goto clean; }
+
+	const git_otype EntryType = git_tree_entry_type(Entry);
+
+	if (EntryType != GIT_OBJ_BLOB)
+		{ r = 1; goto clean; }
+
+	const git_oid *BlobOid = git_tree_entry_id(Entry);
+
+	if (oBlobOid)
+		git_oid_cpy(oBlobOid, BlobOid);
+
+clean:
+	if (Tree)
+		git_tree_free(Tree);
+
+	return r;
+}
+
 int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid) {
 	/* return value GIT_ENOTFOUND is part of the API for this function */
 

@@ -21,6 +21,8 @@ GsFrameType GsFrameTypes[] = {
 	GS_FRAME_TYPE_DECL(RESPONSE_TREES),
 	GS_FRAME_TYPE_DECL(REQUEST_BLOBS),
 	GS_FRAME_TYPE_DECL(RESPONSE_BLOBS),
+	GS_FRAME_TYPE_DECL(REQUEST_BLOB_SELFUPDATE),
+	GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE),
 };
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
@@ -332,6 +334,31 @@ clean:
 	return r;
 }
 
+int aux_frame_full_aux_write_empty(
+	std::string *oBuffer,
+	GsFrameType *FrameType)
+{
+	int r = 0;
+
+	std::string Buffer;
+	uint32_t Offset = 0;
+
+	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+
+	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
+		GS_GOTO_CLEAN();
+
+	if (oBuffer)
+		oBuffer->swap(Buffer);
+
+clean:
+
+	return r;
+}
+
 int aux_frame_full_aux_write_oid(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize)
@@ -488,53 +515,17 @@ clean:
 int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer)
 {
-	int r = 0;
-
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
 
-	std::string Buffer;
-	uint32_t Offset = 0;
-
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
+	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
 }
 
 int aux_frame_full_write_request_latest_commit_tree(
 	std::string *oBuffer)
 {
-	int r = 0;
-
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
 
-	std::string Buffer;
-	uint32_t Offset = 0;
-
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
-
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, &FrameType)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
-		GS_GOTO_CLEAN();
-
-	if (oBuffer)
-		oBuffer->swap(Buffer);
-
-clean:
-
-	return r;
+	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
 }
 
 int aux_frame_full_write_response_latest_commit_tree(
@@ -598,4 +589,21 @@ int aux_frame_full_write_response_blobs(
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOBS);
 
 	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
+}
+
+int aux_frame_full_write_request_blob_selfupdate(
+	std::string *oBuffer)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOB_SELFUPDATE);
+
+	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
+}
+
+int aux_frame_full_write_response_blob_selfupdate(
+	std::string *oBuffer,
+	uint8_t *Oid, uint32_t OidSize)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE);
+
+	return aux_frame_full_aux_write_oid(oBuffer, &FrameType, Oid, OidSize);
 }

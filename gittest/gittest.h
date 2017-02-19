@@ -33,6 +33,7 @@ int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oV
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize);
 void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize);
 void aux_topolist_print(const topolist_t &NodeListTopo);
+int aux_oid_tree_blob_byname(git_repository *Repository, git_oid *TreeOid, const char *WantedBlobName, git_oid *oBlobOid);
 int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid);
 int serv_latest_commit_tree_oid(git_repository *Repository, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid);
 int clnt_latest_commit_tree_oid(git_repository *RepositoryT, const char *RefName, git_oid *oCommitHeadOid, git_oid *oTreeHeadOid);

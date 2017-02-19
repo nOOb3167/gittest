@@ -243,9 +243,13 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 	git_repository *Repository = NULL;
 
 	std::string ConfRefName;
+	std::string ConfRefNameSelfUpdate;
 	std::string ConfRepoOpenPath;
 
 	if (!!(r = aux_config_key_ex(ServKeyVal, "RefName", &ConfRefName)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(ServKeyVal, "RefNameSelfUpdate", &ConfRefNameSelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoOpenPath", &ConfRepoOpenPath)))
@@ -372,6 +376,34 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_blobs(&ResponseBuffer, BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
+				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		case GS_FRAME_TYPE_REQUEST_BLOB_SELFUPDATE:
+		{
+			std::string ResponseBuffer;
+			uint32_t Offset = OffsetSize;
+			git_oid CommitHeadOid = {};
+			git_oid TreeHeadOid = {};
+			git_oid BlobSelfUpdateOid = {};
+
+			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefNameSelfUpdate.c_str(), &CommitHeadOid, &TreeHeadOid)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_oid_tree_blob_byname(Repository, &TreeHeadOid, "gittest_selfupdate.exe", &BlobSelfUpdateOid)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = aux_frame_full_write_response_blob_selfupdate(&ResponseBuffer, BlobSelfUpdateOid.id, GIT_OID_RAWSZ)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -733,6 +765,31 @@ int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> 
 	return retcode < 0;
 }
 
+/* FIXME: race condition between server startup and client connection.
+*   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
+*   the fix is having the connect be retried multiple times. */
+int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
+	int r = 0;
+
+	int retcode = 0;
+	ENetEvent event = {};
+
+	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
+		GS_ERR_CLEAN(1);
+
+	assert(retcode >= 0);
+
+	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
+		GS_ERR_CLEAN(2);
+
+	if (oHasTimedOut)
+		*oHasTimedOut = (retcode == 0);
+
+clean:
+
+	return r;
+}
+
 int aux_host_connect(
 	ENetAddress *address,
 	uint32_t NumRetry, uint32_t RetryTimeoutMs,
@@ -791,27 +848,152 @@ clean:
 	return r;
 }
 
-/* FIXME: race condition between server startup and client connection.
-*   connect may send packet too early to be seen. subsequently enet_host_service call here will timeout.
-*   the fix is having the connect be retried multiple times. */
-int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32_t *oHasTimedOut) {
+int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfUpdate, uint32_t *oHaveUpdate, std::string *oBufferUpdate) {
 	int r = 0;
 
-	int retcode = 0;
-	ENetEvent event = {};
+	uint32_t HaveUpdate = 0;
+	std::string BufferUpdate;
 
-	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
+	git_repository *RepositoryMemory = NULL;
+
+	ENetAddress address = {};
+	ENetHost *host = NULL;
+	ENetPeer *peer = NULL;
+
+	std::string Buffer;
+	gs_packet_t GsPacketBlobOid;
+	gs_packet_t GsPacketBlob;
+	uint32_t Offset = 0;
+	uint32_t DataLengthLimit = 0;
+
+	git_oid BlobSelfUpdateOidT = {};
+
+	std::vector<git_oid> BlobSelfUpdateOidVec(1, {});
+	git_oid * const &BlobSelfUpdateOid = &BlobSelfUpdateOidVec.at(0);
+
+	uint32_t BlobPairedVecLen = 0;
+	uint32_t BlobOffsetSizeBuffer = 0;
+	uint32_t BlobOffsetObjectBuffer = 0;
+
+	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_enet_address_create_hostname(GS_PORT, HostName, &address)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_connect(0, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_request_blob_selfupdate(&Buffer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlobOid)))
+		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketBlobOid = *GsPacketBlobOid;
+
+	Offset = 0;
+
+	if (!!(r = aux_frame_ensure_frametype(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOB_SELFUPDATE))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_size_ensure(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_oid(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, BlobSelfUpdateOid)))
+		GS_GOTO_CLEAN();
+
+	/* empty as_path parameter means no filters applied */
+	if (!!(r = git_repository_hashfile(&BlobSelfUpdateOidT, RepositoryMemory, FileNameAbsoluteSelfUpdate, GIT_OBJ_BLOB, "")))
+		GS_GOTO_CLEAN();
+
+	if (git_oid_cmp(&BlobSelfUpdateOidT, BlobSelfUpdateOid) == 0) {
+		char buf[GIT_OID_HEXSZ] = {};
+		git_oid_fmt(buf, &BlobSelfUpdateOidT);
+		printf("[selfupdate] Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+	}
+
+	if (!!(r = aux_frame_full_write_request_blobs(&Buffer, &BlobSelfUpdateOidVec)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
+		GS_GOTO_CLEAN();
+
+	ENetPacket * const &PacketBlob = *GsPacketBlob;
+
+	Offset = 0;
+
+	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &DataLengthLimit)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(
+		PacketBlob->data, DataLengthLimit, Offset, &Offset,
+		&BlobPairedVecLen, &BlobOffsetSizeBuffer, &BlobOffsetSizeBuffer)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (BlobPairedVecLen != 1)
 		GS_ERR_CLEAN(1);
 
-	assert(retcode >= 0);
+	{
+		uint32_t BlobZeroSize = 0;
+		git_oid BlobZeroOid = {};
+		
+		git_blob *BlobZero = NULL;
+		git_buf BlobZeroBuf = {};
 
-	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
-		GS_ERR_CLEAN(2);
+		aux_LE_to_uint32(&BlobZeroSize, (char *)(PacketBlob->data + BlobOffsetSizeBuffer), GS_FRAME_SIZE_LEN);
 
-	if (oHasTimedOut)
-		*oHasTimedOut = (retcode == 0);
+		if (!!(r = git_blob_create_frombuffer(&BlobZeroOid, RepositoryMemory, PacketBlob->data + BlobOffsetObjectBuffer, BlobZeroSize)))
+			GS_GOTO_CLEANSUB();
+
+		if (!!(r = git_blob_lookup(&BlobZero, RepositoryMemory, &BlobZeroOid)))
+			GS_GOTO_CLEANSUB();
+
+		/* wtf? was the wrong blob sent? */
+		if (git_oid_cmp(&BlobZeroOid, BlobSelfUpdateOid) != 0)
+			GS_ERR_CLEANSUB(1);
+
+		// FIXME: git_blob_filtered_content: actually this whole API is trash.
+		//   - it is not clear if empty string passed as 'path' parameter is ok.
+		//   - 'check_for_binary_data' MUST ALWAYS BE ZERO PLEASE - according to current libgit2 source
+		//   - freeing the buffer before freeing the blob seems to be the right thing in all cases?
+		if (!!(r = git_blob_filtered_content(&BlobZeroBuf, BlobZero, "", 0)))
+			GS_GOTO_CLEANSUB();
+
+		HaveUpdate = 1;
+		BufferUpdate = std::string(BlobZeroBuf.ptr, BlobZeroBuf.size);
+
+	cleansub:
+
+		git_buf_free(&BlobZeroBuf);
+
+		if (BlobZero)
+			git_blob_free(BlobZero);
+
+		if (!!r)
+			GS_GOTO_CLEAN();
+	}
+
+	if (oHaveUpdate)
+		*oHaveUpdate = HaveUpdate;
+
+	if (oBufferUpdate)
+		oBufferUpdate->swap(BufferUpdate);
 
 clean:
+	if (peer)
+		enet_peer_disconnect_now(peer, NULL);
+
+	if (host)
+		enet_host_destroy(host);
+
+	if (RepositoryMemory)
+		git_repository_free(RepositoryMemory);
 
 	return r;
 }

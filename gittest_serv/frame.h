@@ -24,6 +24,8 @@
 #define GS_FRAME_TYPE_RESPONSE_TREES 6
 #define GS_FRAME_TYPE_REQUEST_BLOBS 7
 #define GS_FRAME_TYPE_RESPONSE_BLOBS 8
+#define GS_FRAME_TYPE_REQUEST_BLOB_SELFUPDATE 9
+#define GS_FRAME_TYPE_RESPONSE_BLOB_SELFUPDATE 10
 
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
@@ -34,11 +36,14 @@ struct GsFrameType {
 };
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
+
 int aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace);
+
 int aux_frame_read_buf(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t DataOffset, uint32_t *DataOffsetNew,
 	uint8_t *BufStart, uint32_t BufLength, uint32_t BufOffset, uint32_t NumToRead);
 int aux_frame_write_buf(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint8_t *Buf, uint32_t BufLen);
+
 int aux_frame_read_size(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint32_t SizeOfSize, uint32_t *oSize, uint32_t *oDataLengthLimit);
@@ -46,6 +51,7 @@ int aux_frame_write_size(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint32_t SizeOfSize, uint32_t Size);
 int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize);
+
 int aux_frame_read_frametype(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	GsFrameType *oFrameType);
@@ -55,6 +61,7 @@ int aux_frame_write_frametype(
 int aux_frame_ensure_frametype(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	const GsFrameType &FrameType);
+
 int aux_frame_read_oid(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	git_oid *oOid);
@@ -67,6 +74,10 @@ int aux_frame_read_oid_vec(
 int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	git_oid *OidVec, uint32_t OidNum, uint32_t OidSize);
+
+int aux_frame_full_aux_write_empty(
+	std::string *oBuffer,
+	GsFrameType *FrameType);
 int aux_frame_full_aux_write_oid(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize);
@@ -79,6 +90,7 @@ int aux_frame_full_aux_read_paired_vec_noalloc(
 int aux_frame_full_aux_write_paired_vec(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
+
 int aux_frame_full_write_serv_aux_interrupt_requested(
 	std::string *oBuffer);
 int aux_frame_full_write_request_latest_commit_tree(
@@ -104,6 +116,11 @@ int aux_frame_full_write_request_blobs(
 int aux_frame_full_write_response_blobs(
 	std::string *oBuffer,
 	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob);
+int aux_frame_full_write_request_blob_selfupdate(
+	std::string *oBuffer);
+int aux_frame_full_write_response_blob_selfupdate(
+	std::string *oBuffer,
+	uint8_t *Oid, uint32_t OidSize);
 
 extern GsFrameType GsFrameTypes[];
 
