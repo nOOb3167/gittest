@@ -250,7 +250,7 @@ int aux_serv_worker_thread_service_request_blobs(
 	std::string SizeBufferBlob;
 	std::string ObjectBufferBlob;
 
-	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BloblistRequested)))
@@ -387,7 +387,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			std::string SizeBufferTree;
 			std::string ObjectBufferTree;
 
-			if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+			if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &TreelistRequested)))
@@ -989,7 +989,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &DataLengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &DataLengthLimit)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(
@@ -1628,7 +1628,7 @@ int clnt_state_3_noown(
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, oTreelist)))
@@ -1677,7 +1677,7 @@ int clnt_state_4_noown(
 	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketTree Offsets use start */
@@ -1739,7 +1739,7 @@ int clnt_state_5_noown(
 	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, NULL, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketBlob Offsets use start */

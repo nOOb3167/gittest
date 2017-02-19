@@ -99,11 +99,16 @@ int aux_frame_read_size(
 
 	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
 
+
 	if (oSize)
 		*oSize = Size;
 
-	if (oDataLengthLimit)
-		*oDataLengthLimit = Offset + SizeOfSize + Size;
+	if (oDataLengthLimit) {
+		// FIXME: not implemented / senseless for read size, specialize into a read limit
+		//*oDataLengthLimit = Offset + SizeOfSize + Size;
+		assert(0);
+		GS_ERR_CLEAN(1);
+	}
 
 	if (OffsetNew)
 		*OffsetNew = Offset + SizeOfSize;
@@ -147,6 +152,33 @@ int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t
 
 	if (OffsetNew)
 		*OffsetNew = Offset;
+
+clean:
+
+	return r;
+}
+
+int aux_frame_read_size_limit(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint32_t SizeOfSize, uint32_t *oDataLengthLimit)
+{
+	int r = 0;
+
+	uint32_t Size = 0;
+
+	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
+		GS_GOTO_CLEAN();
+
+	aux_LE_to_uint32(&Size, (char *)(DataStart + Offset), SizeOfSize);
+
+	if (!!(r = aux_frame_enough_space(DataLength, Offset + SizeOfSize, Size)))
+		GS_GOTO_CLEAN();
+
+	if (oDataLengthLimit)
+		*oDataLengthLimit = Offset + SizeOfSize + Size;
+
+	if (OffsetNew)
+		*OffsetNew = Offset + SizeOfSize;
 
 clean:
 

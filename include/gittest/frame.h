@@ -55,6 +55,9 @@ int aux_frame_write_size(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint32_t SizeOfSize, uint32_t Size);
 int aux_frame_read_size_ensure(uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew, uint32_t MSize);
+int aux_frame_read_size_limit(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	uint32_t SizeOfSize, uint32_t *oDataLengthLimit);
 
 int aux_frame_read_frametype(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
