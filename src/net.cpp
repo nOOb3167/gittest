@@ -1025,6 +1025,8 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		//   - it is not clear if empty string passed as 'path' parameter is ok.
 		//   - 'check_for_binary_data' MUST ALWAYS BE ZERO PLEASE - according to current libgit2 source
 		//   - freeing the buffer before freeing the blob seems to be the right thing in all cases?
+		// FIXME: this actually does filter the content!
+		//   file server side: "dummy\r\n"; blob server side: "dummy\n"; blob filtered client side: "dummy\r\n"
 		if (!!(r = git_blob_filtered_content(&BlobZeroBuf, BlobZero, "", 0)))
 			GS_GOTO_CLEANSUB();
 
