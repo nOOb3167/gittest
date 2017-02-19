@@ -1,5 +1,5 @@
-#ifndef _GITTEST_SERV_H_
-#define _GITTEST_SERV_H_
+#ifndef _GITTEST_NET_H_
+#define _GITTEST_NET_H_
 
 #include <cstdint>
 
@@ -287,4 +287,4 @@ int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionCli
 
 int stuff2();
 
-#endif /* _GITTEST_SERV_H_ */
+#endif /* _GITTEST_NET_H_ */

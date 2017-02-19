@@ -1,5 +1,5 @@
-#ifndef _GITTEST_H_
-#define _GITTEST_H_
+#ifndef _GITTEST_GITTEST_H_
+#define _GITTEST_GITTEST_H_
 
 #include <cstdint>
 
@@ -92,4 +92,4 @@ int aux_repository_discover_open(const char *RepoDiscoverPath, git_repository **
 int stuff(const confmap_t &KeyVal);
 int gittest_main(int argc, char **argv);
 
-#endif /* _GITTEST_H_ */
+#endif /* _GITTEST_GITTEST_H_ */

@@ -301,7 +301,7 @@ clean:
 	return r;
 }
 
-int main(int argc, char **argv) {
+int selfupdate_main(int argc, char **argv) {
 	if (argc < 2)
 		assert(0);
 	
@@ -322,4 +322,6 @@ int main(int argc, char **argv) {
 	} else {
 		assert(0);
 	}
+
+	return EXIT_SUCCESS;
 }

@@ -1,5 +1,5 @@
-#ifndef _FRAME_H_
-#define _FRAME_H_
+#ifndef _GITTEST_FRAME_H_
+#define _GITTEST_FRAME_H_
 
 #include <cstdint>
 
@@ -124,4 +124,4 @@ int aux_frame_full_write_response_blob_selfupdate(
 
 extern GsFrameType GsFrameTypes[];
 
-#endif /* _FRAME_H_ */
+#endif /* _GITTEST_FRAME_H_ */

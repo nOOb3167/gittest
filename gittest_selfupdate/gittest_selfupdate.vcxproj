@@ -19,7 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\gittest_selfupdate.cpp" />
+    <ClCompile Include="..\src\gittest_selfupdate_win.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\gittest\gittest_selfupdate.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{055C39C6-A54D-4D9D-A92B-2D0E713CE81F}</ProjectGuid>
@@ -34,7 +37,7 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v120</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
