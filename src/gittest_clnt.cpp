@@ -40,8 +40,10 @@ int startselfupdate(int argc, char **argv) {
 	if (HaveUpdateShouldQuit)
 		GS_ERR_NO_CLEAN(0);
 
-	if (!!(r = startclnt()))
-		GS_GOTO_CLEAN();
+	printf("[selfupdate] HaveUpdateShouldQuit = false\n");
+
+	//if (!!(r = startclnt()))
+	//	GS_GOTO_CLEAN();
 
 noclean:
 
@@ -61,6 +63,8 @@ int main(int argc, char **argv) {
 
 	if (!!(r = startselfupdate(argc, argv)))
 		GS_GOTO_CLEAN();
+
+	/* dummy */
 
 clean:
 	if (!!r) {
