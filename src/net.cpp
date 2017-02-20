@@ -21,6 +21,7 @@
 #include <gittest/misc.h>
 #include <gittest/gittest.h>
 #include <gittest/frame.h>
+#include <gittest/gittest_selfupdate.h>
 
 #include <gittest/net.h>
 
@@ -1049,8 +1050,6 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	if (oBufferUpdate)
 		oBufferUpdate->swap(BufferUpdate);
-
-	assert(0);
 
 clean:
 	if (peer)
