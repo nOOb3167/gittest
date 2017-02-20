@@ -444,7 +444,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, ConfRefNameSelfUpdate.c_str(), &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, "gittest_selfupdate.exe", &BlobSelfUpdateOid)))
+			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(&ResponseBuffer, BlobSelfUpdateOid.id, GIT_OID_RAWSZ)))
