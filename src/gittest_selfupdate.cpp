@@ -92,13 +92,16 @@ int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit) 
 		GS_ERR_CLEAN(1);
 
 	if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0) {
+		printf("[selfupdate_main] start\n");
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
 		if (!!(r = aux_selfupdate_main_mode_main(&HaveUpdateShouldQuit)))
 			GS_GOTO_CLEAN();
+		printf("[selfupdate_main] end [HaveUpdateShouldQuit = %d]\n", (int)HaveUpdateShouldQuit);
 		if (HaveUpdateShouldQuit)
 			GS_ERR_NO_CLEAN(0);
 	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_CHILD) == 0) {
+		printf("[selfupdate_chld] start\n");
 		if (argc != 6)
 			GS_ERR_CLEAN(1);
 		const size_t ArgvHandleSerializedSize = strlen(argv[3]) + 1;
@@ -111,6 +114,7 @@ int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit) 
 		{
 			GS_ERR_CLEAN(1);
 		}
+		printf("[selfupdate_chld] end\n");
 	}
 
 noclean:

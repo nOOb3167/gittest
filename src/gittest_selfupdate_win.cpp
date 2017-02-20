@@ -343,8 +343,20 @@ int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNam
 	si.cb = sizeof si;
 	ZeroMemory(&pi, sizeof pi);
 
-	if (!(Ok = CreateProcess(FileNameChildBuf, ChildCommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)))
+	if (!(Ok = CreateProcess(
+		FileNameChildBuf,
+		ChildCommandLine,
+		NULL,
+		NULL,
+		TRUE,
+		0, /* CREATE_NEW_CONSOLE - meh it closes on quit */
+		NULL,
+		NULL,
+		&si,
+		&pi)))
+	{
 		GS_ERR_CLEAN(1);
+	}
 	hChildProcess = pi.hProcess;
 	hChildThread = pi.hThread;
 

@@ -1,2 +1,2 @@
-start /D "..\..\gittest_serv" gittest_serv.exe
-start /D "..\..\gittest_clnt" gittest_clnt.exe --gsselfupdate --xmain
+start "serv" z_test_serv.bat
+start "clnt" z_test_clnt.bat
