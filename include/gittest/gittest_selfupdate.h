@@ -37,6 +37,6 @@ int aux_selfupdate_overwrite_parent(
 
 int aux_selfupdate_main_mode_main(uint32_t *oHaveUpdateShouldQuit);
 
-int aux_selfupdate_main(int argc, char **argv);
+int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit);
 
 #endif /* _GITTEST_GITTEST_SELFUPDATE_H_ */

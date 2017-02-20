@@ -73,17 +73,19 @@ clean:
 	return r;
 }
 
-int aux_selfupdate_main(int argc, char **argv) {
+int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
+
+	uint32_t HaveUpdateShouldQuit = 0;
 
 	if (argc < 2) {
 		printf("[selfup] no update done (args)\n");
-		GS_NO_ERR_CLEAN(0);
+		GS_ERR_NO_CLEAN(0);
 	}
 
 	if (strcmp(argv[1], GS_SELFUPDATE_ARG_UPDATEMODE) != 0) {
 		printf("[selfup] no update done (foreign)\n");
-		GS_NO_ERR_CLEAN(0);
+		GS_ERR_NO_CLEAN(0);
 	}
 
 	if (argc < 3)
@@ -92,11 +94,10 @@ int aux_selfupdate_main(int argc, char **argv) {
 	if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0) {
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
-		uint32_t HaveUpdateShouldQuit = 0;
 		if (!!(r = aux_selfupdate_main_mode_main(&HaveUpdateShouldQuit)))
 			GS_GOTO_CLEAN();
 		if (HaveUpdateShouldQuit)
-			GS_NO_ERR_CLEAN(0);
+			GS_ERR_NO_CLEAN(0);
 	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_CHILD) == 0) {
 		if (argc != 6)
 			GS_ERR_CLEAN(1);
@@ -112,7 +113,9 @@ int aux_selfupdate_main(int argc, char **argv) {
 		}
 	}
 
-	// normal execution
+noclean:
+	if (oHaveUpdateShouldQuit)
+		*oHaveUpdateShouldQuit = HaveUpdateShouldQuit;
 
 clean:
 

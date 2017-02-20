@@ -8,17 +8,6 @@
 #include <gittest/net.h>
 #include <gittest/gittest_selfupdate.h>
 
-int startselfupdate(int argc, char **argv) {
-	int r = 0;
-
-	if (!!(r = aux_selfupdate_main(argc, argv)))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
 int startclnt() {
 	int r = 0;
 
@@ -40,6 +29,27 @@ clean:
 	return r;
 }
 
+int startselfupdate(int argc, char **argv) {
+	int r = 0;
+
+	uint32_t HaveUpdateShouldQuit = 0;
+
+	if (!!(r = aux_selfupdate_main(argc, argv, &HaveUpdateShouldQuit)))
+		GS_GOTO_CLEAN();
+
+	if (HaveUpdateShouldQuit)
+		GS_ERR_NO_CLEAN(0);
+
+	if (!!(r = startclnt()))
+		GS_GOTO_CLEAN();
+
+noclean:
+
+clean:
+
+	return r;
+}
+
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -50,9 +60,6 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = startselfupdate(argc, argv)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = startclnt()))
 		GS_GOTO_CLEAN();
 
 clean:

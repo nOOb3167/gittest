@@ -8,7 +8,7 @@
 #define GS_DBG_CLEAN { assert(0); }
 //#define GS_DBG_CLEAN { DebugBreak(); }
 
-#define GS_NO_ERR_CLEAN(THE_R) { r = (THE_R); goto clean; }
+#define GS_ERR_NO_CLEAN(THE_R) { r = (THE_R); goto noclean; }
 #define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
 #define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
 #define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto cleansub; }
