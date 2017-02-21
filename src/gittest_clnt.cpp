@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 	if (!!(r = startselfupdate(argc, argv)))
 		GS_GOTO_CLEAN();
 
-	printf("dummy002\n");
+	printf("dummy003\n");
 
 clean:
 	if (!!r) {
