@@ -58,9 +58,9 @@ int testlog() {
 
 	log_guard<GsLog> log(GsLog::Create());
 
-	GS_LOG(INFO, S, "hello_outsidescope");
-	GS_LOG(INFO,SZ, "hello", strlen("hello"));
-	GS_LOG(INFO,PF, "hello [%s]", "world");
+	GS_LOG(I,S, "hello_outsidescope");
+	GS_LOG(I,SZ, "hello", strlen("hello"));
+	GS_LOG(I,PF, "hello [%s]", "world");
 
 clean:
 
