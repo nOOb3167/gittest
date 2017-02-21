@@ -1,5 +1,12 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif /* _MSC_VER */
+
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
+#include <cstddef>
+#include <cstdarg>
 
 #include <memory>
 #include <string>
@@ -59,14 +66,14 @@ void GsLogBase::Exit() {
 	mPreviousLog = sp<GsLogBase>();
 }
 
-GsLog::GsLog()
+GsLog::GsLog(uint32_t LogLevelLimit)
 	: GsLogBase(),
 	mMsg(new std::deque<sp<std::string> >),
-	mLogLevelLimit(0)
+	mLogLevelLimit(LogLevelLimit)
 {}
 
 sp<GsLog> GsLog::Create() {
-	sp<GsLog> Ret(new GsLog);
+	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO));
 	return Ret;
 }
 
@@ -79,23 +86,46 @@ void GsLog::MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, con
 	mMsg->push_back(Msg);
 }
 
-GsLogGuard::GsLogGuard(const sp<GsLog> &Log)
-	: mLog(Log)
-{
-	mLog->Enter();
-}
-
-GsLogGuard::~GsLogGuard() {
-	mLog->Exit();
-}
-
-void gs_log_info(uint32_t Level, const char *MsgBuf, uint32_t MsgSize) {
+void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
 	GsLogGlobal *lg = gs_log_global_ensure();
-	(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, "[dummy]", 0);
+	if (*lg->mpCurrentLog)
+		(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
 
-void gs_log_info_(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine)
-{
+void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf){
+	const size_t sanity_arbitrary_max = 2048;
+	size_t MsgSize = strnlen(MsgBuf, sanity_arbitrary_max);
+	assert(MsgSize < sanity_arbitrary_max);
+
 	GsLogGlobal *lg = gs_log_global_ensure();
-	(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, CppFile, CppLine);
+	if (*lg->mpCurrentLog)
+		(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, CppFile, CppLine);
+}
+
+void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char *Format, ...) {
+	const size_t sanity_arbitrary_max = 2048;
+
+	char buf[sanity_arbitrary_max] = {};
+	int numwrite = 0;
+
+	va_list argp;
+	va_start(argp, Format);
+
+	if ((numwrite = vsnprintf(buf, sizeof buf, Format, argp)) == -1)
+		assert(0);
+	if (numwrite >= sizeof buf)
+		assert(0);
+
+	va_end(argp);
+
+	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
+	assert(MsgSize < sanity_arbitrary_max);
+
+	GsLogGlobal *lg = gs_log_global_ensure();
+	if (*lg->mpCurrentLog)
+		(*lg->mpCurrentLog)->MessageLog(Level, buf, MsgSize, CppFile, CppLine);
+}
+
+void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize) {
+	gs_log_tls_SZ("[dummy]", 0, Level, MsgBuf, MsgSize);
 }

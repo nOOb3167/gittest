@@ -6,6 +6,7 @@
 #include <string>
 
 #include <gittest/net.h>
+#include <gittest/log.h>
 
 #include <gittest/gittest_selfupdate.h>
 

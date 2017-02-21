@@ -33,6 +33,8 @@ clean:
 int startselfupdate(int argc, char **argv) {
 	int r = 0;
 
+	log_guard<GsLog> log(GsLog::Create());
+
 	uint32_t HaveUpdateShouldQuit = 0;
 
 	if (!!(r = aux_selfupdate_main(argc, argv, &HaveUpdateShouldQuit)))
@@ -54,11 +56,11 @@ clean:
 int testlog() {
 	int r = 0;
 
-	sp<GsLog> Log = GsLog::Create();
+	log_guard<GsLog> log(GsLog::Create());
 
-	log_guard log(Log);
-
-	GS_LOG_INFO(0, "hello", strlen("hello"));
+	GS_LOG(INFO, S, "hello_outsidescope");
+	GS_LOG(INFO,SZ, "hello", strlen("hello"));
+	GS_LOG(INFO,PF, "hello [%s]", "world");
 
 clean:
 

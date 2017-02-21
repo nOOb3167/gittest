@@ -9,7 +9,15 @@
 
 #include <gittest/misc.h>
 
-#define GS_LOG_INFO(LEVEL, MSGBUF, MSGSIZE) { gs_log_info_((LEVEL), (MSGBUF), (MSGSIZE), __FILE__, __LINE__); }
+#define GS_LOG_LEVEL_INFO 1000
+
+#define GS_LOG_X_INFO(MSGBUF, MSGSIZE) { gs_log_tls_(__FILE__, __LINE__, GS_LOG_LEVEL_INFO, (MSGBUF), (MSGSIZE)); }
+
+#define GS_LOG(LEVEL, TT, ...) { GS_LOG_TT_ ## TT (__FILE__, __LINE__, GS_LOG_LEVEL_ ## LEVEL, __VA_ARGS__); }
+
+#define GS_LOG_TT_SZ gs_log_tls_SZ
+#define GS_LOG_TT_S  gs_log_tls_S
+#define GS_LOG_TT_PF  gs_log_tls_PF
 
 class GsLogBase : std::enable_shared_from_this<GsLogBase> {
 protected:
@@ -25,7 +33,7 @@ private:
 
 class GsLog : public GsLogBase {
 protected:
-	GsLog();
+	GsLog(uint32_t LogLevelLimit);
 public:
 	static sp<GsLog> Create();
 	void MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
@@ -38,18 +46,34 @@ struct GsLogGlobal {
 	sp<GsLogBase> *mpCurrentLog;
 };
 
+template<typename T>
 class GsLogGuard {
 public:
-	GsLogGuard::GsLogGuard(const sp<GsLog> &Log);
-	~GsLogGuard();
+	GsLogGuard::GsLogGuard(const sp<GsLog> &Log)
+		: mLog(Log)
+	{
+		mLog->Enter();
+	}
+
+	~GsLogGuard() {
+		mLog->Exit();
+	}
+
+	sp<T> GetLog() {
+		return mLog;
+	}
+
 private:
-	sp<GsLogBase> mLog;
+	sp<T> mLog;
 };
 
-typedef GsLogGuard log_guard;
+template<typename T>
+using log_guard = GsLogGuard<T>;
 
-void gs_log_info_(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
+void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
+void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf);
+void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char *Format, ...);
 
-void gs_log_info(uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
+void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
 
 #endif /* _GITTEST_LOG_H_ */
