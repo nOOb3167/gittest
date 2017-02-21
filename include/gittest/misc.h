@@ -1,6 +1,7 @@
 #ifndef _GITTEST_MISC_H_
 #define _GITTEST_MISC_H_
 
+#include <memory>
 #include <string>
 #include <map>
 
@@ -17,5 +18,9 @@
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 
 typedef ::std::map<::std::string, ::std::string> confmap_t;
+
+// FIXME: evil? two character identifier inside header..
+template<typename T>
+using sp = ::std::shared_ptr<T>;
 
 #endif /* _GITTEST_MISC_H_ */

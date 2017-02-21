@@ -36,10 +36,6 @@
 	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
 	    GS_ERR_CLEAN(9998); }
 
-// FIXME: evil? two character identifier inside header..
-template<typename T>
-using sp = ::std::shared_ptr<T>;
-
 struct gs_packet_unique_t_deleter {
 	void operator()(ENetPacket **xpacket) const;
 };

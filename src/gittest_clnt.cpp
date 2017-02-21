@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/net.h>
 #include <gittest/gittest_selfupdate.h>
@@ -50,6 +51,20 @@ clean:
 	return r;
 }
 
+int testlog() {
+	int r = 0;
+
+	sp<GsLog> Log = GsLog::Create();
+
+	log_guard log(Log);
+
+	GS_LOG_INFO(0, "hello", strlen("hello"));
+
+clean:
+
+	return r;
+}
+
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -57,6 +72,9 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = enet_initialize()))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = testlog()))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = startselfupdate(argc, argv)))
