@@ -31,32 +31,28 @@ struct GsVersion {
 	uint32_t mVersion;
 };
 
-class GsLogBase : public std::enable_shared_from_this<GsLogBase> {
-public:
+struct GsLogBase {
 	GsVersion mVersion;
-protected:
-	GsLogBase(const std::string &Prefix);
-public:
+	sp<GsLogBase> mSelf;
+	std::string mPrefix;
+	sp<GsLogBase> mPreviousLog;
+
+	/* WARNING: this initialization function is basically mandatory - sets the mSelf member */
+	void GsLogBaseCompleteInit(const sp<GsLogBase> &Self);
+    GsLogBase(const std::string &Prefix);
 	virtual ~GsLogBase();
+
 	void Enter();
 	void Exit();
 	virtual void MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) = 0;
-public:
-	std::string mPrefix;
-private:
-	sp<GsLogBase> mPreviousLog;
 };
 
-class GsLog : public GsLogBase {
-protected:
-	GsLog(uint32_t LogLevelLimit, const std::string &Prefix);
-public:
-	static sp<GsLog> Create();
-	static sp<GsLog> Create(const std::string &Prefix);
-	void MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
-private:
+struct GsLog : public GsLogBase {
 	sp<std::deque<sp<std::string> > > mMsg;
 	uint32_t mLogLevelLimit;
+
+	GsLog(uint32_t LogLevelLimit, const std::string &Prefix);
+	void MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
 };
 
 struct GsLogGlobal {
@@ -66,7 +62,11 @@ struct GsLogGlobal {
 template<typename T>
 class GsLogGuard {
 public:
-	GsLogGuard::GsLogGuard(const sp<T> &Log)
+	GsLogGuard(T *Log)
+		: GsLogGuard(Log->mSelf)
+	{}
+
+	GsLogGuard(const sp<T> &Log)
 		: mLog(Log)
 	{
 		mLog->Enter();
@@ -86,6 +86,9 @@ private:
 
 template<typename T>
 using log_guard = GsLogGuard<T>;
+
+int gs_log_create(const char *Prefix, GsLog **oLog);
+GsLog * gs_log_create_ret(const char *Prefix);
 
 void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
 

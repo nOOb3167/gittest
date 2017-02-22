@@ -35,7 +35,7 @@ clean:
 int startselfupdate(int argc, char **argv) {
 	int r = 0;
 
-	log_guard<GsLog> log(GsLog::Create("selfup"));
+	log_guard<GsLogBase> log(GS_LOG_GET("selfup"));
 
 	uint32_t HaveUpdateShouldQuit = 0;
 
@@ -55,21 +55,31 @@ clean:
 	return r;
 }
 
+int setuplogging() {
+	int r = 0;
+
+	GS_LOG_ADD(gs_log_create_ret("selfup"));
+
+clean:
+
+	return r;
+}
+
 int testlog() {
 	int r = 0;
 
-	GS_LOG_ADD(GsLog::Create("testprefix").get());
+	GS_LOG_ADD(gs_log_create_ret("testprefix1"));
 
 	{
-		GsLogBase *LogA = GS_LOG_GET("testprefix");
+		GsLogBase *LogA = GS_LOG_GET("testprefix1");
 
-		log_guard<GsLog> log(GsLog::Create());
+		log_guard<GsLogBase> log(gs_log_create_ret("testprefix2"));
 
 		GS_LOG(I,S, "hello_insidescope");
 		GS_LOG(I,SZ, "hello", strlen("hello"));
 		GS_LOG(I,PF, "hello [%s]", "world");
 
-		log_guard<GsLogBase> log2(LogA->shared_from_this());
+		log_guard<GsLogBase> log2(LogA);
 
 		GS_LOG(I, S, "hello_insidescope");
 		GS_LOG(I, SZ, "hello", strlen("hello"));
@@ -88,6 +98,9 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = enet_initialize()))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = setuplogging()))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = testlog()))

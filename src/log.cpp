@@ -1,4 +1,8 @@
 #ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
+#ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif /* _MSC_VER */
 
@@ -45,6 +49,10 @@ GsLogGlobal *gs_log_global_ensure() {
 	return lg;
 }
 
+void GsLogBase::GsLogBaseCompleteInit(const sp<GsLogBase> &Self) {
+	mSelf = Self;
+}
+
 GsLogBase::GsLogBase(const std::string &Prefix)
 	: mPreviousLog(),
 	mPrefix(Prefix)
@@ -63,7 +71,7 @@ void GsLogBase::Enter() {
 	/* no recursive entry */
 	if (mPreviousLog)
 		assert(0);
-	mPreviousLog = shared_from_this();
+	mPreviousLog = mSelf;
 	mPreviousLog.swap(*lg->mpCurrentLog);
 }
 
@@ -75,7 +83,7 @@ void GsLogBase::Exit() {
 	//if (!mPreviousLog)
 	//	assert(0);
 	mPreviousLog.swap(*lg->mpCurrentLog);
-	if (mPreviousLog != shared_from_this())
+	if (mPreviousLog != mSelf)
 		assert(0);
 	mPreviousLog = sp<GsLogBase>();
 }
@@ -85,16 +93,6 @@ GsLog::GsLog(uint32_t LogLevelLimit, const std::string &Prefix)
 	mMsg(new std::deque<sp<std::string> >),
 	mLogLevelLimit(LogLevelLimit)
 {}
-
-sp<GsLog> GsLog::Create() {
-	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO, ""));
-	return Ret;
-}
-
-sp<GsLog> GsLog::Create(const std::string &Prefix) {
-	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO, Prefix));
-	return Ret;
-}
 
 void GsLog::MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
 	if (Level > mLogLevelLimit)
@@ -143,6 +141,29 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	GsLogGlobal *lg = gs_log_global_ensure();
 	if (*lg->mpCurrentLog)
 		(*lg->mpCurrentLog)->MessageLog(Level, buf, MsgSize, CppFile, CppLine);
+}
+
+int gs_log_create(const char *Prefix, GsLog **oLog) {
+	int r = 0;
+
+	sp<GsLog> Log(new GsLog(GS_LOG_LEVEL_INFO, Prefix));
+	Log->GsLogBaseCompleteInit(Log);
+
+	if (oLog)
+		*oLog = Log.get();
+
+clean:
+
+	return r;
+}
+
+GsLog * gs_log_create_ret(const char *Prefix) {
+	GsLog *Log = NULL;
+
+	if (!!gs_log_create(Prefix, &Log))
+		return NULL;
+
+	return Log;
 }
 
 void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize) {
@@ -234,7 +255,7 @@ int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
 		if (LogList->mLogs->find(Log->mPrefix) != LogList->mLogs->end())
 			GS_ERR_CLEAN(1);
 
-		(*LogList->mLogs)[Log->mPrefix] = Log->shared_from_this();
+		(*LogList->mLogs)[Log->mPrefix] = Log->mSelf;
 	}
 
 clean:
@@ -277,7 +298,9 @@ clean:
 
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 	GsLogBase *Log = NULL;
+
 	if (!!gs_log_list_get_log(LogList, Prefix, &Log))
 		return NULL;
+
 	return Log;
 }
