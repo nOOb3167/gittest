@@ -33,7 +33,7 @@ clean:
 int startselfupdate(int argc, char **argv) {
 	int r = 0;
 
-	log_guard<GsLog> log(GsLog::Create());
+	log_guard<GsLog> log(GsLog::Create("selfup"));
 
 	uint32_t HaveUpdateShouldQuit = 0;
 

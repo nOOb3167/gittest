@@ -66,14 +66,20 @@ void GsLogBase::Exit() {
 	mPreviousLog = sp<GsLogBase>();
 }
 
-GsLog::GsLog(uint32_t LogLevelLimit)
+GsLog::GsLog(uint32_t LogLevelLimit, const std::string &Prefix)
 	: GsLogBase(),
 	mMsg(new std::deque<sp<std::string> >),
-	mLogLevelLimit(LogLevelLimit)
+	mLogLevelLimit(LogLevelLimit),
+	mPrefix(Prefix)
 {}
 
 sp<GsLog> GsLog::Create() {
-	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO));
+	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO, ""));
+	return Ret;
+}
+
+sp<GsLog> GsLog::Create(const std::string &Prefix) {
+	sp<GsLog> Ret(new GsLog(GS_LOG_LEVEL_INFO, Prefix));
 	return Ret;
 }
 
@@ -81,7 +87,7 @@ void GsLog::MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, con
 	if (Level > mLogLevelLimit)
 		return;
 	std::stringstream ss;
-	ss << "[" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
+	ss << "[" + mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
 	sp<std::string> Msg(new std::string(ss.str()));
 	mMsg->push_back(Msg);
 }

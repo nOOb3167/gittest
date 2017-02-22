@@ -5,15 +5,23 @@
 #include <string>
 #include <map>
 
+#include <gittest/log_defs.h>
+
 //#define GS_DBG_CLEAN {}
-#define GS_DBG_CLEAN { assert(0); }
+#define GS_DBG_CLEAN() { assert(0); }
 //#define GS_DBG_CLEAN { DebugBreak(); }
 
-#define GS_ERR_NO_CLEAN(THE_R) { r = (THE_R); goto noclean; }
-#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto clean; }
-#define GS_GOTO_CLEAN() { GS_DBG_CLEAN; goto clean; }
-#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_CLEAN; goto cleansub; }
-#define GS_GOTO_CLEANSUB() { GS_DBG_CLEAN; goto cleansub; }
+#define GS_DBG_LOG() GS_LOG(CLEAN, S, "CLEAN");
+
+#define GS_ERR_NO_CLEAN(THE_R) { r = (THE_R); GS_DBG_LOG(); goto noclean; }
+#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; }
+#define GS_GOTO_CLEAN() { GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; }
+#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; }
+#define GS_GOTO_CLEANSUB() { GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; }
+
+#define GS_ERR_NO_CLEAN_L(THE_R, LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_NO_CLEAN(THE_R); }
+#define GS_ERR_CLEAN_L(THE_R, LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_CLEAN(THE_R); }
+#define GS_GOTO_CLEAN_L(LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_GOTO_CLEAN(); }
 
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 

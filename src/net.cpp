@@ -19,6 +19,7 @@
 #include <git2.h>
 
 #include <gittest/misc.h>
+#include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/frame.h>
 #include <gittest/gittest_selfupdate.h>
@@ -940,7 +941,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
-		GS_GOTO_CLEAN();
+		GS_GOTO_CLEAN_L(E, PF, "failure connecting [host=[%s]]", HostName);
 
 	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(&Buffer)))
 		GS_GOTO_CLEAN();
@@ -966,12 +967,12 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	/* empty as_path parameter means no filters applied */
 	if (!!(r = git_repository_hashfile(&BlobSelfUpdateOidT, RepositoryMemory, FileNameAbsoluteSelfUpdate, GIT_OBJ_BLOB, "")))
-		GS_GOTO_CLEAN();
+		GS_GOTO_CLEAN_L(E, PF, "failure hashing [filename=[%s]]", FileNameAbsoluteSelfUpdate);
 
 	if (git_oid_cmp(&BlobSelfUpdateOidT, BlobSelfUpdateOid) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &BlobSelfUpdateOidT);
-		printf("[selfupdate] Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+		GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
 	}
 
 	if (!!(r = aux_frame_full_write_request_blobs_selfupdate(&Buffer, &BlobSelfUpdateOidVec)))

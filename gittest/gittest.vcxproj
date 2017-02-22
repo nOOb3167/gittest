@@ -146,6 +146,7 @@
   <ItemGroup>
     <ClInclude Include="..\include\gittest\gittest.h" />
     <ClInclude Include="..\include\gittest\log.h" />
+    <ClInclude Include="..\include\gittest\log_defs.h" />
     <ClInclude Include="..\include\gittest\misc.h" />
   </ItemGroup>
   <ItemGroup>
