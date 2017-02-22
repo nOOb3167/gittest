@@ -12,6 +12,8 @@
 #include <cstddef>
 #include <cstdarg>
 
+#include <algorithm>
+#include <utility>
 #include <memory>
 #include <string>
 #include <deque>
@@ -22,7 +24,12 @@
 
 #include <gittest/log.h>
 
-typedef ::std::map<::std::string, sp<GsLogBase> > gs_log_map_t;
+typedef ::std::map<::std::string, GsLogBase *> gs_log_map_t;
+
+struct GsVersion {
+	uint32_t mVersion;
+	char dummy[64];
+};
 
 struct GsLogList {
 	GsVersion mVersion;
@@ -32,6 +39,30 @@ struct GsLogList {
 	sp<gs_log_map_t> mLogs;
 };
 
+struct GsLogGlobal {
+	GsLogBase *mpCurrentLog;
+};
+
+typedef void (*gs_log_base_func_message_log_t)(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
+
+struct GsLogBase {
+	GsVersion mVersion;
+	gs_tripwire_t mTripwire;
+
+	std::string mPrefix;
+	GsLogBase *mPreviousLog;
+
+	gs_log_base_func_message_log_t mFuncMessageLog;
+};
+
+struct GsLog {
+	GsLogBase mBase;
+	gs_tripwire_t mTripwire;
+
+	sp<std::deque<sp<std::string> > > mMsg;
+	uint32_t mLogLevelLimit;
+};
+
 // FIXME: port to non-msvc (use thread_local keyword most likely)
 __declspec( thread ) GsLogGlobal g_tls_log_global = {};
 
@@ -39,74 +70,112 @@ GsLogGlobal *gs_log_global_get() {
 	return &g_tls_log_global;
 }
 
-GsLogGlobal *gs_log_global_ensure() {
+int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefix) {
+	int r = 0;
+
+	gs_log_version_make_compiled(&Klass->mVersion);
+	Klass->mTripwire = GS_TRIPWIRE_LOG_BASE;
+	Klass->mPrefix = std::string(Prefix);
+	Klass->mPreviousLog = NULL;
+
+	Klass->mFuncMessageLog = NULL;
+
+clean:
+
+	return r;
+}
+
+void gs_log_base_enter(GsLogBase *Klass) {
 	GsLogGlobal *lg = gs_log_global_get();
-	if (lg->mpCurrentLog == NULL) {
-		/* FIXME: is there any sane way to eventually delete[] this? */
-		sp<GsLogBase> *p = new sp<GsLogBase>();
-		lg->mpCurrentLog = p;
-	}
-	return lg;
-}
-
-void GsLogBase::GsLogBaseCompleteInit(const sp<GsLogBase> &Self) {
-	mSelf = Self;
-}
-
-GsLogBase::GsLogBase(const std::string &Prefix)
-	: mPreviousLog(),
-	mPrefix(Prefix)
-{
-	mVersion = gs_log_version_make_compiled();
-}
-
-GsLogBase::~GsLogBase() {
-	/* have previous entry not paired with an exit? */
-	if (mPreviousLog)
-		assert(0);
-}
-
-void GsLogBase::Enter() {
-	GsLogGlobal *lg = gs_log_global_ensure();
 	/* no recursive entry */
-	if (mPreviousLog)
+	if (Klass->mPreviousLog)
 		assert(0);
-	mPreviousLog = mSelf;
-	mPreviousLog.swap(*lg->mpCurrentLog);
+	Klass->mPreviousLog = Klass;
+	std::swap(Klass->mPreviousLog, lg->mpCurrentLog);
 }
 
-void GsLogBase::Exit() {
-	GsLogGlobal *lg = gs_log_global_ensure();
+void gs_log_base_exit(GsLogBase *Klass) {
+	GsLogGlobal *lg = gs_log_global_get();
 	/* have previous exit not paired with an entry? */
 	// FIXME: toplevel mpCurrentLog is NULL
 	//   enable this check if toplevel dummy log design is used
 	//if (!mPreviousLog)
 	//	assert(0);
-	mPreviousLog.swap(*lg->mpCurrentLog);
-	if (mPreviousLog != mSelf)
+	std::swap(Klass->mPreviousLog, lg->mpCurrentLog);
+	if (Klass->mPreviousLog != Klass)
 		assert(0);
-	mPreviousLog = sp<GsLogBase>();
+	Klass->mPreviousLog = NULL;
 }
 
-GsLog::GsLog(uint32_t LogLevelLimit, const std::string &Prefix)
-	: GsLogBase(Prefix),
-	mMsg(new std::deque<sp<std::string> >),
-	mLogLevelLimit(LogLevelLimit)
-{}
+GsLogBase *gs_log_base_cast_(void *Log) {
+	GsLogBase *LogBase = (GsLogBase *)Log;
+	if (LogBase->mTripwire != GS_TRIPWIRE_LOG_BASE)
+		assert(0);
+	return LogBase;
+}
 
-void GsLog::MessageLog(uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
-	if (Level > mLogLevelLimit)
+
+int gs_log_create(const char *Prefix, GsLog **oLog) {
+	int r = 0;
+
+	GsLog *Log = new GsLog;
+	GsLogBase *LogBase = &Log->mBase;
+
+	const uint32_t DefaultLevel = GS_LOG_LEVEL_INFO;
+
+	if (!!(r = gs_log_base_init(LogBase, DefaultLevel, Prefix)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_log_init(Log, DefaultLevel)))
+		GS_GOTO_CLEAN();
+
+	if (oLog)
+		*oLog = Log;
+
+clean:
+
+	return r;
+}
+
+GsLog * gs_log_create_ret(const char *Prefix) {
+	GsLog *Log = NULL;
+
+	if (!!gs_log_create(Prefix, &Log))
+		return NULL;
+
+	return Log;
+}
+
+int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit) {
+	int r = 0;
+
+	Klass->mTripwire = GS_TRIPWIRE_LOG;
+	Klass->mMsg = sp<std::deque<sp<std::string> > >(new std::deque<sp<std::string> >);
+	Klass->mLogLevelLimit = LogLevelLimit;
+
+	Klass->mBase.mFuncMessageLog = gs_log_message_log;
+
+clean:
+
+	return r;
+}
+
+void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
+	GsLog *Klass = (GsLog *)XKlass;
+
+	if (Level > Klass->mLogLevelLimit)
 		return;
+
 	std::stringstream ss;
-	ss << "[" + mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
-	sp<std::string> Msg(new std::string(ss.str()));
-	mMsg->push_back(Msg);
+	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
+
+	Klass->mMsg->push_back(sp<std::string>(new std::string(ss.str())));
 }
 
 void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
-	GsLogGlobal *lg = gs_log_global_ensure();
-	if (*lg->mpCurrentLog)
-		(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, CppFile, CppLine);
+	GsLogGlobal *lg = gs_log_global_get();
+	if (lg->mpCurrentLog)
+		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
 
 void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf){
@@ -114,9 +183,9 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 	size_t MsgSize = strnlen(MsgBuf, sanity_arbitrary_max);
 	assert(MsgSize < sanity_arbitrary_max);
 
-	GsLogGlobal *lg = gs_log_global_ensure();
-	if (*lg->mpCurrentLog)
-		(*lg->mpCurrentLog)->MessageLog(Level, MsgBuf, MsgSize, CppFile, CppLine);
+	GsLogGlobal *lg = gs_log_global_get();
+	if (lg->mpCurrentLog)
+		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
 
 void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char *Format, ...) {
@@ -138,42 +207,19 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
 	assert(MsgSize < sanity_arbitrary_max);
 
-	GsLogGlobal *lg = gs_log_global_ensure();
-	if (*lg->mpCurrentLog)
-		(*lg->mpCurrentLog)->MessageLog(Level, buf, MsgSize, CppFile, CppLine);
-}
-
-int gs_log_create(const char *Prefix, GsLog **oLog) {
-	int r = 0;
-
-	sp<GsLog> Log(new GsLog(GS_LOG_LEVEL_INFO, Prefix));
-	Log->GsLogBaseCompleteInit(Log);
-
-	if (oLog)
-		*oLog = Log.get();
-
-clean:
-
-	return r;
-}
-
-GsLog * gs_log_create_ret(const char *Prefix) {
-	GsLog *Log = NULL;
-
-	if (!!gs_log_create(Prefix, &Log))
-		return NULL;
-
-	return Log;
+	GsLogGlobal *lg = gs_log_global_get();
+	if (lg->mpCurrentLog)
+		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, buf, MsgSize, CppFile, CppLine);
 }
 
 void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize) {
 	gs_log_tls_SZ("[dummy]", 0, Level, MsgBuf, MsgSize);
 }
 
-GsVersion gs_log_version_make_compiled() {
+void gs_log_version_make_compiled(GsVersion *oVersion) {
 	GsVersion Ret;
 	Ret.mVersion = GS_LOG_VERSION_COMPILED;
-	return Ret;
+	*oVersion = Ret;
 }
 
 int gs_log_version_check_compiled(GsVersion *other) {
@@ -197,7 +243,7 @@ int gs_log_list_create(GsLogList **oLogList) {
 
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
 	{
-		LogList->mVersion = gs_log_version_make_compiled();
+		gs_log_version_make_compiled(&LogList->mVersion);
 		LogList->mSelf = LogList;
 		LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
 	}
@@ -255,7 +301,7 @@ int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
 		if (LogList->mLogs->find(Log->mPrefix) != LogList->mLogs->end())
 			GS_ERR_CLEAN(1);
 
-		(*LogList->mLogs)[Log->mPrefix] = Log->mSelf;
+		(*LogList->mLogs)[Log->mPrefix] = Log;
 	}
 
 clean:
@@ -266,7 +312,7 @@ clean:
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog) {
 	int r = 0;
 
-	sp<GsLogBase> Log;
+	GsLogBase *Log = NULL;
 
 	std::string sPrefix(Prefix);
 
@@ -289,7 +335,7 @@ int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog
 	}
 
 	if (oLog)
-		*oLog = Log.get();
+		*oLog = Log;
 
 clean:
 

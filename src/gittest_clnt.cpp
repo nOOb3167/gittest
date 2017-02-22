@@ -35,7 +35,7 @@ clean:
 int startselfupdate(int argc, char **argv) {
 	int r = 0;
 
-	log_guard<GsLogBase> log(GS_LOG_GET("selfup"));
+	log_guard_t log(GS_LOG_GET("selfup"));
 
 	uint32_t HaveUpdateShouldQuit = 0;
 
@@ -69,17 +69,16 @@ int testlog() {
 	int r = 0;
 
 	GS_LOG_ADD(gs_log_create_ret("testprefix1"));
+	GS_LOG_ADD(gs_log_create_ret("testprefix2"));
 
 	{
-		GsLogBase *LogA = GS_LOG_GET("testprefix1");
-
-		log_guard<GsLogBase> log(gs_log_create_ret("testprefix2"));
+		log_guard_t log(GS_LOG_GET("testprefix1"));
 
 		GS_LOG(I,S, "hello_insidescope");
 		GS_LOG(I,SZ, "hello", strlen("hello"));
 		GS_LOG(I,PF, "hello [%s]", "world");
 
-		log_guard<GsLogBase> log2(LogA);
+		log_guard_t log2(GS_LOG_GET("testprefix2"));
 
 		GS_LOG(I, S, "hello_insidescope");
 		GS_LOG(I, SZ, "hello", strlen("hello"));
