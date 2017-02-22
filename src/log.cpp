@@ -12,10 +12,21 @@
 #include <string>
 #include <deque>
 #include <sstream>
+#include <stdexcept> // std::runtime_error
 
 #include <gittest/misc.h>
 
 #include <gittest/log.h>
+
+typedef ::std::map<::std::string, sp<GsLogBase> > gs_log_map_t;
+
+struct GsLogList {
+	GsVersion mVersion;
+
+	sp<std::mutex> mMutexData;
+	sp<GsLogList> mSelf;
+	sp<gs_log_map_t> mLogs;
+};
 
 // FIXME: port to non-msvc (use thread_local keyword most likely)
 __declspec( thread ) GsLogGlobal g_tls_log_global = {};
@@ -34,9 +45,12 @@ GsLogGlobal *gs_log_global_ensure() {
 	return lg;
 }
 
-GsLogBase::GsLogBase()
-	: mPreviousLog()
-{}
+GsLogBase::GsLogBase(const std::string &Prefix)
+	: mPreviousLog(),
+	mPrefix(Prefix)
+{
+	mVersion = gs_log_version_make_compiled();
+}
 
 GsLogBase::~GsLogBase() {
 	/* have previous entry not paired with an exit? */
@@ -67,10 +81,9 @@ void GsLogBase::Exit() {
 }
 
 GsLog::GsLog(uint32_t LogLevelLimit, const std::string &Prefix)
-	: GsLogBase(),
+	: GsLogBase(Prefix),
 	mMsg(new std::deque<sp<std::string> >),
-	mLogLevelLimit(LogLevelLimit),
-	mPrefix(Prefix)
+	mLogLevelLimit(LogLevelLimit)
 {}
 
 sp<GsLog> GsLog::Create() {
@@ -134,4 +147,137 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 
 void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize) {
 	gs_log_tls_SZ("[dummy]", 0, Level, MsgBuf, MsgSize);
+}
+
+GsVersion gs_log_version_make_compiled() {
+	GsVersion Ret;
+	Ret.mVersion = GS_LOG_VERSION_COMPILED;
+	return Ret;
+}
+
+int gs_log_version_check_compiled(GsVersion *other) {
+	if (other->mVersion != GS_LOG_VERSION_COMPILED)
+		return 1;
+	return 0;
+}
+
+int gs_log_version_check(GsVersion *other, GsVersion compare) {
+	if (other->mVersion != compare.mVersion)
+		return 1;
+	return 0;
+}
+
+int gs_log_list_create(GsLogList **oLogList) {
+	int r = 0;
+
+	sp<GsLogList> LogList(new GsLogList());
+
+	LogList->mMutexData = sp<std::mutex>(new std::mutex);
+
+	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{
+		LogList->mVersion = gs_log_version_make_compiled();
+		LogList->mSelf = LogList;
+		LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
+	}
+
+	if (oLogList)
+		*oLogList = LogList.get();
+
+clean:
+
+	return r;
+}
+
+GsLogList *gs_log_list_global_create_cpp() {
+	int r = 0;
+
+	GsLogList *LogList = NULL;
+
+	if (!!(r = gs_log_list_create(&LogList))) {
+		/* NOTE: c++ API (exception throwing) */
+		assert(0);
+		throw std::runtime_error("[ERROR] exception from gs_log_list_global_create_cpp");
+	}
+
+	return LogList;
+}
+
+int gs_log_list_free(GsLogList *LogList) {
+	int r = 0;
+
+	/* NOTE: special deletion protocol - managed by shared_ptr technically */
+	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{
+		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
+			GS_GOTO_CLEAN();
+
+		LogList->mSelf = sp<GsLogList>();
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
+	int r = 0;
+
+	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{
+		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
+			GS_GOTO_CLEAN();
+
+		if (!!(r = gs_log_version_check_compiled(&Log->mVersion)))
+			GS_GOTO_CLEAN();
+
+		if (LogList->mLogs->find(Log->mPrefix) != LogList->mLogs->end())
+			GS_ERR_CLEAN(1);
+
+		(*LogList->mLogs)[Log->mPrefix] = Log->shared_from_this();
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog) {
+	int r = 0;
+
+	sp<GsLogBase> Log;
+
+	std::string sPrefix(Prefix);
+
+	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{
+		gs_log_map_t::iterator it;
+
+		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
+			GS_GOTO_CLEAN();
+
+		it = LogList->mLogs->find(sPrefix);
+		
+		if (it == LogList->mLogs->end())
+			GS_ERR_CLEAN(1);
+
+		if (!!(r = gs_log_version_check_compiled(&it->second->mVersion)))
+			GS_GOTO_CLEAN();
+
+		Log = it->second;
+	}
+
+	if (oLog)
+		*oLog = Log.get();
+
+clean:
+
+	return r;
+}
+
+GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
+	GsLogBase *Log = NULL;
+	if (!!gs_log_list_get_log(LogList, Prefix, &Log))
+		return NULL;
+	return Log;
 }

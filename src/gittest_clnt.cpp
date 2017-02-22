@@ -9,6 +9,8 @@
 #include <gittest/net.h>
 #include <gittest/gittest_selfupdate.h>
 
+GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+
 int startclnt() {
 	int r = 0;
 
@@ -56,11 +58,23 @@ clean:
 int testlog() {
 	int r = 0;
 
-	log_guard<GsLog> log(GsLog::Create());
+	GS_LOG_ADD(GsLog::Create("testprefix").get());
 
-	GS_LOG(I,S, "hello_outsidescope");
-	GS_LOG(I,SZ, "hello", strlen("hello"));
-	GS_LOG(I,PF, "hello [%s]", "world");
+	{
+		GsLogBase *LogA = GS_LOG_GET("testprefix");
+
+		log_guard<GsLog> log(GsLog::Create());
+
+		GS_LOG(I,S, "hello_insidescope");
+		GS_LOG(I,SZ, "hello", strlen("hello"));
+		GS_LOG(I,PF, "hello [%s]", "world");
+
+		log_guard<GsLogBase> log2(LogA->shared_from_this());
+
+		GS_LOG(I, S, "hello_insidescope");
+		GS_LOG(I, SZ, "hello", strlen("hello"));
+		GS_LOG(I, PF, "hello [%s]", "world");
+	}
 
 clean:
 
