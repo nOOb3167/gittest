@@ -88,6 +88,8 @@ int testlog() {
 		GS_LOG(I, PF, "hello [%s]", "world");
 	}
 
+	//int *X = NULL; *X = 1234;
+
 clean:
 
 	return r;

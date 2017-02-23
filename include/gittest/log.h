@@ -73,13 +73,15 @@ int gs_log_version_check_compiled(GsVersion *other);
 int gs_log_version_check(GsVersion *other, GsVersion compare);
 
 void gs_log_dump_reset(GsLogDump *ioDump);
+void gs_log_dump_reset_to_noalloc(GsLogDump *ioDump, char *Buf, size_t BufSize, size_t LenBuf);
+void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, size_t LenBuf);
 
 int gs_log_list_create(GsLogList **oLogList);
 int gs_log_list_free(GsLogList *LogList);
 int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
-int gs_log_list_dump_all(GsLogList *LogList);
+int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
 
 int gs_log_crash_handler_setup();
 

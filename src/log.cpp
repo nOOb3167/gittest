@@ -206,11 +206,8 @@ int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
 		const char *DumpCStr = Dump.c_str();
 		const size_t LenDumpCStr = strlen(DumpCStr);
 		const size_t DumpCStrSize = LenDumpCStr + 1;
-		char *DumpC = new char[DumpCStrSize];
-		memcpy(DumpC, DumpCStr, DumpCStrSize);
-		oLogDump->mBuf = DumpC;
-		oLogDump->mBufSize = DumpCStrSize;
-		oLogDump->mLenBuf = LenDumpCStr;
+
+		gs_log_dump_reset_to(oLogDump, DumpCStr, DumpCStrSize, LenDumpCStr);
 	}
 
 clean:
@@ -288,6 +285,26 @@ void gs_log_dump_reset(GsLogDump *ioDump) {
 		ioDump->mBufSize = 0;
 		ioDump->mLenBuf = 0;
 	}
+}
+
+void gs_log_dump_reset_to_noalloc(GsLogDump *ioDump, char *Buf, size_t BufSize, size_t LenBuf) {
+	gs_log_dump_reset(ioDump);
+
+	assert(Buf || (!Buf && !BufSize && !LenBuf));
+
+	ioDump->mBuf = Buf;
+	ioDump->mBufSize = BufSize;
+	ioDump->mLenBuf = LenBuf;
+}
+
+void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, size_t LenBuf) {
+	assert(Buf || (!Buf && !BufSize && !LenBuf));
+
+	char *NewBuf = new char[BufSize];
+
+	memcpy(NewBuf, Buf, BufSize);
+
+	gs_log_dump_reset_to_noalloc(ioDump, NewBuf, BufSize, LenBuf);
 }
 
 int gs_log_list_create(GsLogList **oLogList) {
@@ -407,8 +424,12 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 	return Log;
 }
 
-int gs_log_list_dump_all(GsLogList *LogList) {
+int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump) {
 	int r = 0;
+
+	std::string RetString;
+
+	std::stringstream ss;
 
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
 	{
@@ -422,12 +443,28 @@ int gs_log_list_dump_all(GsLogList *LogList) {
 			if (!!(r = LogBase->mFuncDump(LogBase, &LogDump)))
 				goto cleansub;
 
+			ss << "=[= " << LogBase->mPrefix << " =]=" << std::endl;
+
+			ss.write(LogDump.mBuf, LogDump.mLenBuf);
+
+			ss << std::endl;
+
 		cleansub:
 			gs_log_dump_reset(&LogDump);
 
 			if (!!r)
 				goto clean;
 		}
+	}
+
+	RetString = ss.str();
+
+	if (oRetDump) {
+		const char *RetCStr = RetString.c_str();
+		const size_t LenRetCStr = strlen(RetCStr);
+		const size_t RetCStrSize = LenRetCStr + 1;
+
+		gs_log_dump_reset_to(oRetDump, RetCStr, RetCStrSize, LenRetCStr);
 	}
 
 clean:

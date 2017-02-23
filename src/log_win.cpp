@@ -24,6 +24,8 @@ int gs_log_crash_handler_dump_global_log_list() {
 	size_t LenLogFileName = 0;
 	char LogFileNameBuf[512];
 
+	GsLogDump Dump = {};
+
 	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
 		goto clean;
 
@@ -38,13 +40,19 @@ int gs_log_crash_handler_dump_global_log_list() {
 		goto clean;
 	}
 
+	if (!!(r = gs_log_list_dump_all(GS_LOG_LIST_GLOBAL_NAME, &Dump)))
+		goto clean;
+
+	printf("Dumping logs\n%.*s\n", Dump.mLenBuf, Dump.mBuf);
+
 clean:
+	gs_log_dump_reset(&Dump);
 
 	return r;
 }
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo) {
-	DebugBreak();
+
 	/* not much to do about errors here presumably */
 	if (!!gs_log_crash_handler_dump_global_log_list())
 		printf("[ERROR] inside crash handler gs_log_crash_handler_unhandled_exception_filter_ \n");
