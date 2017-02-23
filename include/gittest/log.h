@@ -39,7 +39,7 @@ typedef uint32_t gs_tripwire_t;
 
 struct GsVersion;
 struct GsLogList;
-struct GsLogGlobal;
+struct GsLogTls;
 struct GsLogBase;
 struct GsLog;
 

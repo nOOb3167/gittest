@@ -43,7 +43,7 @@ struct GsLogList {
 	sp<gs_log_map_t> mLogs;
 };
 
-struct GsLogGlobal {
+struct GsLogTls {
 	GsLogBase *mpCurrentLog;
 };
 
@@ -70,9 +70,9 @@ struct GsLog {
 };
 
 // FIXME: port to non-msvc (use thread_local keyword most likely)
-__declspec( thread ) GsLogGlobal g_tls_log_global = {};
+__declspec( thread ) GsLogTls g_tls_log_global = {};
 
-GsLogGlobal *gs_log_global_get() {
+GsLogTls *gs_log_global_get() {
 	return &g_tls_log_global;
 }
 
@@ -100,7 +100,7 @@ clean:
 }
 
 void gs_log_base_enter(GsLogBase *Klass) {
-	GsLogGlobal *lg = gs_log_global_get();
+	GsLogTls *lg = gs_log_global_get();
 	/* no recursive entry */
 	if (Klass->mPreviousLog)
 		assert(0);
@@ -109,7 +109,7 @@ void gs_log_base_enter(GsLogBase *Klass) {
 }
 
 void gs_log_base_exit(GsLogBase *Klass) {
-	GsLogGlobal *lg = gs_log_global_get();
+	GsLogTls *lg = gs_log_global_get();
 	/* have previous exit not paired with an entry? */
 	// FIXME: toplevel mpCurrentLog is NULL
 	//   enable this check if toplevel dummy log design is used
@@ -216,7 +216,7 @@ clean:
 }
 
 void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
-	GsLogGlobal *lg = gs_log_global_get();
+	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
@@ -226,7 +226,7 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 	size_t MsgSize = strnlen(MsgBuf, sanity_arbitrary_max);
 	assert(MsgSize < sanity_arbitrary_max);
 
-	GsLogGlobal *lg = gs_log_global_get();
+	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
@@ -250,7 +250,7 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
 	assert(MsgSize < sanity_arbitrary_max);
 
-	GsLogGlobal *lg = gs_log_global_get();
+	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, buf, MsgSize, CppFile, CppLine);
 }
