@@ -44,6 +44,7 @@ struct GsLogGlobal {
 };
 
 typedef void (*gs_log_base_func_message_log_t)(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
+typedef int  (*gs_log_base_func_dump_t)(GsLogBase *XKlass, GsLogDump *oLogDump);
 
 struct GsLogBase {
 	GsVersion mVersion;
@@ -53,6 +54,7 @@ struct GsLogBase {
 	GsLogBase *mPreviousLog;
 
 	gs_log_base_func_message_log_t mFuncMessageLog;
+	gs_log_base_func_dump_t mFuncDump;
 };
 
 struct GsLog {
@@ -70,6 +72,13 @@ GsLogGlobal *gs_log_global_get() {
 	return &g_tls_log_global;
 }
 
+GsLogBase *gs_log_base_cast_(void *Log) {
+	GsLogBase *a = (GsLogBase *)Log;
+	if (a->mTripwire != GS_TRIPWIRE_LOG_BASE)
+		assert(0);
+	return a;
+}
+
 int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefix) {
 	int r = 0;
 
@@ -79,6 +88,7 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 	Klass->mPreviousLog = NULL;
 
 	Klass->mFuncMessageLog = NULL;
+	Klass->mFuncDump = NULL;
 
 clean:
 
@@ -107,13 +117,12 @@ void gs_log_base_exit(GsLogBase *Klass) {
 	Klass->mPreviousLog = NULL;
 }
 
-GsLogBase *gs_log_base_cast_(void *Log) {
-	GsLogBase *LogBase = (GsLogBase *)Log;
-	if (LogBase->mTripwire != GS_TRIPWIRE_LOG_BASE)
+GsLog *gs_log_cast_(void *Log) {
+	GsLog *a = (GsLog *)Log;
+	if (a->mTripwire != GS_TRIPWIRE_LOG)
 		assert(0);
-	return LogBase;
+	return a;
 }
-
 
 int gs_log_create(const char *Prefix, GsLog **oLog) {
 	int r = 0;
@@ -154,6 +163,7 @@ int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit) {
 	Klass->mLogLevelLimit = LogLevelLimit;
 
 	Klass->mBase.mFuncMessageLog = gs_log_message_log;
+	Klass->mBase.mFuncDump = gs_log_dump_and_flush;
 
 clean:
 
@@ -161,7 +171,7 @@ clean:
 }
 
 void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
-	GsLog *Klass = (GsLog *)XKlass;
+	GsLog *Klass = GS_LOG_CAST(XKlass);
 
 	if (Level > Klass->mLogLevelLimit)
 		return;
@@ -170,6 +180,38 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
 
 	Klass->mMsg->push_back(sp<std::string>(new std::string(ss.str())));
+}
+
+int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
+	int r = 0;
+
+	GsLog *Klass = GS_LOG_CAST(XKlass);
+
+	std::string Dump;
+
+	for (std::deque<sp<std::string> >::iterator it = Klass->mMsg->begin(); it != Klass->mMsg->end(); it++) {
+		const sp<std::string> &Line = *it;
+
+		Dump.append(*Line);
+		Dump.append("\n");
+	}
+
+	Klass->mMsg->clear();
+
+	if (oLogDump) {
+		const char *DumpCStr = Dump.c_str();
+		const size_t LenDumpCStr = strlen(DumpCStr);
+		const size_t DumpCStrSize = LenDumpCStr + 1;
+		char *DumpC = new char[DumpCStrSize];
+		memcpy(DumpC, DumpCStr, DumpCStrSize);
+		oLogDump->mBuf = DumpC;
+		oLogDump->mBufSize = DumpCStrSize;
+		oLogDump->mLenBuf = LenDumpCStr;
+	}
+
+clean:
+
+	return r;
 }
 
 void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
@@ -232,6 +274,16 @@ int gs_log_version_check(GsVersion *other, GsVersion compare) {
 	if (other->mVersion != compare.mVersion)
 		return 1;
 	return 0;
+}
+
+void gs_log_dump_reset(GsLogDump *ioDump) {
+	if (ioDump->mBuf) {
+		delete ioDump->mBuf;
+		ioDump->mBuf = NULL;
+		
+		ioDump->mBufSize = 0;
+		ioDump->mLenBuf = 0;
+	}
 }
 
 int gs_log_list_create(GsLogList **oLogList) {
@@ -349,4 +401,33 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 		return NULL;
 
 	return Log;
+}
+
+/* nolog - does not call logging functions (prevent recursion / deadlock) */
+int gs_log_list_dump_all__nolog(GsLogList *LogList) {
+	int r = 0;
+
+	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{
+		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
+			goto clean;
+
+		for (gs_log_map_t::iterator it = LogList->mLogs->begin(); it != LogList->mLogs->end(); it++) {
+			GsLogDump LogDump = {};
+			GsLogBase *LogBase = it->second;
+
+			if (!!(r = LogBase->mFuncDump(LogBase, &LogDump)))
+				goto cleansub;
+
+		cleansub:
+			gs_log_dump_reset(&LogDump);
+
+			if (!!r)
+				goto clean;
+		}
+	}
+
+clean:
+
+	return r;
 }

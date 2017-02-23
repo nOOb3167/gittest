@@ -1,6 +1,8 @@
 #ifndef _GITTEST_MISC_H_
 #define _GITTEST_MISC_H_
 
+#include <cassert>
+
 #include <memory>
 #include <string>
 #include <map>
@@ -30,5 +32,13 @@ typedef ::std::map<::std::string, ::std::string> confmap_t;
 // FIXME: evil? two character identifier inside header..
 template<typename T>
 using sp = ::std::shared_ptr<T>;
+
+int gs_build_modified_filename(
+	char *BaseFileNameBuf, size_t LenBaseFileName,
+	char *ExpectedSuffix, size_t LenExpectedSuffix,
+	char *ExpectedExtension, size_t LenExpectedExtension,
+	char *ExtraSuffix, size_t LenExtraSuffix,
+	char *ExtraExtension, size_t LenExtraExtension,
+	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
 
 #endif /* _GITTEST_MISC_H_ */

@@ -58,6 +58,9 @@ clean:
 int setuplogging() {
 	int r = 0;
 
+	if (!!(r = gs_log_crash_handler_setup()))
+		GS_GOTO_CLEAN();
+
 	GS_LOG_ADD(gs_log_create_ret("selfup"));
 
 clean:
