@@ -144,12 +144,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\gittest\cbuf.h" />
     <ClInclude Include="..\include\gittest\gittest.h" />
     <ClInclude Include="..\include\gittest\log.h" />
     <ClInclude Include="..\include\gittest\log_defs.h" />
     <ClInclude Include="..\include\gittest\misc.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\cbuf.cpp" />
     <ClCompile Include="..\src\log.cpp" />
     <ClCompile Include="..\src\log_win.cpp" />
     <ClCompile Include="..\src\main.cpp" />
