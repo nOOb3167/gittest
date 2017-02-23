@@ -24,6 +24,10 @@
 
 #include <gittest/log.h>
 
+/* NOTE: implementation of logging should not itself log (avoid recursion / deadlock)
+*    therefore function calls and macros such as GS_GOTO_CLEAN which may result in logging
+*    must be avoided inside logging implementation code. */
+
 typedef ::std::map<::std::string, GsLogBase *> gs_log_map_t;
 
 struct GsVersion {
@@ -133,10 +137,10 @@ int gs_log_create(const char *Prefix, GsLog **oLog) {
 	const uint32_t DefaultLevel = GS_LOG_LEVEL_INFO;
 
 	if (!!(r = gs_log_base_init(LogBase, DefaultLevel, Prefix)))
-		GS_GOTO_CLEAN();
+		goto clean;
 
 	if (!!(r = gs_log_init(Log, DefaultLevel)))
-		GS_GOTO_CLEAN();
+		goto clean;
 
 	if (oLog)
 		*oLog = Log;
@@ -329,7 +333,7 @@ int gs_log_list_free(GsLogList *LogList) {
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
 	{
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
-			GS_GOTO_CLEAN();
+			goto clean;
 
 		LogList->mSelf = sp<GsLogList>();
 	}
@@ -345,13 +349,13 @@ int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
 	{
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
-			GS_GOTO_CLEAN();
+			goto clean;
 
 		if (!!(r = gs_log_version_check_compiled(&Log->mVersion)))
-			GS_GOTO_CLEAN();
+			goto clean;
 
 		if (LogList->mLogs->find(Log->mPrefix) != LogList->mLogs->end())
-			GS_ERR_CLEAN(1);
+			{ r = 1; goto clean; }
 
 		(*LogList->mLogs)[Log->mPrefix] = Log;
 	}
@@ -373,15 +377,15 @@ int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog
 		gs_log_map_t::iterator it;
 
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
-			GS_GOTO_CLEAN();
+			goto clean;
 
 		it = LogList->mLogs->find(sPrefix);
 		
 		if (it == LogList->mLogs->end())
-			GS_ERR_CLEAN(1);
+			{ r = 1; goto clean; };
 
 		if (!!(r = gs_log_version_check_compiled(&it->second->mVersion)))
-			GS_GOTO_CLEAN();
+			goto clean;
 
 		Log = it->second;
 	}
@@ -403,8 +407,7 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 	return Log;
 }
 
-/* nolog - does not call logging functions (prevent recursion / deadlock) */
-int gs_log_list_dump_all__nolog(GsLogList *LogList) {
+int gs_log_list_dump_all(GsLogList *LogList) {
 	int r = 0;
 
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
