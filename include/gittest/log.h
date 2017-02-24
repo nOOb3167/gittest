@@ -85,8 +85,8 @@ int gs_log_list_free(GsLogList *LogList);
 int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
-int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
 int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
+int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
 
 int gs_log_crash_handler_setup();
 
