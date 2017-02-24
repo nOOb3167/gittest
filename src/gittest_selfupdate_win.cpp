@@ -233,7 +233,7 @@ int gs_write_temp_file(
 	if (TempFileNameBufSize < MAX_PATH)
 		GS_ERR_CLEAN(1);
 
-	/* gets a temporary file name AND create a temporary file */
+	/* get a temporary file name AND create a temporary file */
 	if (!(Uw = GetTempFileName(TempPathBuf, GS_STR_TEMP_FILE_PREFIX_STRING, 0, oTempFileNameBuf)))
 		GS_ERR_CLEAN(1);
 
