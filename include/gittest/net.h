@@ -36,6 +36,11 @@
 	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
 	    GS_ERR_CLEAN(9998); }
 
+/* GsBypartCbDataVector */
+GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
+#define GS_BYPART_TRIPWIRE_OidVector 0x23132358
+int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l);
+
 struct gs_packet_unique_t_deleter {
 	void operator()(ENetPacket **xpacket) const;
 };

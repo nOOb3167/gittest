@@ -8,6 +8,7 @@
 
 #include <gittest/gittest.h>
 #include <gittest/net.h>
+#include <gittest/cbuf.h>
 
 #include <gittest/frame.h>
 
@@ -278,28 +279,18 @@ clean:
 
 int aux_frame_read_oid(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *oOid)
+	uint8_t *oOid, uint32_t OidSize)
 {
 	int r = 0;
 
-	git_oid Oid = {};
-	uint8_t OidBuf[GIT_OID_RAWSZ] = {};
-
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+	assert(OidSize == GIT_OID_RAWSZ && GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
 
 	if (!!(r = aux_frame_read_buf(
 		DataStart, DataLength, Offset, &Offset,
-		OidBuf, GIT_OID_RAWSZ, 0, GIT_OID_RAWSZ)))
+		oOid, OidSize, 0, OidSize)))
 	{
 		GS_GOTO_CLEAN();
 	}
-
-	/* FIXME: LUL GOOD API NO SIZE PARAMETER IMPLEMENTED AS RAW MEMCPY */
-	assert(sizeof(unsigned char) == sizeof(uint8_t));
-	git_oid_fromraw(&Oid, (unsigned char *)OidBuf);
-
-	if (oOid)
-		git_oid_cpy(oOid, &Oid);
 
 	if (OffsetNew)
 		*OffsetNew = Offset;
@@ -330,6 +321,33 @@ clean:
 
 int aux_frame_read_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	void *ctx, gs_bypart_cb_t cb)
+{
+	int r = 0;
+
+	uint32_t OidNum = 0;
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum, NULL)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < OidNum; i++) {
+		uint8_t OidBuf[GIT_OID_RAWSZ];
+		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, OidBuf, GIT_OID_RAWSZ)))
+			GS_GOTO_CLEAN();
+		if (!!(r = cb(ctx, (char *)OidBuf, GIT_OID_RAWSZ)))
+			GS_GOTO_CLEAN();
+	}
+
+	if (OffsetNew)
+		*OffsetNew = Offset;
+
+clean:
+
+	return r;
+}
+
+int aux_frame_read_oid_vec_cpp(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	std::vector<git_oid> *oOidVec)
 {
 	int r = 0;
@@ -343,7 +361,7 @@ int aux_frame_read_oid_vec(
 	// FIXME: hmmm, almost unbounded allocation, from a single uint32_t read off the network
 	OidVec.resize(OidNum);
 	for (uint32_t i = 0; i < OidNum; i++) {
-		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, &OidVec[i])))
+		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, (uint8_t *)OidVec[i].id, GIT_OID_RAWSZ)))
 			GS_GOTO_CLEAN();
 	}
 

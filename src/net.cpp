@@ -154,6 +154,22 @@ FullConnectionClient::FullConnectionClient(const sp<std::thread> &ThreadWorker, 
 	Thread(Thread)
 {}
 
+int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l) {
+	int r = 0;
+
+	git_oid Oid = {};
+	GS_BYPART_DATA_VAR_CTX_NONUCF(OidVector, Data, ctx);
+
+	if (!!(r = aux_frame_read_oid((uint8_t *)d, (uint32_t)l, 0, NULL, (uint8_t *)Oid.id, GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+
+	Data->m0OidVec->push_back(Oid);
+
+clean:
+
+	return r;
+}
+
 gs_packet_t aux_gs_make_packet(ENetPacket *packet) {
 	return gs_packet_t(new ENetPacket *(packet), [](ENetPacket **xpacket) { enet_packet_destroy(*xpacket); delete xpacket; });
 }
@@ -252,10 +268,13 @@ int aux_serv_worker_thread_service_request_blobs(
 	std::string SizeBufferBlob;
 	std::string ObjectBufferBlob;
 
+	GS_BYPART_DATA_VAR(OidVector, BypartBloblistRequested);
+	BypartBloblistRequested.m0OidVec = &BloblistRequested;
+
 	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BloblistRequested)))
+	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartBloblistRequested, gs_bypart_cb_OidVector)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
@@ -363,7 +382,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, &TreeOid)))
+			if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, TreeOid.id, GIT_OID_RAWSZ)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
@@ -389,10 +408,13 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			std::string SizeBufferTree;
 			std::string ObjectBufferTree;
 
+			GS_BYPART_DATA_VAR(OidVector, BypartTreelistRequested);
+			BypartTreelistRequested.m0OidVec = &TreelistRequested;
+
 			if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &TreelistRequested)))
+			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartTreelistRequested, gs_bypart_cb_OidVector)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
@@ -962,7 +984,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_frame_read_size_ensure(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, BlobSelfUpdateOid)))
+	if (!!(r = aux_frame_read_oid(PacketBlobOid->data, PacketBlobOid->dataLength, Offset, &Offset, BlobSelfUpdateOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
 	/* empty as_path parameter means no filters applied */
@@ -1581,7 +1603,7 @@ int clnt_state_2_noown(
 	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, oTreeHeadOid)))
+	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, oTreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, ConfRefName, &CommitHeadOidT, &TreeHeadOidT)))
@@ -1611,6 +1633,9 @@ int clnt_state_3_noown(
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
+	GS_BYPART_DATA_VAR(OidVector, BypartTreelist);
+	BypartTreelist.m0OidVec = oTreelist;
+
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
@@ -1631,7 +1656,7 @@ int clnt_state_3_noown(
 	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, oTreelist)))
+	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartTreelist, gs_bypart_cb_OidVector)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_missing_trees(RepositoryT, oTreelist, oMissingTreelist)))

@@ -8,6 +8,9 @@
 
 #include <git2.h>
 
+#include <gittest/misc.h>
+#include <gittest/cbuf.h>
+
 #define GS_FRAME_HEADER_STR_LEN 40
 #define GS_FRAME_HEADER_NUM_LEN 4
 #define GS_FRAME_HEADER_LEN (GS_FRAME_HEADER_STR_LEN + GS_FRAME_HEADER_NUM_LEN)
@@ -50,6 +53,20 @@
 	};
 
 #define GS_STRIDED_PIDX(S, IDX) ((S).mDataStart + (S).mDataOffset + (S).mEltStride * (IDX))
+
+#define GS_BYPART_DATA_DECL(SUBNAME, MEMBERS) \
+	struct GsBypartCbData ## SUBNAME { uint32_t Tripwire; MEMBERS }
+
+#define GS_BYPART_DATA_VAR(SUBNAME, VARNAME) \
+	GsBypartCbData ## SUBNAME VARNAME;       \
+	(VARNAME).Tripwire = GS_BYPART_TRIPWIRE_ ## SUBNAME;
+
+#define GS_BYPART_DATA_VAR_CTX_NONUCF(SUBNAME, VARNAME, CTXNAME)                 \
+	GsBypartCbData ## SUBNAME * VARNAME = (GsBypartCbData ## SUBNAME *) CTXNAME; \
+	{                                                                            \
+		if ((VARNAME)->Tripwire != GS_BYPART_TRIPWIRE_ ## SUBNAME)               \
+			{ r = 1; goto clean; }                                               \
+	}
 
 struct GsStrided {
 	uint8_t *mDataStart;
@@ -102,11 +119,14 @@ int aux_frame_ensure_frametype(
 
 int aux_frame_read_oid(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *oOid);
+	uint8_t *oOid, uint32_t OidSize);
 int aux_frame_write_oid(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint8_t *Oid, uint32_t OidSize);
 int aux_frame_read_oid_vec(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	void *ctx, gs_bypart_cb_t cb);
+int aux_frame_read_oid_vec_cpp(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	std::vector<git_oid> *oOidVec);
 int aux_frame_write_oid_vec(
