@@ -29,6 +29,15 @@
 *    therefore function calls and macros such as GS_GOTO_CLEAN which may result in logging
 *    must be avoided inside logging implementation code. */
 
+/* NOTE: GsLogList references GsLog instances.
+*    both protect data with mutexes.
+*    GsLogList by design calls GsLog operations.
+*    if GsLog needs to then either call back into GsLogList,
+*    or just calls into GsLogList eg GS_GOTO_CLEAN->GsLog->GsLogList,
+*    a deadlock may occur.
+*    Against the first problem, recursive mutex may help.
+*    Against the second, probably lock mutexes in the same order. */
+
 typedef ::std::map<::std::string, GsLogBase *> gs_log_map_t;
 
 struct GsVersion {
@@ -57,6 +66,7 @@ struct GsLogBase {
 	GsVersion mVersion;
 	gs_tripwire_t mTripwire;
 
+	sp<std::mutex> mMutexData;
 	std::string mPrefix;
 	GsLogBase *mPreviousLog;
 
@@ -90,9 +100,12 @@ GsLogBase *gs_log_base_cast_(void *Log) {
 int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefix) {
 	int r = 0;
 
+	sp<std::mutex> Mutex(new std::mutex);
+
 	gs_log_version_make_compiled(&Klass->mVersion);
 	Klass->mTripwire = GS_TRIPWIRE_LOG_BASE;
 
+	Klass->mMutexData = Mutex;
 	Klass->mPrefix = std::string(Prefix);
 	Klass->mPreviousLog = NULL;
 
@@ -102,12 +115,17 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 	Klass->mFuncDump = NULL;
 	Klass->mFuncDumpLowLevel = NULL;
 
+	// FIXME: is this enough to make the above writes sequenced-before ?
+	std::lock_guard<std::mutex> lock(*Mutex);
+
 clean:
 
 	return r;
 }
 
 void gs_log_base_enter(GsLogBase *Klass) {
+	std::lock_guard<std::mutex> lock(*Klass->mMutexData);
+
 	GsLogTls *lg = gs_log_global_get();
 	/* no recursive entry */
 	if (Klass->mPreviousLog)
@@ -117,6 +135,8 @@ void gs_log_base_enter(GsLogBase *Klass) {
 }
 
 void gs_log_base_exit(GsLogBase *Klass) {
+	std::lock_guard<std::mutex> lock(*Klass->mMutexData);
+
 	GsLogTls *lg = gs_log_global_get();
 	/* have previous exit not paired with an entry? */
 	// FIXME: toplevel mpCurrentLog is NULL
@@ -131,6 +151,7 @@ void gs_log_base_exit(GsLogBase *Klass) {
 
 GsLog *gs_log_cast_(void *Log) {
 	GsLog *a = (GsLog *)Log;
+	// FIXME: should lock mutex checking the tripwire?
 	if (a->mTripwire != GS_TRIPWIRE_LOG)
 		assert(0);
 	return a;
@@ -186,6 +207,8 @@ int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit) {
 	Klass->mBase.mFuncDump = gs_log_dump_and_flush;
 	Klass->mBase.mFuncDumpLowLevel = gs_log_dump_lowlevel;
 
+	{ std::lock_guard<std::mutex> lock(*Klass->mBase.mMutexData); }
+
 clean:
 
 	return r;
@@ -196,6 +219,8 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 
 	if (Level > Klass->mLogLevelLimit)
 		return;
+
+	std::lock_guard<std::mutex> lock(*Klass->mBase.mMutexData);
 
 	std::stringstream ss;
 	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]" << std::endl;
@@ -213,6 +238,8 @@ int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
 	GsLog *Klass = GS_LOG_CAST(XKlass);
 
 	std::string Dump;
+
+	std::lock_guard<std::mutex> lock(*Klass->mBase.mMutexData);
 
 	if (!!(r = cbuf_read_full_bypart_cpp(Klass->mMsg.get(),
 		[&Dump](const char *d, int64_t l) {
@@ -350,14 +377,15 @@ int gs_log_list_create(GsLogList **oLogList) {
 
 	sp<GsLogList> LogList(new GsLogList());
 
-	LogList->mMutexData = sp<std::mutex>(new std::mutex);
+	sp<std::mutex> Mutex(new std::mutex);
+
+	gs_log_version_make_compiled(&LogList->mVersion);
+
+	LogList->mMutexData = Mutex;
+	LogList->mSelf = LogList;
+	LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
 
 	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
-	{
-		gs_log_version_make_compiled(&LogList->mVersion);
-		LogList->mSelf = LogList;
-		LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
-	}
 
 	if (oLogList)
 		*oLogList = LogList.get();
