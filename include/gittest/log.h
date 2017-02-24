@@ -88,6 +88,10 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
 int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
 int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
 
+int gs_log_dump_construct_header_(
+	const char *PrefixBuf, size_t PrefixSize,
+	char *ioHeaderBuf, size_t HeaderSize, size_t *oLenHeader);
+
 int gs_log_crash_handler_setup();
 
 

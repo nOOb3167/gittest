@@ -201,7 +201,7 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 		return;
 
 	std::stringstream ss;
-	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
+	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]" << std::endl;
 
 	const std::string &ssstr = ss.str();
 
@@ -476,19 +476,17 @@ int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t 
 	for (gs_log_map_t::iterator it = LogList->mLogs->begin(); it != LogList->mLogs->end(); it++) {
 		GsLogBase *LogBase = it->second;
 		
+		size_t LenHeader = 0;
 		char Header[64] = {};
-		const char LumpA[] = "\n=[= ";
-		const char LumpB[] = " =]=\n";
-		const uint32_t LenLump = 5;
-		const uint32_t PrefixTrunc = GS_MIN(LogBase->mPrefix.size(), sizeof Header - 2*LenLump);
-		const uint32_t NumToWrite = PrefixTrunc + 2*LenLump;
-		if (NumToWrite > sizeof Header)
-			{ r = 1; goto clean; }
-		memcpy(Header + 0, LumpA, LenLump);
-		memcpy(Header + LenLump, LogBase->mPrefix.data(), PrefixTrunc);
-		memcpy(Header + LenLump + PrefixTrunc, LumpB, LenLump);
 
-		if (!!(r = cb(ctx, Header, NumToWrite)))
+		if (!!(r = gs_log_dump_construct_header_(
+			LogBase->mPrefix.data(), LogBase->mPrefix.size(),
+			Header, sizeof Header, &LenHeader)))
+		{
+			goto clean;
+		}
+
+		if (!!(r = cb(ctx, Header, LenHeader)))
 			goto clean;
 
 		if (!!(r = LogBase->mFuncDumpLowLevel(LogBase, ctx, cb)))
@@ -542,6 +540,33 @@ int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump) {
 
 		gs_log_dump_reset_to(oRetDump, RetCStr, RetCStrSize, LenRetCStr);
 	}
+
+clean:
+
+	return r;
+}
+
+int gs_log_dump_construct_header_(
+	const char *PrefixBuf, size_t PrefixSize,
+	char *ioHeaderBuf, size_t HeaderSize, size_t *oLenHeader)
+{
+	int r = 0;
+
+	const char LumpA[] = "\n=[= ";
+	const char LumpB[] = " =]=\n";
+	const uint32_t LenLump = 5;
+	const uint32_t PrefixTrunc = GS_MIN(PrefixSize, HeaderSize - 2 * LenLump);
+	const uint32_t NumToWrite = PrefixTrunc + 2 * LenLump;
+
+	if (NumToWrite > HeaderSize)
+		{ r = 1; goto clean; }
+
+	memcpy(ioHeaderBuf + 0, LumpA, LenLump);
+	memcpy(ioHeaderBuf + LenLump, PrefixBuf, PrefixTrunc);
+	memcpy(ioHeaderBuf + LenLump + PrefixTrunc, LumpB, LenLump);
+
+	if (oLenHeader)
+		*oLenHeader = NumToWrite;
 
 clean:
 
