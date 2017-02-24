@@ -47,7 +47,7 @@ struct GsLogTls;
 struct GsLogBase;
 struct GsLog;
 
-/* public structure - free with gs_log_dump_free */
+/* public structure - reset with gs_log_dump_reset */
 struct GsLogDump {
 	char *mBuf;
 	size_t mBufSize;
