@@ -21,12 +21,16 @@
 #include <stdexcept> // std::runtime_error
 
 #include <gittest/misc.h>
+#include <gittest/cbuf.h>
 
 #include <gittest/log.h>
 
 /* NOTE: implementation of logging should not itself log (avoid recursion / deadlock)
 *    therefore function calls and macros such as GS_GOTO_CLEAN which may result in logging
 *    must be avoided inside logging implementation code. */
+
+#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 typedef ::std::map<::std::string, GsLogBase *> gs_log_map_t;
 
@@ -49,6 +53,8 @@ struct GsLogTls {
 
 typedef void (*gs_log_base_func_message_log_t)(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
 typedef int  (*gs_log_base_func_dump_t)(GsLogBase *XKlass, GsLogDump *oLogDump);
+/* lowlevel : intended for use within crash handler - dump without synchronization or memory allocation etc */
+typedef int(*gs_log_base_func_dump_lowlevel_t)(GsLogBase *XKlass, void *ctx, gs_bypart_cb_t cb);
 
 struct GsLogBase {
 	GsVersion mVersion;
@@ -59,13 +65,14 @@ struct GsLogBase {
 
 	gs_log_base_func_message_log_t mFuncMessageLog;
 	gs_log_base_func_dump_t mFuncDump;
+	gs_log_base_func_dump_lowlevel_t mFuncDumpLowLevel;
 };
 
 struct GsLog {
 	GsLogBase mBase;
 	gs_tripwire_t mTripwire;
 
-	sp<std::deque<sp<std::string> > > mMsg;
+	sp<cbuf> mMsg;
 	uint32_t mLogLevelLimit;
 };
 
@@ -88,11 +95,15 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 
 	gs_log_version_make_compiled(&Klass->mVersion);
 	Klass->mTripwire = GS_TRIPWIRE_LOG_BASE;
+
 	Klass->mPrefix = std::string(Prefix);
 	Klass->mPreviousLog = NULL;
 
+	/* virtual functions */
+
 	Klass->mFuncMessageLog = NULL;
 	Klass->mFuncDump = NULL;
+	Klass->mFuncDumpLowLevel = NULL;
 
 clean:
 
@@ -162,12 +173,21 @@ GsLog * gs_log_create_ret(const char *Prefix) {
 int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit) {
 	int r = 0;
 
+	sp<cbuf> c;
+
+	if (!!(r = cbuf_setup_cpp(GS_LOG_DEFAULT_SIZE, &c)))
+		goto clean;
+
 	Klass->mTripwire = GS_TRIPWIRE_LOG;
-	Klass->mMsg = sp<std::deque<sp<std::string> > >(new std::deque<sp<std::string> >);
+
+	Klass->mMsg = c;
 	Klass->mLogLevelLimit = LogLevelLimit;
+
+	/* virtual functions */
 
 	Klass->mBase.mFuncMessageLog = gs_log_message_log;
 	Klass->mBase.mFuncDump = gs_log_dump_and_flush;
+	Klass->mBase.mFuncDumpLowLevel = gs_log_dump_lowlevel;
 
 clean:
 
@@ -183,7 +203,11 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 	std::stringstream ss;
 	ss << "[" + Klass->mBase.mPrefix + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]";
 
-	Klass->mMsg->push_back(sp<std::string>(new std::string(ss.str())));
+	const std::string &ssstr = ss.str();
+
+	// FIXME: what to do on error here?
+	if (!!cbuf_push_back_discarding_trunc(Klass->mMsg.get(), ssstr.data(), ssstr.size()))
+		assert(0);
 }
 
 int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
@@ -193,14 +217,17 @@ int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
 
 	std::string Dump;
 
-	for (std::deque<sp<std::string> >::iterator it = Klass->mMsg->begin(); it != Klass->mMsg->end(); it++) {
-		const sp<std::string> &Line = *it;
-
-		Dump.append(*Line);
-		Dump.append("\n");
+	if (!!(r = cbuf_read_full_bypart_cpp(Klass->mMsg.get(),
+		[&Dump](const char *d, int64_t l) {
+			Dump.append(d, l);
+			Dump.append("\n");
+			return 0;
+		})))
+	{
+		goto clean;
 	}
 
-	Klass->mMsg->clear();
+	cbuf_clear(Klass->mMsg.get());
 
 	if (oLogDump) {
 		const char *DumpCStr = Dump.c_str();
@@ -209,6 +236,20 @@ int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
 
 		gs_log_dump_reset_to(oLogDump, DumpCStr, DumpCStrSize, LenDumpCStr);
 	}
+
+clean:
+
+	return r;
+}
+
+/* lowlevel - see comment */
+int gs_log_dump_lowlevel(GsLogBase *XKlass, void *ctx, gs_bypart_cb_t cb) {
+	int r = 0;
+
+	GsLog *Klass = GS_LOG_CAST(XKlass);
+
+	if (!!(r = cbuf_read_full_bypart(Klass->mMsg.get(), ctx, cb)))
+		goto clean;
 
 clean:
 
@@ -422,6 +463,41 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 		return NULL;
 
 	return Log;
+}
+
+/* lowlevel - see comment */
+int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb) {
+	int r = 0;
+
+	if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
+		goto clean;
+
+	// FIXME: eventually have the loggers also on a c style linked list to avoid c++ container access
+	for (gs_log_map_t::iterator it = LogList->mLogs->begin(); it != LogList->mLogs->end(); it++) {
+		GsLogBase *LogBase = it->second;
+		
+		char Header[64] = {};
+		const char LumpA[] = "\n=[= ";
+		const char LumpB[] = " =]=\n";
+		const uint32_t LenLump = 5;
+		const uint32_t PrefixTrunc = GS_MIN(LogBase->mPrefix.size(), sizeof Header - 2*LenLump);
+		const uint32_t NumToWrite = PrefixTrunc + 2*LenLump;
+		if (NumToWrite > sizeof Header)
+			{ r = 1; goto clean; }
+		memcpy(Header + 0, LumpA, LenLump);
+		memcpy(Header + LenLump, LogBase->mPrefix.data(), PrefixTrunc);
+		memcpy(Header + LenLump + PrefixTrunc, LumpB, LenLump);
+
+		if (!!(r = cb(ctx, Header, NumToWrite)))
+			goto clean;
+
+		if (!!(r = LogBase->mFuncDumpLowLevel(LogBase, ctx, cb)))
+			goto clean;
+	}
+
+clean:
+
+	return r;
 }
 
 int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump) {

@@ -3,6 +3,7 @@
 #endif /* _MSC_VER */
 
 #include <cstddef>
+#include <cstdint>
 
 #include <windows.h>
 
@@ -15,9 +16,16 @@
 
 /* NOTE: avoid using logging functions such as GS_GOTO_CLEAN() inside crash handler ! */
 
+int gs_log_crash_handler_dump_cb(void *ctx, const char *d, int64_t l);
 int gs_log_crash_handler_dump_global_log_list();
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo);
+
+int gs_log_crash_handler_dump_cb(void *ctx, const char *d, int64_t l) {
+	std::string *Fixme = (std::string *) ctx;
+	Fixme->append(d, l);
+	return 0;
+}
 
 int gs_log_crash_handler_dump_global_log_list() {
 	int r = 0;
@@ -27,8 +35,6 @@ int gs_log_crash_handler_dump_global_log_list() {
 	
 	size_t LenLogFileName = 0;
 	char LogFileNameBuf[512];
-
-	GsLogDump Dump = {};
 
 	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
 		goto clean;
@@ -44,19 +50,22 @@ int gs_log_crash_handler_dump_global_log_list() {
 		goto clean;
 	}
 
-	if (!!(r = gs_log_list_dump_all(GS_LOG_LIST_GLOBAL_NAME, &Dump)))
-		goto clean;
+	{
+		std::string Fixme;
+	
+		if (!!(r = gs_log_list_dump_all_lowlevel(GS_LOG_LIST_GLOBAL_NAME, &Fixme, gs_log_crash_handler_dump_cb)))
+			goto clean;
 
-	printf("Dumping logs\n%.*s\n", Dump.mLenBuf, Dump.mBuf);
+		printf("Dumping logs\n%.*s\n", (int)Fixme.size(), Fixme.data());
+	}
 
 clean:
-	gs_log_dump_reset(&Dump);
 
 	return r;
 }
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo) {
-
+	//DebugBreak();
 	/* not much to do about errors here presumably */
 	if (!!gs_log_crash_handler_dump_global_log_list())
 		printf("[ERROR] inside crash handler gs_log_crash_handler_unhandled_exception_filter_ \n");

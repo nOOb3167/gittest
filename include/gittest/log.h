@@ -11,6 +11,7 @@
 #include <atomic>
 
 #include <gittest/misc.h>
+#include <gittest/cbuf.h>
 #include <gittest/log_defs.h>
 
 #define GS_LOG_VERSION_COMPILED 0x00010000
@@ -20,6 +21,8 @@
 
 #define GS_LOG_STR_EXTRA_SUFFIX "_log"
 #define GS_LOG_STR_EXTRA_EXTENSION ".txt"
+
+#define GS_LOG_DEFAULT_SIZE 4 * 1024 /* 4KB */
 
 #define GS_LOG_ADD(PLOG) { if (!!gs_log_list_add_log(GS_LOG_LIST_GLOBAL_NAME, GS_LOG_BASE_CAST((PLOG)))) { GS_ERR_CLEAN(1); } }
 #define GS_LOG_GET(PREFIX) gs_log_list_get_log_ret(GS_LOG_LIST_GLOBAL_NAME, (PREFIX))
@@ -65,6 +68,7 @@ GsLog * gs_log_create_ret(const char *Prefix);
 int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit);
 void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
 int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump);
+int gs_log_dump_lowlevel(GsLogBase *XKlass, void *ctx, gs_bypart_cb_t cb);
 
 void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
 
@@ -82,6 +86,7 @@ int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
 int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
+int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
 
 int gs_log_crash_handler_setup();
 
