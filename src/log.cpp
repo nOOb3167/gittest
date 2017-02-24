@@ -29,9 +29,6 @@
 *    therefore function calls and macros such as GS_GOTO_CLEAN which may result in logging
 *    must be avoided inside logging implementation code. */
 
-#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
-
 typedef ::std::map<::std::string, GsLogBase *> gs_log_map_t;
 
 struct GsVersion {

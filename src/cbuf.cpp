@@ -3,8 +3,8 @@
 
 #include <gittest/cbuf.h>
 
-#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define CBUF_MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define CBUF_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 int cbuf_setup(uint64_t sz, cbuf *oc) {
 	if (oc->d)
@@ -56,7 +56,7 @@ int64_t cbuf_available(cbuf *c) {
 int cbuf_push_back(cbuf *c, const char *d, int64_t l) {
 	if (cbuf_len(c) + l >= c->sz)
 		return 1;
-	int64_t lfst = GS_MIN(c->sz - c->e, l);
+	int64_t lfst = CBUF_MIN(c->sz - c->e, l);
 	memcpy(c->d + c->e, d, lfst);
 	memcpy(c->d + 0, d + lfst, l - lfst);
 	c->e = cbuf_mod(c->e + l, c->sz);
@@ -67,7 +67,7 @@ int cbuf_push_back_discarding_trunc(cbuf *c, const char *d, int64_t l) {
 	/* truncate if too long for the buffer */
 	if (l >= c->sz)
 		l = c->sz;
-	int64_t discard = GS_MAX(l - cbuf_available(c), 0);
+	int64_t discard = CBUF_MAX(l - cbuf_available(c), 0);
 	if (!!cbuf_pop_front_only(c, discard))
 		return 1;
 	if (cbuf_available(c) < l)
@@ -80,7 +80,7 @@ int cbuf_push_back_discarding_trunc(cbuf *c, const char *d, int64_t l) {
 int cbuf_pop_front(cbuf *c, char *d, int64_t l) {
 	if (cbuf_len(c) - l < 0)
 		return 1;
-	int64_t lfst = GS_MIN(c->sz - c->s, l);
+	int64_t lfst = CBUF_MIN(c->sz - c->s, l);
 	int64_t lsnd = l - lfst;
 	memcpy(d, c->d + c->s, lfst);
 	memcpy(d + lfst, c->d + 0, lsnd);
@@ -97,7 +97,7 @@ int cbuf_pop_front_only(cbuf *c, int64_t l) {
 
 int cbuf_read_full_bypart(cbuf *c, void *ctx, gs_bypart_cb_t cb) {
 	int64_t l = cbuf_len(c);
-	int64_t lfst = GS_MIN(c->sz - c->s, l);
+	int64_t lfst = CBUF_MIN(c->sz - c->s, l);
 	int64_t lsnd = l - lfst;
 	if (! (lfst > 0))
 		return 0;

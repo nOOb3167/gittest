@@ -27,6 +27,10 @@
 
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 
+/* WARNING: evaluates arguments multiple times. rework using block with decltype assignment. */
+#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
+
 typedef ::std::map<::std::string, ::std::string> confmap_t;
 
 // FIXME: evil? two character identifier inside header..
