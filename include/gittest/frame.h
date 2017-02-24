@@ -32,12 +32,43 @@
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
 #define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
 
+#define GS_FRAME_TYPE_DEFINE_FRAME_TYPE_ARRAY(VARNAME)       \
+	GsFrameType (VARNAME)[] = {                              \
+		GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED),    \
+		GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE),      \
+		GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE),     \
+		GS_FRAME_TYPE_DECL(REQUEST_TREELIST),                \
+		GS_FRAME_TYPE_DECL(RESPONSE_TREELIST),               \
+		GS_FRAME_TYPE_DECL(REQUEST_TREES),                   \
+		GS_FRAME_TYPE_DECL(RESPONSE_TREES),                  \
+		GS_FRAME_TYPE_DECL(REQUEST_BLOBS),                   \
+		GS_FRAME_TYPE_DECL(RESPONSE_BLOBS),                  \
+		GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE),        \
+		GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE),       \
+		GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB),  \
+		GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB), \
+	};
+
+#define GS_STRIDED_PIDX(S, IDX) ((S).mDataStart + (S).mDataOffset + (S).mEltStride * (IDX))
+
+struct GsStrided {
+	uint8_t *mDataStart;
+	uint32_t mDataOffset;
+	uint32_t mEltNum;
+	uint32_t mEltSize;
+	uint32_t mEltStride;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
+
 struct GsFrameType {
 	char mTypeName[GS_FRAME_HEADER_STR_LEN];
 	uint32_t mTypeNum;
 
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
+
+int gs_strided_for_oid_vec(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
 
@@ -80,7 +111,10 @@ int aux_frame_read_oid_vec(
 	std::vector<git_oid> *oOidVec);
 int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	git_oid *OidVec, uint32_t OidNum, uint32_t OidSize);
+	const GsStrided OidVec);
+int aux_frame_write_oid_vec_cpp(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	std::vector<git_oid> *OidVec);
 
 int aux_frame_full_aux_write_empty(
 	std::string *oBuffer,
@@ -89,8 +123,8 @@ int aux_frame_full_aux_write_oid(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize);
 int aux_frame_full_aux_write_oid_vec(
-	std::string *oBuffer,
-	GsFrameType *FrameType, git_oid *OidVec, uint32_t OidNum, uint32_t OidSize);
+	std::string *oBuffer, GsFrameType *FrameType,
+	const GsStrided OidVec);
 int aux_frame_full_aux_read_paired_vec_noalloc(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint32_t *oPairedVecLen, uint32_t *oOffsetSizeBuffer, uint32_t *oOffsetObjectBuffer);
@@ -108,19 +142,19 @@ int aux_frame_full_write_response_latest_commit_tree(
 int aux_frame_full_write_request_treelist(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize);
-int aux_frame_full_write_response_treelist(
+int aux_frame_full_write_response_treelist_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
-int aux_frame_full_write_request_trees(
+int aux_frame_full_write_request_trees_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
 int aux_frame_full_write_response_trees(
 	std::string *oBuffer,
 	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
-int aux_frame_full_write_request_blobs(
+int aux_frame_full_write_request_blobs_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
-int aux_frame_full_write_request_blobs_selfupdate(
+int aux_frame_full_write_request_blobs_selfupdate_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
 int aux_frame_full_write_response_blobs(

@@ -369,7 +369,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_treelist(&ResponseBuffer, &Treelist)))
+			if (!!(r = aux_frame_full_write_response_treelist_cpp(&ResponseBuffer, &Treelist)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -975,7 +975,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
 	}
 
-	if (!!(r = aux_frame_full_write_request_blobs_selfupdate(&Buffer, &BlobSelfUpdateOidVec)))
+	if (!!(r = aux_frame_full_write_request_blobs_selfupdate_cpp(&Buffer, &BlobSelfUpdateOidVec)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
@@ -1658,7 +1658,7 @@ int clnt_state_4_noown(
 
 	uint32_t BufferTreeLen;
 
-	if (!!(r = aux_frame_full_write_request_trees(&Buffer, MissingTreelist)))
+	if (!!(r = aux_frame_full_write_request_trees_cpp(&Buffer, MissingTreelist)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
@@ -1720,7 +1720,7 @@ int clnt_state_5_noown(
 	uint32_t OffsetSizeBufferBlob;
 	uint32_t OffsetObjectBufferBlob;
 
-	if (!!(r = aux_frame_full_write_request_blobs(&Buffer, MissingBloblist)))
+	if (!!(r = aux_frame_full_write_request_blobs_cpp(&Buffer, MissingBloblist)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
