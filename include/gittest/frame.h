@@ -163,7 +163,9 @@ int aux_frame_full_aux_read_paired_vec_noalloc(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	uint32_t *oPairedVecLen, uint32_t *oOffsetSizeBuffer, uint32_t *oOffsetObjectBuffer);
 int aux_frame_full_aux_write_paired_vec(
-	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree,
+	GsFrameType *FrameType, uint32_t PairedVecLen,
+	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
+	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
 	gs_bysize_cb_t cb, void *ctx);
 
 int aux_frame_full_write_serv_aux_interrupt_requested(
