@@ -12,6 +12,36 @@
 
 #include <gittest/frame.h>
 
+int gs_strided_for_struct_member(
+	uint8_t *DataStart, uint32_t DataOffset, uint32_t OffsetOfMember,
+	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
+	GsStrided *oStrided)
+{
+	int r = 0;
+
+	uint32_t DataOffsetPlusOffset = DataOffset + OffsetOfMember;
+
+	GsStrided Strided = {
+		DataStart,
+		DataOffsetPlusOffset,
+		EltNum,
+		EltSize,
+		EltStride,
+	};
+
+	uint32_t DataLength = EltNum * EltSize;
+
+	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
+		GS_ERR_CLEAN(1);
+
+	if (oStrided)
+		*oStrided = Strided;
+
+clean:
+
+	return r;
+}
+
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
 	assert(sizeof a.mTypeName == GS_FRAME_HEADER_STR_LEN);
 	bool eqstr = memcmp(a.mTypeName, b.mTypeName, GS_FRAME_HEADER_STR_LEN) == 0;
@@ -305,6 +335,43 @@ int aux_frame_read_oid_vec(
 		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, OidBuf, GIT_OID_RAWSZ)))
 			GS_GOTO_CLEAN();
 		if (!!(r = cb(ctx, (char *)OidBuf, GIT_OID_RAWSZ)))
+			GS_GOTO_CLEAN();
+	}
+
+	if (OffsetNew)
+		*OffsetNew = Offset;
+
+clean:
+
+	return r;
+}
+
+/* FIXME: untested function */
+int aux_frame_read_oid_vec_(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	int r = 0;
+
+	uint32_t OidNum = 0;
+	uint32_t OidVecSize = 0;
+	uint8_t *OidVecData = NULL;
+	GsStrided OidVecStrided = {};
+
+	if (!!(r = aux_frame_read_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &OidNum, NULL)))
+		GS_GOTO_CLEAN();
+
+	OidVecSize = OidNum * GIT_OID_RAWSZ;
+
+	// FIXME: hmmm, almost unbounded allocation, from a single uint32_t read off the network
+	if (!!(r = cb(ctx, OidVecSize, &OidVecData)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_strided_for_struct_member(OidVecData, 0, offsetof(git_oid, id), OidNum, GIT_OID_RAWSZ, sizeof(git_oid), &OidVecStrided)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < OidNum; i++) {
+		if (!!(r = aux_frame_read_oid(DataStart, DataLength, Offset, &Offset, GS_STRIDED_PIDX(OidVecStrided, i), GIT_OID_RAWSZ)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -662,14 +729,15 @@ int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided
 	int r = 0;
 
 	uint8_t *DataStart = (uint8_t *)OidVec->data();
-	uint32_t DataOffset = 0 + offsetof(git_oid, id);
+	uint32_t DataOffset = 0;
+	uint32_t DataOffsetPlusOffset = DataOffset + offsetof(git_oid, id);
 	uint32_t EltNum = OidVec->size();
 	uint32_t EltSize = sizeof *OidVec->data();
 	uint32_t EltStride = GIT_OID_RAWSZ;
 
 	GsStrided Strided = {
 		DataStart,
-		DataOffset,
+		DataOffsetPlusOffset,
 		EltNum,
 		EltSize,
 		EltStride,
@@ -716,11 +784,4 @@ int aux_frame_read_oid_vec_cpp(
 clean:
 
 	return r;
-}
-
-int aux_frame_write_oid_vec_cpp(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	GsStrided OidVecStrided)
-{
-	return aux_frame_write_oid_vec(DataStart, DataLength, Offset, OffsetNew, OidVecStrided);
 }

@@ -92,6 +92,11 @@ struct GsFrameType {
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
 
+int gs_strided_for_struct_member(
+	uint8_t *DataStart, uint32_t DataStartOffset, uint32_t OffsetOfMember,
+	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
+	GsStrided *oStrided);
+
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
 
 int aux_frame_enough_space(uint32_t TotalLength, uint32_t Offset, uint32_t WantedSpace);
@@ -131,6 +136,9 @@ int aux_frame_write_oid(
 int aux_frame_read_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	void *ctx, gs_bypart_cb_t cb);
+int aux_frame_read_oid_vec_(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	const GsStrided OidVec);
@@ -205,13 +213,6 @@ int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
 int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
 
 int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
-
-int aux_frame_read_oid_vec_cpp(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *oOidVec);
-int aux_frame_write_oid_vec(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	GsStrided OidVecStrided);
 
 #endif /* __cplusplus */
 
