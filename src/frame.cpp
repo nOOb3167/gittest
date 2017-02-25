@@ -515,6 +515,121 @@ clean:
 	return r;
 }
 
+int aux_frame_full_write_serv_aux_interrupt_requested(
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
+
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
+}
+
+int aux_frame_full_write_request_latest_commit_tree(
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
+
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
+}
+
+int aux_frame_full_write_response_latest_commit_tree(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
+
+	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
+}
+
+int aux_frame_full_write_request_treelist(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
+
+	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
+}
+
+int aux_frame_full_write_response_treelist(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
+
+	return aux_frame_full_aux_write_oid_vec(&FrameType, OidVecStrided, cb, ctx);
+}
+
+int aux_frame_full_write_request_trees(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
+
+	return aux_frame_full_aux_write_oid_vec(&FrameType, OidVecStrided, cb, ctx);
+}
+
+int aux_frame_full_write_response_trees(
+	uint32_t PairedVecLen,
+	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
+	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
+
+	return aux_frame_full_aux_write_paired_vec(&FrameType, PairedVecLen,
+		SizeBufferTreeData, SizeBufferTreeSize,
+		ObjectBufferTreeData, ObjectBufferTreeSize,
+		cb, ctx);
+}
+
+int aux_frame_full_write_request_blobs(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
+
+	return aux_frame_full_aux_write_oid_vec(&FrameType, OidVecStrided, cb, ctx);
+}
+
+int aux_frame_full_write_request_blobs_selfupdate(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE);
+
+	return aux_frame_full_aux_write_oid_vec(&FrameType, OidVecStrided, cb, ctx);
+}
+
+int aux_frame_full_write_response_blobs(
+	const GsFrameType &FrameType, uint32_t PairedVecLen,
+	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
+	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	GsFrameType FrameTypeTmp = FrameType;
+
+	return aux_frame_full_aux_write_paired_vec(&FrameTypeTmp, PairedVecLen,
+		SizeBufferBlobData, SizeBufferBlobSize,
+		ObjectBufferBlobData, ObjectBufferBlobSize,
+		cb, ctx);
+}
+
+int aux_frame_full_write_request_latest_selfupdate_blob(
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB);
+
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
+}
+
+int aux_frame_full_write_response_latest_selfupdate_blob(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx)
+{
+	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB);
+
+	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
+}
+
 int gs_bypart_cb_String(void *ctx, const char *d, int64_t l) {
 	int r = 0;
 
@@ -573,85 +688,6 @@ clean:
 	return r;
 }
 
-int aux_frame_full_write_serv_aux_interrupt_requested(
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
-
-	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
-}
-
-int aux_frame_full_write_request_latest_commit_tree(
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
-
-	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
-}
-
-int aux_frame_full_write_response_latest_commit_tree(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE);
-
-	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
-}
-
-int aux_frame_full_write_request_treelist(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREELIST);
-
-	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
-}
-
-int aux_frame_full_write_response_trees(
-	uint32_t PairedVecLen,
-	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
-	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
-
-	return aux_frame_full_aux_write_paired_vec(&FrameType, PairedVecLen,
-		SizeBufferTreeData, SizeBufferTreeSize,
-		ObjectBufferTreeData, ObjectBufferTreeSize,
-		cb, ctx);
-}
-
-int aux_frame_full_write_response_blobs(
-	const GsFrameType &FrameType, uint32_t PairedVecLen,
-	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
-	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	GsFrameType FrameTypeTmp = FrameType;
-
-	return aux_frame_full_aux_write_paired_vec(&FrameTypeTmp, PairedVecLen,
-		SizeBufferBlobData, SizeBufferBlobSize,
-		ObjectBufferBlobData, ObjectBufferBlobSize,
-		cb, ctx);
-}
-
-int aux_frame_full_write_request_latest_selfupdate_blob(
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB);
-
-	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
-}
-
-int aux_frame_full_write_response_latest_selfupdate_blob(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB);
-
-	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
-}
-
 int aux_frame_read_oid_vec_cpp(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	std::vector<git_oid> *oOidVec)
@@ -684,62 +720,7 @@ clean:
 
 int aux_frame_write_oid_vec_cpp(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *OidVec)
+	GsStrided OidVecStrided)
 {
-	GsStrided Strided = {};
-	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
-		return 1;
-	return aux_frame_write_oid_vec(DataStart, DataLength, Offset, OffsetNew, Strided);
-}
-
-int aux_frame_full_write_response_treelist_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
-
-	GsStrided Strided = {};
-	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
-		return 1;
-
-	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
-}
-
-int aux_frame_full_write_request_trees_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
-
-	GsStrided Strided = {};
-	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
-		return 1;
-
-	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
-}
-
-int aux_frame_full_write_request_blobs_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
-
-	GsStrided Strided = {};
-	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
-		return 1;
-
-	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
-}
-
-int aux_frame_full_write_request_blobs_selfupdate_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx)
-{
-	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE);
-
-	GsStrided Strided = {};
-	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
-		return 1;
-
-	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
+	return aux_frame_write_oid_vec(DataStart, DataLength, Offset, OffsetNew, OidVecStrided);
 }

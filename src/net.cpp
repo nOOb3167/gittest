@@ -386,9 +386,13 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			uint32_t Offset = OffsetSize;
 			git_oid TreeOid = {};
 			std::vector<git_oid> Treelist;
+			GsStrided TreelistStrided = {};
 
 			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
 			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+
+			if (!!(r = gs_strided_for_oid_vec_cpp(&Treelist, &TreelistStrided)))
+				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 				GS_GOTO_CLEAN();
@@ -399,7 +403,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_treelist_cpp(&Treelist, gs_bysize_cb_String, &BysizeResponseBuffer)))
+			if (!!(r = aux_frame_full_write_response_treelist(TreelistStrided, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -975,6 +979,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	std::vector<git_oid> BlobSelfUpdateOidVec(1, {});
 	git_oid * const &BlobSelfUpdateOid = &BlobSelfUpdateOidVec.at(0);
+	GsStrided BlobSelfUpdateOidVecStrided = {};
 
 	uint32_t BlobPairedVecLen = 0;
 	uint32_t BlobOffsetSizeBuffer = 0;
@@ -985,6 +990,9 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 	GS_BYPART_DATA_VAR(String, BysizeBufferBlobs);
 	GS_BYPART_DATA_INIT(String, BysizeBufferBlobs, &BufferBlobs);
+
+	if (!!(r = gs_strided_for_oid_vec_cpp(&BlobSelfUpdateOidVec, &BlobSelfUpdateOidVecStrided)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		GS_GOTO_CLEAN();
@@ -1027,7 +1035,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
 	}
 
-	if (!!(r = aux_frame_full_write_request_blobs_selfupdate_cpp(&BlobSelfUpdateOidVec, gs_bysize_cb_String, &BysizeBufferBlobs)))
+	if (!!(r = aux_frame_full_write_request_blobs_selfupdate(BlobSelfUpdateOidVecStrided, gs_bysize_cb_String, &BysizeBufferBlobs)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_bare_send(host, peer, BufferBlobs.data(), BufferBlobs.size(), ENET_PACKET_FLAG_RELIABLE)))
@@ -1720,12 +1728,17 @@ int clnt_state_4_noown(
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
-	uint32_t BufferTreeLen;
+	GsStrided MissingTreelistStrided = {};
+
+	uint32_t BufferTreeLen = 0;
 
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
-	if (!!(r = aux_frame_full_write_request_trees_cpp(MissingTreelist, gs_bysize_cb_String, &BysizeBuffer)))
+	if (!!(r = gs_strided_for_oid_vec_cpp(MissingTreelist, &MissingTreelistStrided)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_request_trees(MissingTreelistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
@@ -1783,6 +1796,8 @@ int clnt_state_5_noown(
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
+	GsStrided MissingBloblistStrided = {};
+
 	uint32_t BufferBlobLen;
 	uint32_t OffsetSizeBufferBlob;
 	uint32_t OffsetObjectBufferBlob;
@@ -1790,7 +1805,10 @@ int clnt_state_5_noown(
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
-	if (!!(r = aux_frame_full_write_request_blobs_cpp(MissingBloblist, gs_bysize_cb_String, &BysizeBuffer)))
+	if (!!(r = gs_strided_for_oid_vec_cpp(MissingBloblist, &MissingBloblistStrided)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_request_blobs(MissingBloblistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))

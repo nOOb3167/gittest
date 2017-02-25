@@ -153,6 +153,44 @@ int aux_frame_full_aux_write_paired_vec(
 	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
 	gs_bysize_cb_t cb, void *ctx);
 
+int aux_frame_full_write_serv_aux_interrupt_requested(
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_latest_commit_tree(
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_response_latest_commit_tree(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_treelist(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_response_treelist(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_trees(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_response_trees(
+	uint32_t PairedVecLen,
+	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
+	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_blobs(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_blobs_selfupdate(
+	GsStrided OidVecStrided,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_response_blobs(
+	const GsFrameType &FrameType, uint32_t PairedVecLen,
+	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
+	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_request_latest_selfupdate_blob(
+	gs_bysize_cb_t cb, void *ctx);
+int aux_frame_full_write_response_latest_selfupdate_blob(
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
@@ -168,51 +206,12 @@ int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
 
 int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
-int aux_frame_full_write_serv_aux_interrupt_requested(
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_latest_commit_tree(
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_response_latest_commit_tree(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_treelist(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_response_trees(
-	uint32_t PairedVecLen,
-	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
-	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_response_blobs(
-	const GsFrameType &FrameType, uint32_t PairedVecLen,
-	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
-	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_latest_selfupdate_blob(
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_response_latest_selfupdate_blob(
-	uint8_t *Oid, uint32_t OidSize,
-	gs_bysize_cb_t cb, void *ctx);
-
 int aux_frame_read_oid_vec_cpp(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	std::vector<git_oid> *oOidVec);
-int aux_frame_write_oid_vec_cpp(
+int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *OidVec);
-
-int aux_frame_full_write_response_treelist_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_trees_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_blobs_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx);
-int aux_frame_full_write_request_blobs_selfupdate_cpp(
-	std::vector<git_oid> *OidVec,
-	gs_bysize_cb_t cb, void *ctx);
+	GsStrided OidVecStrided);
 
 #endif /* __cplusplus */
 
