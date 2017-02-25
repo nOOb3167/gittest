@@ -68,6 +68,10 @@
 			{ r = 1; goto clean; }                                               \
 	}
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 struct GsStrided {
 	uint8_t *mDataStart;
 	uint32_t mDataOffset;
@@ -84,8 +88,6 @@ struct GsFrameType {
 
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
-
-int gs_strided_for_oid_vec(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
 
@@ -126,15 +128,15 @@ int aux_frame_write_oid(
 int aux_frame_read_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	void *ctx, gs_bypart_cb_t cb);
-int aux_frame_read_oid_vec_cpp(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *oOidVec);
 int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	const GsStrided OidVec);
-int aux_frame_write_oid_vec_cpp(
-	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
-	std::vector<git_oid> *OidVec);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#ifdef __cplusplus
 
 int aux_frame_full_aux_write_empty(
 	std::string *oBuffer,
@@ -162,30 +164,40 @@ int aux_frame_full_write_response_latest_commit_tree(
 int aux_frame_full_write_request_treelist(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize);
+int aux_frame_full_write_response_trees(
+	std::string *oBuffer,
+	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
+int aux_frame_full_write_response_blobs(
+	std::string *oBuffer, const GsFrameType &FrameType,
+	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob);
+int aux_frame_full_write_request_latest_selfupdate_blob(
+	std::string *oBuffer);
+int aux_frame_full_write_response_latest_selfupdate_blob(
+	std::string *oBuffer,
+	uint8_t *Oid, uint32_t OidSize);
+
+int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
+
+int aux_frame_read_oid_vec_cpp(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	std::vector<git_oid> *oOidVec);
+int aux_frame_write_oid_vec_cpp(
+	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
+	std::vector<git_oid> *OidVec);
+
 int aux_frame_full_write_response_treelist_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
 int aux_frame_full_write_request_trees_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
-int aux_frame_full_write_response_trees(
-	std::string *oBuffer,
-	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
 int aux_frame_full_write_request_blobs_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
 int aux_frame_full_write_request_blobs_selfupdate_cpp(
 	std::string *oBuffer,
 	std::vector<git_oid> *OidVec);
-int aux_frame_full_write_response_blobs(
-	std::string *oBuffer, const GsFrameType &FrameType,
-	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob);
-int aux_frame_full_write_request_latest_selfupdate_blob (
-	std::string *oBuffer);
-int aux_frame_full_write_response_latest_selfupdate_blob(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize);
 
-extern GsFrameType GsFrameTypes[];
+#endif /* __cplusplus */
 
 #endif /* _GITTEST_FRAME_H_ */
