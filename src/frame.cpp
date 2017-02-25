@@ -368,15 +368,43 @@ clean:
 	return r;
 }
 
+int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided) {
+	int r = 0;
+
+	uint8_t *DataStart = (uint8_t *)OidVec->data();
+	uint32_t DataOffset = 0 + offsetof(git_oid, id);
+	uint32_t EltNum = OidVec->size();
+	uint32_t EltSize = sizeof *OidVec->data();
+	uint32_t EltStride = GIT_OID_RAWSZ;
+
+	GsStrided Strided = {
+		DataStart,
+		DataOffset,
+		EltNum,
+		EltSize,
+		EltStride,
+	};
+
+	uint32_t DataLength = OidVec->size() * sizeof *OidVec->data();
+
+	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
+		GS_ERR_CLEAN(1);
+
+	if (oStrided)
+		*oStrided = Strided;
+
+clean:
+
+	return r;
+}
+
 int aux_frame_full_aux_write_empty(
 	GsFrameType *FrameType,
 	gs_bysize_cb_t cb, void *ctx)
 {
 	int r = 0;
 
-	std::string Buffer;
 	uint32_t Offset = 0;
-
 	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0;
 	uint8_t * BufferData = NULL;
 
@@ -400,11 +428,8 @@ int aux_frame_full_aux_write_oid(
 {
 	int r = 0;
 
-	uint32_t PayloadSize = 0;
 	uint32_t Offset = 0;
-
-	PayloadSize = OidSize;
-
+	uint32_t PayloadSize = OidSize;
 	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
 	uint8_t *BufferData = NULL;
 
@@ -430,31 +455,29 @@ clean:
 }
 
 int aux_frame_full_aux_write_oid_vec(
-	std::string *oBuffer, GsFrameType *FrameType,
-	const GsStrided OidVec)
+	GsFrameType *FrameType, const GsStrided OidVec,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	int r = 0;
 
-	std::string Buffer;
-	uint32_t PayloadSize = 0;
 	uint32_t Offset = 0;
-
-	PayloadSize = GS_FRAME_SIZE_LEN + OidVec.mEltNum * OidVec.mEltSize;
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+	uint32_t PayloadSize = GS_FRAME_SIZE_LEN + OidVec.mEltNum * OidVec.mEltSize;
+	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
+	uint8_t *BufferData = NULL;
 
 	assert(OidVec.mEltSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
+	if (!!(r = aux_frame_write_frametype(BufferData, BufferSize, Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_oid_vec((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, OidVec)))
+	if (!!(r = aux_frame_write_size(BufferData, BufferSize, Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
 
-	if (oBuffer)
-		oBuffer->swap(Buffer);
+	if (!!(r = aux_frame_write_oid_vec(BufferData, BufferSize, Offset, &Offset, OidVec)))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -513,37 +536,35 @@ clean:
 }
 
 int aux_frame_full_aux_write_paired_vec(
-	std::string *oBuffer,
-	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
+	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	int r = 0;
 
-	std::string Buffer;
-	uint32_t PayloadSize = 0;
 	uint32_t Offset = 0;
-
-	PayloadSize = GS_FRAME_SIZE_LEN + SizeBufferTree->size() + ObjectBufferTree->size();
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize);
+	uint32_t PayloadSize = GS_FRAME_SIZE_LEN + SizeBufferTree->size() + ObjectBufferTree->size();
+	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
+	uint8_t *BufferData = NULL;
 
 	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
 
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
+	if (!!(r = aux_frame_write_frametype(BufferData, BufferSize, Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
+	if (!!(r = aux_frame_write_size(BufferData, BufferSize, Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
+	if (!!(r = aux_frame_write_size(BufferData, BufferSize, Offset, &Offset, GS_FRAME_SIZE_LEN, PairedVecLen)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_buf((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, (uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size())))
+	if (!!(r = aux_frame_write_buf(BufferData, BufferSize, Offset, &Offset, (uint8_t *)SizeBufferTree->data(), SizeBufferTree->size())))
 		GS_GOTO_CLEAN();
 
-	if (oBuffer)
-		oBuffer->swap(Buffer);
+	if (!!(r = aux_frame_write_buf(BufferData, BufferSize, Offset, &Offset, (uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size())))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -585,21 +606,21 @@ int aux_frame_full_write_request_treelist(
 }
 
 int aux_frame_full_write_response_trees(
-	std::string *oBuffer,
-	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree)
+	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
 
-	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree);
+	return aux_frame_full_aux_write_paired_vec(&FrameType, PairedVecLen, SizeBufferTree, ObjectBufferTree, cb, ctx);
 }
 
 int aux_frame_full_write_response_blobs(
-	std::string *oBuffer, const GsFrameType &FrameType,
-	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob)
+	const GsFrameType &FrameType, uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	GsFrameType FrameTypeTmp = FrameType;
 
-	return aux_frame_full_aux_write_paired_vec(oBuffer, &FrameTypeTmp, PairedVecLen, SizeBufferBlob, ObjectBufferBlob);
+	return aux_frame_full_aux_write_paired_vec(&FrameTypeTmp, PairedVecLen, SizeBufferBlob, ObjectBufferBlob, cb, ctx);
 }
 
 int aux_frame_full_write_request_latest_selfupdate_blob(
@@ -617,36 +638,6 @@ int aux_frame_full_write_response_latest_selfupdate_blob(
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB);
 
 	return aux_frame_full_aux_write_oid(&FrameType, Oid, OidSize, cb, ctx);
-}
-
-int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided) {
-	int r = 0;
-
-	uint8_t *DataStart = (uint8_t *)OidVec->data();
-	uint32_t DataOffset = 0 + offsetof(git_oid, id);
-	uint32_t EltNum = OidVec->size();
-	uint32_t EltSize = sizeof *OidVec->data();
-	uint32_t EltStride = GIT_OID_RAWSZ;
-
-	GsStrided Strided = {
-		DataStart,
-		DataOffset,
-		EltNum,
-		EltSize,
-		EltStride,
-	};
-
-	uint32_t DataLength = OidVec->size() * sizeof *OidVec->data();
-
-	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
-		GS_ERR_CLEAN(1);
-
-	if (oStrided)
-		*oStrided = Strided;
-
-clean:
-
-	return r;
 }
 
 int aux_frame_read_oid_vec_cpp(
@@ -690,8 +681,8 @@ int aux_frame_write_oid_vec_cpp(
 }
 
 int aux_frame_full_write_response_treelist_cpp(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
+	std::vector<git_oid> *OidVec,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREELIST);
 
@@ -699,12 +690,12 @@ int aux_frame_full_write_response_treelist_cpp(
 	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
 		return 1;
 
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, Strided);
+	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
 }
 
 int aux_frame_full_write_request_trees_cpp(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
+	std::vector<git_oid> *OidVec,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_TREES);
 
@@ -712,12 +703,12 @@ int aux_frame_full_write_request_trees_cpp(
 	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
 		return 1;
 
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, Strided);
+	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
 }
 
 int aux_frame_full_write_request_blobs_cpp(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
+	std::vector<git_oid> *OidVec,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS);
 
@@ -725,12 +716,12 @@ int aux_frame_full_write_request_blobs_cpp(
 	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
 		return 1;
 
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, Strided);
+	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
 }
 
 int aux_frame_full_write_request_blobs_selfupdate_cpp(
-	std::string *oBuffer,
-	std::vector<git_oid> *OidVec)
+	std::vector<git_oid> *OidVec,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_BLOBS_SELFUPDATE);
 
@@ -738,5 +729,5 @@ int aux_frame_full_write_request_blobs_selfupdate_cpp(
 	if (!!gs_strided_for_oid_vec_cpp(OidVec, &Strided))
 		return 1;
 
-	return aux_frame_full_aux_write_oid_vec(oBuffer, &FrameType, Strided);
+	return aux_frame_full_aux_write_oid_vec(&FrameType, Strided, cb, ctx);
 }

@@ -268,6 +268,9 @@ int aux_serv_worker_thread_service_request_blobs(
 	std::string SizeBufferBlob;
 	std::string ObjectBufferBlob;
 
+	GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+
 	GS_BYPART_DATA_VAR(OidVector, BypartBloblistRequested);
 	GS_BYPART_DATA_INIT(OidVector, BypartBloblistRequested, &BloblistRequested);
 
@@ -281,8 +284,7 @@ int aux_serv_worker_thread_service_request_blobs(
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_full_write_response_blobs(
-		&ResponseBuffer, FrameTypeResponse,
-		BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob)))
+		FrameTypeResponse, BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob, gs_bysize_cb_String, &BysizeResponseBuffer)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -355,8 +357,8 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			git_oid CommitHeadOid = {};
 			git_oid TreeHeadOid = {};
 
-			GS_BYPART_DATA_VAR(String, BypartResponseBuffer);
-			GS_BYPART_DATA_INIT(String, BypartResponseBuffer, &ResponseBuffer);
+			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
+			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
 
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
@@ -364,7 +366,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName.c_str(), &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BypartResponseBuffer)))
+			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -382,6 +384,9 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			git_oid TreeOid = {};
 			std::vector<git_oid> Treelist;
 
+			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
+			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 				GS_GOTO_CLEAN();
 
@@ -391,7 +396,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_treelist_cpp(&ResponseBuffer, &Treelist)))
+			if (!!(r = aux_frame_full_write_response_treelist_cpp(&Treelist, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -411,6 +416,9 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			std::string SizeBufferTree;
 			std::string ObjectBufferTree;
 
+			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
+			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+
 			GS_BYPART_DATA_VAR(OidVector, BypartTreelistRequested);
 			GS_BYPART_DATA_INIT(OidVector, BypartTreelistRequested, &TreelistRequested);
 
@@ -423,7 +431,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_trees(&ResponseBuffer, TreelistRequested.size(), &SizeBufferTree, &ObjectBufferTree)))
+			if (!!(r = aux_frame_full_write_response_trees(TreelistRequested.size(), &SizeBufferTree, &ObjectBufferTree, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -947,7 +955,8 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	ENetHost *host = NULL;
 	ENetPeer *peer = NULL;
 
-	std::string Buffer;
+	std::string BufferLatest;
+	std::string BufferBlobs;
 	gs_packet_t GsPacketBlobOid;
 	gs_packet_t GsPacketBlob;
 	uint32_t Offset = 0;
@@ -962,8 +971,11 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	uint32_t BlobOffsetSizeBuffer = 0;
 	uint32_t BlobOffsetObjectBuffer = 0;
 
-	GS_BYPART_DATA_VAR(String, BysizeBuffer);
-	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+	GS_BYPART_DATA_VAR(String, BysizeBufferLatest);
+	GS_BYPART_DATA_INIT(String, BysizeBufferLatest, &BufferLatest);
+
+	GS_BYPART_DATA_VAR(String, BysizeBufferBlobs);
+	GS_BYPART_DATA_INIT(String, BysizeBufferBlobs, &BufferBlobs);
 
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		GS_GOTO_CLEAN();
@@ -974,10 +986,10 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
 		GS_GOTO_CLEAN_L(E, PF, "failure connecting [host=[%s]]", HostName);
 
-	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(gs_bysize_cb_String, &BysizeBuffer)))
+	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(gs_bysize_cb_String, &BysizeBufferLatest)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+	if (!!(r = aux_packet_bare_send(host, peer, BufferLatest.data(), BufferLatest.size(), ENET_PACKET_FLAG_RELIABLE)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlobOid)))
@@ -1006,10 +1018,10 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 		GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
 	}
 
-	if (!!(r = aux_frame_full_write_request_blobs_selfupdate_cpp(&Buffer, &BlobSelfUpdateOidVec)))
+	if (!!(r = aux_frame_full_write_request_blobs_selfupdate_cpp(&BlobSelfUpdateOidVec, gs_bysize_cb_String, &BysizeBufferBlobs)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
+	if (!!(r = aux_packet_bare_send(host, peer, BufferBlobs.data(), BufferBlobs.size(), ENET_PACKET_FLAG_RELIABLE)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
@@ -1701,7 +1713,10 @@ int clnt_state_4_noown(
 
 	uint32_t BufferTreeLen;
 
-	if (!!(r = aux_frame_full_write_request_trees_cpp(&Buffer, MissingTreelist)))
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
+	if (!!(r = aux_frame_full_write_request_trees_cpp(MissingTreelist, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
@@ -1763,7 +1778,10 @@ int clnt_state_5_noown(
 	uint32_t OffsetSizeBufferBlob;
 	uint32_t OffsetObjectBufferBlob;
 
-	if (!!(r = aux_frame_full_write_request_blobs_cpp(&Buffer, MissingBloblist)))
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
+	if (!!(r = aux_frame_full_write_request_blobs_cpp(MissingBloblist, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
