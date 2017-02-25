@@ -340,64 +340,6 @@ clean:
 	return r;
 }
 
-int gs_bypart_cb_String(void *ctx, const char *d, int64_t l) {
-	int r = 0;
-
-	git_oid Oid = {};
-	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
-
-	Data->m0Buffer->append(d, l);
-
-clean:
-
-	return r;
-}
-
-int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od) {
-	int r = 0;
-
-	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
-
-	Data->m0Buffer->resize(l);
-
-	if (od)
-		*od = (uint8_t *)Data->m0Buffer->data();
-
-clean:
-
-	return r;
-}
-
-int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided) {
-	int r = 0;
-
-	uint8_t *DataStart = (uint8_t *)OidVec->data();
-	uint32_t DataOffset = 0 + offsetof(git_oid, id);
-	uint32_t EltNum = OidVec->size();
-	uint32_t EltSize = sizeof *OidVec->data();
-	uint32_t EltStride = GIT_OID_RAWSZ;
-
-	GsStrided Strided = {
-		DataStart,
-		DataOffset,
-		EltNum,
-		EltSize,
-		EltStride,
-	};
-
-	uint32_t DataLength = OidVec->size() * sizeof *OidVec->data();
-
-	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
-		GS_ERR_CLEAN(1);
-
-	if (oStrided)
-		*oStrided = Strided;
-
-clean:
-
-	return r;
-}
-
 int aux_frame_full_aux_write_empty(
 	GsFrameType *FrameType,
 	gs_bysize_cb_t cb, void *ctx)
@@ -567,6 +509,64 @@ int aux_frame_full_aux_write_paired_vec(
 
 	if (!!(r = aux_frame_write_buf(BufferData, BufferSize, Offset, &Offset, ObjectBufferTreeData, ObjectBufferTreeSize)))
 		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_bypart_cb_String(void *ctx, const char *d, int64_t l) {
+	int r = 0;
+
+	git_oid Oid = {};
+	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
+
+	Data->m0Buffer->append(d, l);
+
+clean:
+
+	return r;
+}
+
+int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od) {
+	int r = 0;
+
+	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
+
+	Data->m0Buffer->resize(l);
+
+	if (od)
+		*od = (uint8_t *)Data->m0Buffer->data();
+
+clean:
+
+	return r;
+}
+
+int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided) {
+	int r = 0;
+
+	uint8_t *DataStart = (uint8_t *)OidVec->data();
+	uint32_t DataOffset = 0 + offsetof(git_oid, id);
+	uint32_t EltNum = OidVec->size();
+	uint32_t EltSize = sizeof *OidVec->data();
+	uint32_t EltStride = GIT_OID_RAWSZ;
+
+	GsStrided Strided = {
+		DataStart,
+		DataOffset,
+		EltNum,
+		EltSize,
+		EltStride,
+	};
+
+	uint32_t DataLength = OidVec->size() * sizeof *OidVec->data();
+
+	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
+		GS_ERR_CLEAN(1);
+
+	if (oStrided)
+		*oStrided = Strided;
 
 clean:
 

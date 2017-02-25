@@ -135,21 +135,6 @@ int aux_frame_write_oid_vec(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	const GsStrided OidVec);
 
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
-
-#ifdef __cplusplus
-
-/* GsBypartCbDataString */
-GS_BYPART_DATA_DECL(String, std::string *m0Buffer;);
-#define GS_BYPART_TRIPWIRE_String 0x23132359
-#define GS_BYPART_DATA_INIT_String(VARNAME, PBUFFER) (VARNAME).m0Buffer = PBUFFER;
-int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
-int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
-
-int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
-
 int aux_frame_full_aux_write_empty(
 	GsFrameType *FrameType,
 	gs_bysize_cb_t cb, void *ctx);
@@ -167,6 +152,21 @@ int aux_frame_full_aux_write_paired_vec(
 	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
 	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
 	gs_bysize_cb_t cb, void *ctx);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#ifdef __cplusplus
+
+/* GsBypartCbDataString */
+GS_BYPART_DATA_DECL(String, std::string *m0Buffer;);
+#define GS_BYPART_TRIPWIRE_String 0x23132359
+#define GS_BYPART_DATA_INIT_String(VARNAME, PBUFFER) (VARNAME).m0Buffer = PBUFFER;
+int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
+int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
+
+int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
 int aux_frame_full_write_serv_aux_interrupt_requested(
 	gs_bysize_cb_t cb, void *ctx);
