@@ -355,13 +355,16 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			git_oid CommitHeadOid = {};
 			git_oid TreeHeadOid = {};
 
+			GS_BYPART_DATA_VAR(String, BypartResponseBuffer);
+			GS_BYPART_DATA_INIT(String, BypartResponseBuffer, &ResponseBuffer);
+
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName.c_str(), &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_latest_commit_tree(&ResponseBuffer, TreeHeadOid.id, GIT_OID_RAWSZ)))
+			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BypartResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -461,6 +464,9 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			git_oid TreeHeadOid = {};
 			git_oid BlobSelfUpdateOid = {};
 
+			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
+			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
@@ -470,7 +476,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(&ResponseBuffer, BlobSelfUpdateOid.id, GIT_OID_RAWSZ)))
+			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(BlobSelfUpdateOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
@@ -1642,10 +1648,13 @@ int clnt_state_3_noown(
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
 	GS_BYPART_DATA_VAR(OidVector, BypartTreelist);
 	GS_BYPART_DATA_INIT(OidVector, BypartTreelist, oTreelist);
 
-	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid->id, GIT_OID_RAWSZ)))
+	if (!!(r = aux_frame_full_write_request_treelist(TreeHeadOid->id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))

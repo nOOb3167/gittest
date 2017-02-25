@@ -152,8 +152,8 @@ int aux_frame_full_aux_write_empty(
 	GsFrameType *FrameType,
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_aux_write_oid(
-	std::string *oBuffer,
-	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize);
+	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_aux_write_oid_vec(
 	std::string *oBuffer, GsFrameType *FrameType,
 	const GsStrided OidVec);
@@ -169,11 +169,11 @@ int aux_frame_full_write_serv_aux_interrupt_requested(
 int aux_frame_full_write_request_latest_commit_tree(
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_latest_commit_tree(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize);
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_request_treelist(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize);
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_trees(
 	std::string *oBuffer,
 	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
@@ -183,8 +183,8 @@ int aux_frame_full_write_response_blobs(
 int aux_frame_full_write_request_latest_selfupdate_blob(
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_latest_selfupdate_blob(
-	std::string *oBuffer,
-	uint8_t *Oid, uint32_t OidSize);
+	uint8_t *Oid, uint32_t OidSize,
+	gs_bysize_cb_t cb, void *ctx);
 
 int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
