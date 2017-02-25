@@ -284,7 +284,10 @@ int aux_serv_worker_thread_service_request_blobs(
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_full_write_response_blobs(
-		FrameTypeResponse, BloblistRequested.size(), &SizeBufferBlob, &ObjectBufferBlob, gs_bysize_cb_String, &BysizeResponseBuffer)))
+		FrameTypeResponse, BloblistRequested.size(),
+		(uint8_t *)SizeBufferBlob.data(), SizeBufferBlob.size(),
+		(uint8_t *)ObjectBufferBlob.data(), ObjectBufferBlob.size(),
+		gs_bysize_cb_String, &BysizeResponseBuffer)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -431,8 +434,14 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_frame_full_write_response_trees(TreelistRequested.size(), &SizeBufferTree, &ObjectBufferTree, gs_bysize_cb_String, &BysizeResponseBuffer)))
+			if (!!(r = aux_frame_full_write_response_trees(
+				TreelistRequested.size(),
+				(uint8_t *)SizeBufferTree.data(), SizeBufferTree.size(),
+				(uint8_t *)ObjectBufferTree.data(), ObjectBufferTree.size(),
+				gs_bysize_cb_String, &BysizeResponseBuffer)))
+			{
 				GS_GOTO_CLEAN();
+			}
 
 			if (!!(r = aux_packet_response_queue_interrupt_request_reliable(
 				ServAuxData.get(), WorkerDataSend.get(), Request.get(), ResponseBuffer.data(), ResponseBuffer.size())))

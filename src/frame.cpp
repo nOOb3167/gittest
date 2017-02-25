@@ -608,26 +608,30 @@ int aux_frame_full_write_request_treelist(
 }
 
 int aux_frame_full_write_response_trees(
-	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree,
+	uint32_t PairedVecLen,
+	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
+	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
 	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(RESPONSE_TREES);
 
 	return aux_frame_full_aux_write_paired_vec(&FrameType, PairedVecLen,
-		(uint8_t *)SizeBufferTree->data(), SizeBufferTree->size(),
-		(uint8_t *)ObjectBufferTree->data(), ObjectBufferTree->size(),
+		SizeBufferTreeData, SizeBufferTreeSize,
+		ObjectBufferTreeData, ObjectBufferTreeSize,
 		cb, ctx);
 }
 
 int aux_frame_full_write_response_blobs(
-	const GsFrameType &FrameType, uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob,
+	const GsFrameType &FrameType, uint32_t PairedVecLen,
+	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
+	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
 	gs_bysize_cb_t cb, void *ctx)
 {
 	GsFrameType FrameTypeTmp = FrameType;
 
 	return aux_frame_full_aux_write_paired_vec(&FrameTypeTmp, PairedVecLen,
-		(uint8_t *)SizeBufferBlob->data(), SizeBufferBlob->size(),
-		(uint8_t *)ObjectBufferBlob->data(), ObjectBufferBlob->size(),
+		SizeBufferBlobData, SizeBufferBlobSize,
+		ObjectBufferBlobData, ObjectBufferBlobSize,
 		cb, ctx);
 }
 

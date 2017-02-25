@@ -179,10 +179,14 @@ int aux_frame_full_write_request_treelist(
 	uint8_t *Oid, uint32_t OidSize,
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_trees(
-	uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree,
+	uint32_t PairedVecLen,
+	uint8_t *SizeBufferTreeData, uint32_t SizeBufferTreeSize,
+	uint8_t *ObjectBufferTreeData, uint32_t ObjectBufferTreeSize,
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_blobs(
-	const GsFrameType &FrameType, uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob,
+	const GsFrameType &FrameType, uint32_t PairedVecLen,
+	uint8_t *SizeBufferBlobData, uint32_t SizeBufferBlobSize,
+	uint8_t *ObjectBufferBlobData, uint32_t ObjectBufferBlobSize,
 	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_request_latest_selfupdate_blob(
 	gs_bysize_cb_t cb, void *ctx);
