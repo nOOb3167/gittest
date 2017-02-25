@@ -61,6 +61,9 @@
 	GsBypartCbData ## SUBNAME VARNAME;       \
 	(VARNAME).Tripwire = GS_BYPART_TRIPWIRE_ ## SUBNAME;
 
+#define GS_BYPART_DATA_INIT(SUBNAME, VARNAME, ...) \
+	GS_BYPART_DATA_INIT_ ## SUBNAME (VARNAME, __VA_ARGS__)
+
 #define GS_BYPART_DATA_VAR_CTX_NONUCF(SUBNAME, VARNAME, CTXNAME)                 \
 	GsBypartCbData ## SUBNAME * VARNAME = (GsBypartCbData ## SUBNAME *) CTXNAME; \
 	{                                                                            \
@@ -138,9 +141,16 @@ int aux_frame_write_oid_vec(
 
 #ifdef __cplusplus
 
+/* GsBypartCbDataString */
+GS_BYPART_DATA_DECL(String, std::string *m0Buffer;);
+#define GS_BYPART_TRIPWIRE_String 0x23132359
+#define GS_BYPART_DATA_INIT_String(VARNAME, PBUFFER) (VARNAME).m0Buffer = PBUFFER;
+int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
+int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
+
 int aux_frame_full_aux_write_empty(
-	std::string *oBuffer,
-	GsFrameType *FrameType);
+	GsFrameType *FrameType,
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_aux_write_oid(
 	std::string *oBuffer,
 	GsFrameType *FrameType, uint8_t *Oid, uint32_t OidSize);
@@ -155,9 +165,9 @@ int aux_frame_full_aux_write_paired_vec(
 	GsFrameType *FrameType, uint32_t PairedVecLen, std::string *SizeBufferTree, std::string *ObjectBufferTree);
 
 int aux_frame_full_write_serv_aux_interrupt_requested(
-	std::string *oBuffer);
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_request_latest_commit_tree(
-	std::string *oBuffer);
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_latest_commit_tree(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize);
@@ -171,7 +181,7 @@ int aux_frame_full_write_response_blobs(
 	std::string *oBuffer, const GsFrameType &FrameType,
 	uint32_t PairedVecLen, std::string *SizeBufferBlob, std::string *ObjectBufferBlob);
 int aux_frame_full_write_request_latest_selfupdate_blob(
-	std::string *oBuffer);
+	gs_bysize_cb_t cb, void *ctx);
 int aux_frame_full_write_response_latest_selfupdate_blob(
 	std::string *oBuffer,
 	uint8_t *Oid, uint32_t OidSize);

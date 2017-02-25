@@ -269,7 +269,7 @@ int aux_serv_worker_thread_service_request_blobs(
 	std::string ObjectBufferBlob;
 
 	GS_BYPART_DATA_VAR(OidVector, BypartBloblistRequested);
-	BypartBloblistRequested.m0OidVec = &BloblistRequested;
+	GS_BYPART_DATA_INIT(OidVector, BypartBloblistRequested, &BloblistRequested);
 
 	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
@@ -409,7 +409,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			std::string ObjectBufferTree;
 
 			GS_BYPART_DATA_VAR(OidVector, BypartTreelistRequested);
-			BypartTreelistRequested.m0OidVec = &TreelistRequested;
+			GS_BYPART_DATA_INIT(OidVector, BypartTreelistRequested, &TreelistRequested);
 
 			if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 				GS_GOTO_CLEAN();
@@ -956,6 +956,9 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	uint32_t BlobOffsetSizeBuffer = 0;
 	uint32_t BlobOffsetObjectBuffer = 0;
 
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		GS_GOTO_CLEAN();
 
@@ -965,7 +968,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
 		GS_GOTO_CLEAN_L(E, PF, "failure connecting [host=[%s]]", HostName);
 
-	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(&Buffer)))
+	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_bare_send(host, peer, Buffer.data(), Buffer.size(), ENET_PACKET_FLAG_RELIABLE)))
@@ -1121,7 +1124,10 @@ int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAu
 	ENetHost *client = NULL;
 	ENetPeer *peer = NULL;
 
-	if (!!(r = aux_frame_full_write_serv_aux_interrupt_requested(&BufferFrameInterruptRequested)))
+	GS_BYPART_DATA_VAR(String, BysizeBufferFrameInterruptRequested);
+	GS_BYPART_DATA_INIT(String, BysizeBufferFrameInterruptRequested, &BufferFrameInterruptRequested);
+
+	if (!!(r = aux_frame_full_write_serv_aux_interrupt_requested(gs_bysize_cb_String, &BysizeBufferFrameInterruptRequested)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &client, &peer)))
@@ -1583,7 +1589,10 @@ int clnt_state_2_noown(
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
-	if (!!(r = aux_frame_full_write_request_latest_commit_tree(&Buffer)))
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
+	if (!!(r = aux_frame_full_write_request_latest_commit_tree(gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_packet_response_queue_interrupt_request_reliable(ServAuxData, WorkerDataSend, RequestForSend, Buffer.data(), Buffer.size())))
@@ -1634,7 +1643,7 @@ int clnt_state_3_noown(
 	uint32_t LengthLimit = 0;
 
 	GS_BYPART_DATA_VAR(OidVector, BypartTreelist);
-	BypartTreelist.m0OidVec = oTreelist;
+	GS_BYPART_DATA_INIT(OidVector, BypartTreelist, oTreelist);
 
 	if (!!(r = aux_frame_full_write_request_treelist(&Buffer, TreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();

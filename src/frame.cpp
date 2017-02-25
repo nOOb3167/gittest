@@ -340,25 +340,54 @@ clean:
 	return r;
 }
 
+int gs_bypart_cb_String(void *ctx, const char *d, int64_t l) {
+	int r = 0;
+
+	git_oid Oid = {};
+	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
+
+	Data->m0Buffer->append(d, l);
+
+clean:
+
+	return r;
+}
+
+int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od) {
+	int r = 0;
+
+	GS_BYPART_DATA_VAR_CTX_NONUCF(String, Data, ctx);
+
+	Data->m0Buffer->resize(l);
+
+	if (od)
+		*od = (uint8_t *)Data->m0Buffer->data();
+
+clean:
+
+	return r;
+}
+
 int aux_frame_full_aux_write_empty(
-	std::string *oBuffer,
-	GsFrameType *FrameType)
+	GsFrameType *FrameType,
+	gs_bysize_cb_t cb, void *ctx)
 {
 	int r = 0;
 
 	std::string Buffer;
 	uint32_t Offset = 0;
 
-	Buffer.resize(GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0);
+	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + 0;
+	uint8_t * BufferData = NULL;
 
-	if (!!(r = aux_frame_write_frametype((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, FrameType)))
+	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_write_size((uint8_t *)Buffer.data(), Buffer.size(), Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
+	if (!!(r = aux_frame_write_frametype(BufferData, BufferSize, Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
 
-	if (oBuffer)
-		oBuffer->swap(Buffer);
+	if (!!(r = aux_frame_write_size(BufferData, BufferSize, Offset, &Offset, GS_FRAME_SIZE_LEN, 0)))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -519,19 +548,19 @@ clean:
 }
 
 int aux_frame_full_write_serv_aux_interrupt_requested(
-	std::string *oBuffer)
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(SERV_AUX_INTERRUPT_REQUESTED);
 
-	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
 }
 
 int aux_frame_full_write_request_latest_commit_tree(
-	std::string *oBuffer)
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_COMMIT_TREE);
 
-	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
 }
 
 int aux_frame_full_write_response_latest_commit_tree(
@@ -571,11 +600,11 @@ int aux_frame_full_write_response_blobs(
 }
 
 int aux_frame_full_write_request_latest_selfupdate_blob(
-	std::string *oBuffer)
+	gs_bysize_cb_t cb, void *ctx)
 {
 	static GsFrameType FrameType = GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB);
 
-	return aux_frame_full_aux_write_empty(oBuffer, &FrameType);
+	return aux_frame_full_aux_write_empty(&FrameType, cb, ctx);
 }
 
 int aux_frame_full_write_response_latest_selfupdate_blob(
