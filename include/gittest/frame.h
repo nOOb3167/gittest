@@ -32,8 +32,10 @@
 #define GS_FRAME_TYPE_REQUEST_LATEST_SELFUPDATE_BLOB 11
 #define GS_FRAME_TYPE_RESPONSE_LATEST_SELFUPDATE_BLOB 12
 
+// FIXME: bits of old design etc
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
-#define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
+//#define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
+#define GS_FRAME_TYPE_DECL(name) aux_frametype_make( # name , GS_FRAME_TYPE_DECL2(name) )
 
 #define GS_FRAME_TYPE_DEFINE_FRAME_TYPE_ARRAY(VARNAME)       \
 	GsFrameType (VARNAME)[] = {                              \
@@ -96,6 +98,8 @@ int gs_strided_for_struct_member(
 	uint8_t *DataStart, uint32_t DataStartOffset, uint32_t OffsetOfMember,
 	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
 	GsStrided *oStrided);
+
+GsFrameType aux_frametype_make(const char *NameString, uint32_t NameNum);
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b);
 

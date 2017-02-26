@@ -69,16 +69,18 @@ int gs_deserialize_windows_process_handle(HANDLE *oHandle, const char *BufZeroTe
 	if (! memchr(BufZeroTerm, '\0', BufSize))
 		GS_ERR_CLEAN(1);
 
-	const char *startPtr = BufZeroTerm;
-	char *endPtr = 0;
-	errno = 0;
-	long long lluVal = strtoull(startPtr, &endPtr, 16);
-	if (errno = ERANGE && (lluVal == LONG_MIN || lluVal == LONG_MAX))
-		GS_ERR_CLEAN(1);
-	if (endPtr >= BufZeroTerm + BufSize)
-		GS_ERR_CLEAN(1);
+	{
+		const char *startPtr = BufZeroTerm;
+		char *endPtr = 0;
+		errno = 0;
+		long long lluVal = strtoull(startPtr, &endPtr, 16);
+		if (errno = ERANGE && (lluVal == LONG_MIN || lluVal == LONG_MAX))
+			GS_ERR_CLEAN(1);
+		if (endPtr >= BufZeroTerm + BufSize)
+			GS_ERR_CLEAN(1);
 
-	Handle = (HANDLE) lluVal;
+		Handle = (HANDLE) lluVal;
+	}
 
 	if (oHandle)
 		*oHandle = Handle;
@@ -126,36 +128,38 @@ int gs_build_child_command_line(
 		GS_ERR_CLEAN(1);
 	}
 
-	char * const PtrArg0 = oChildCommandLine;
-	char * const PtrArg1 = PtrArg0 + 1 + LenChildFileName + 1 + 1;
-	char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
-	char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD) + 1;
-	char * const PtrArg4 = PtrArg3 + LenHandleCurrentProcessSerialized + 1;
-	char * const PtrArg5 = PtrArg4 + 1 + LenParentFileName + 1 + 1;
-	char * const PtrArg6 = PtrArg5 + 1 + LenChildFileName + 1 + 1;
-	memset(PtrArg0, '"', 1);
-	memcpy(PtrArg0 + 1, ChildFileNameBuf, LenChildFileName);
-	memset(PtrArg0 + 1 + LenChildFileName, '"', 1);
-	memset(PtrArg0 + 1 + LenChildFileName + 1, ' ', 1);
+	{
+		char * const PtrArg0 = oChildCommandLine;
+		char * const PtrArg1 = PtrArg0 + 1 + LenChildFileName + 1 + 1;
+		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
+		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD) + 1;
+		char * const PtrArg4 = PtrArg3 + LenHandleCurrentProcessSerialized + 1;
+		char * const PtrArg5 = PtrArg4 + 1 + LenParentFileName + 1 + 1;
+		char * const PtrArg6 = PtrArg5 + 1 + LenChildFileName + 1 + 1;
+		memset(PtrArg0, '"', 1);
+		memcpy(PtrArg0 + 1, ChildFileNameBuf, LenChildFileName);
+		memset(PtrArg0 + 1 + LenChildFileName, '"', 1);
+		memset(PtrArg0 + 1 + LenChildFileName + 1, ' ', 1);
 
-	memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
-	memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
+		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
+		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
 
-	memcpy(PtrArg2, GS_SELFUPDATE_ARG_CHILD, strlen(GS_SELFUPDATE_ARG_CHILD));
-	memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD), ' ', 1);
+		memcpy(PtrArg2, GS_SELFUPDATE_ARG_CHILD, strlen(GS_SELFUPDATE_ARG_CHILD));
+		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD), ' ', 1);
 
-	memcpy(PtrArg3, HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized);
-	memset(PtrArg3 + LenHandleCurrentProcessSerialized, ' ', 1);
+		memcpy(PtrArg3, HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized);
+		memset(PtrArg3 + LenHandleCurrentProcessSerialized, ' ', 1);
 
-	memset(PtrArg4, '"', 1);
-	memcpy(PtrArg4 + 1, ParentFileNameBuf, LenParentFileName);
-	memset(PtrArg4 + 1 + LenParentFileName, '"', 1);
-	memset(PtrArg4 + 1 + LenParentFileName + 1, ' ', 1);
+		memset(PtrArg4, '"', 1);
+		memcpy(PtrArg4 + 1, ParentFileNameBuf, LenParentFileName);
+		memset(PtrArg4 + 1 + LenParentFileName, '"', 1);
+		memset(PtrArg4 + 1 + LenParentFileName + 1, ' ', 1);
 
-	memset(PtrArg5, '"', 1);
-	memcpy(PtrArg5 + 1, ChildFileNameBuf, LenChildFileName);
-	memset(PtrArg5 + 1 + LenChildFileName, '"', 1);
-	memset(PtrArg5 + 1 + LenChildFileName + 1, '\0', 1);
+		memset(PtrArg5, '"', 1);
+		memcpy(PtrArg5 + 1, ChildFileNameBuf, LenChildFileName);
+		memset(PtrArg5 + 1 + LenChildFileName, '"', 1);
+		memset(PtrArg5 + 1 + LenChildFileName + 1, '\0', 1);
+	}
 
 clean:
 
@@ -163,10 +167,10 @@ clean:
 }
 
 int gs_build_child_filename(
-	char *ParentFileNameBuf, size_t LenParentFileName,
-	char *ExpectedSuffix, size_t LenExpectedSuffix,
-	char *ExpectedExtension, size_t LenExpectedExtension,
-	char *ExtraSuffix, size_t LenExtraSuffix,
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	const char *ExpectedSuffix, size_t LenExpectedSuffix,
+	const char *ExpectedExtension, size_t LenExpectedExtension,
+	const char *ExtraSuffix, size_t LenExtraSuffix,
 	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName)
 {
 	// modify example ${path}${expectedsuffix}${expectedextension}
@@ -175,13 +179,14 @@ int gs_build_child_filename(
 
 	int r = 0;
 
+	const size_t OffsetStartOfCheck = LenParentFileName - LenExpectedSuffix;
+	const size_t OffsetStartOfChange = LenParentFileName - LenExpectedExtension;
+	const size_t LenChildFileName = OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension;
+
 	if (LenParentFileName < LenExpectedSuffix)
 		GS_ERR_CLEAN(1);
 	if (LenExpectedSuffix < LenExpectedExtension)
 		GS_ERR_CLEAN(1);
-
-	const size_t OffsetStartOfCheck = LenParentFileName - LenExpectedSuffix;
-	const size_t OffsetStartOfChange = LenParentFileName - LenExpectedExtension;
 
 	if (strcmp(ExpectedSuffix, ParentFileNameBuf + OffsetStartOfCheck) != 0)
 		GS_ERR_CLEAN(1);
@@ -195,8 +200,6 @@ int gs_build_child_filename(
 	memcpy(ioChildFileNameBuf + OffsetStartOfChange, ExtraSuffix, LenExtraSuffix);
 	memcpy(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix, ExpectedExtension, LenExpectedExtension);
 	memset(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension, '\0', 1);
-
-	const size_t LenChildFileName = OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension;
 
 	if (oLenChildFileName)
 		*oLenChildFileName = LenChildFileName;
@@ -304,6 +307,8 @@ int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNam
 	HANDLE hCurrentProcess = NULL;
 
 	char HandleCurrentProcessSerialized[512] = {};
+	size_t LenHandleCurrentProcessSerialized = 0;
+
 	char ChildCommandLine[1024];
 
 	STARTUPINFO si = {};
@@ -332,7 +337,7 @@ int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNam
 	if (!!(r = gs_serialize_windows_process_handle(hCurrentProcess, HandleCurrentProcessSerialized, sizeof HandleCurrentProcessSerialized)))
 		GS_GOTO_CLEAN();
 
-	const size_t LenHandleCurrentProcessSerialized = strlen(HandleCurrentProcessSerialized);
+	LenHandleCurrentProcessSerialized = strlen(HandleCurrentProcessSerialized);
 
 	if (!!(r = gs_build_child_command_line(
 		FileNameChildBuf, LenFileNameChild,

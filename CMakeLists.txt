@@ -1,0 +1,100 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
+
+PROJECT (gittest)
+
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+FIND_PACKAGE(LibGit2 REQUIRED)
+# dependency of LibGit2
+FIND_PACKAGE(ZLIB REQUIRED)
+
+FIND_PACKAGE(ENet REQUIRED)
+
+SET(GITTEST_INCLUDE_DIRS
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+  ${LIBGIT2_INCLUDE_DIR}
+  ${ENET_INCLUDE_DIR}
+  ${ZLIB_INCLUDE_DIR}
+)
+
+SET(GITTEST_LIBRARIES
+  ${LIBGIT2_LIBRARIES}
+  ${ENET_LIBRARIES}
+# ZLIB must be on the link list AFTER LibGit2 to resolve symbols
+  ${ZLIB_LIBRARIES}
+)
+
+SET(GITTEST_LIB_SOURCES
+  src/cbuf.cpp
+  src/log.cpp
+  src/misc.cpp
+  src/main.cpp
+)
+
+SET(GITTEST_LIB_SOURCES_WIN
+  src/log_win.cpp
+)
+
+SET(GITTEST_NET_SOURCES
+  src/frame.cpp
+  src/net.cpp
+)
+
+SET(GITTEST_SELFUPDATE_SOURCES
+  src/gittest_selfupdate.cpp
+)
+
+SET(GITTEST_SELFUPDATE_SOURCES_WIN
+  src/gittest_selfupdate_win.cpp
+)
+
+SET(GITTEST_SERV_SOURCES
+  src/gittest_serv.cpp
+)
+
+SET(GITTEST_CLNT_SOURCES
+  src/gittest_clnt.cpp
+)
+
+ADD_LIBRARY(gittest_lib STATIC
+  ${GITTEST_LIB_SOURCES}
+  ${GITTEST_LIB_SOURCES_WIN}
+)
+
+ADD_LIBRARY(gittest_net STATIC
+  ${GITTEST_NET_SOURCES}
+)
+
+ADD_LIBRARY(gittest_selfupdate STATIC
+  ${GITTEST_SELFUPDATE_SOURCES}
+  ${GITTEST_SELFUPDATE_SOURCES_WIN}
+)
+
+ADD_EXECUTABLE(gittest_serv
+  ${GITTEST_SERV_SOURCES}
+)
+
+ADD_EXECUTABLE(gittest_clnt
+  ${GITTEST_CLNT_SOURCES}
+)
+
+TARGET_INCLUDE_DIRECTORIES(gittest_lib PUBLIC ${GITTEST_INCLUDE_DIRS})
+TARGET_INCLUDE_DIRECTORIES(gittest_net PUBLIC ${GITTEST_INCLUDE_DIRS})
+TARGET_INCLUDE_DIRECTORIES(gittest_selfupdate PUBLIC ${GITTEST_INCLUDE_DIRS})
+
+TARGET_LINK_LIBRARIES(gittest_serv gittest_lib gittest_net ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_clnt gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
+
+INSTALL(TARGETS gittest_serv gittest_clnt
+    LIBRARY DESTINATION "lib"
+    RUNTIME DESTINATION "bin"
+    ARCHIVE DESTINATION "lib"
+)
+
+INSTALL(DIRECTORY "data/"
+    DESTINATION "data"
+    PATTERN "marker.txt" EXCLUDE
+)
+
+SOURCE_GROUP("Header Files" REGULAR_EXPRESSION "include/gittest/*.h")
+SOURCE_GROUP("Source Files" REGULAR_EXPRESSION "src/*.cpp")

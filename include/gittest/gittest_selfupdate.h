@@ -18,10 +18,10 @@
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
 
 int gs_build_child_filename(
-	char *ParentFileNameBuf, size_t LenParentFileName,
-	char *ExpectedSuffix, size_t LenExpectedSuffix,
-	char *ExpectedExtension, size_t LenExpectedExtension,
-	char *ExtraSuffix, size_t LenExtraSuffix,
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	const char *ExpectedSuffix, size_t LenExpectedSuffix,
+	const char *ExpectedExtension, size_t LenExpectedExtension,
+	const char *ExtraSuffix, size_t LenExtraSuffix,
 	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName);
 
 int aux_selfupdate_create_child(

@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 #include <vector>
 #include <map>
@@ -110,14 +111,15 @@ int aux_config_read(const char *ExpectedLocation, const char *ExpectedName, std:
 	std::string retbuffer;
 	
 	FILE *f = NULL;
-
+    
+    size_t ret = 0;
+    size_t idx = 0;
 
 	locationss << ExpectedLocation << "/" << ExpectedName;
 
 	if (!(f = fopen(locationss.str().c_str(), "rb")))
 		{ r = 1; goto clean; }
 
-	size_t ret = 0;
 	while ((ret = fread(buf, 1, ArbitraryBufferSize, f)) > 0)
 		retbuffer.append(buf, ret);
 
@@ -133,7 +135,7 @@ int aux_config_read(const char *ExpectedLocation, const char *ExpectedName, std:
 	if (retbuffer.at(hdr_raw_size) != newline)
 		{ r = 2; goto clean; }
 
-	size_t idx = hdr_raw_size + 1;
+	idx = hdr_raw_size + 1;
 	while (idx < retbuffer.size()) {
 		size_t newlinepos = retbuffer.npos;
 		if ((newlinepos = retbuffer.find_first_of(newline, idx)) == retbuffer.npos)
@@ -236,20 +238,26 @@ int aux_oid_tree_blob_byname(git_repository *Repository, git_oid *TreeOid, const
 	if (!!(r = git_tree_lookup(&Tree, Repository, TreeOid)))
 		goto clean;
 
-	const git_tree_entry *Entry = git_tree_entry_byname(Tree, WantedBlobName);
+	{
+		const git_tree_entry *Entry = git_tree_entry_byname(Tree, WantedBlobName);
 
-	if (! Entry)
-		{ r = 1; goto clean; }
+		if (! Entry)
+			{ r = 1; goto clean; }
 
-	const git_otype EntryType = git_tree_entry_type(Entry);
+		{
+			const git_otype EntryType = git_tree_entry_type(Entry);
 
-	if (EntryType != GIT_OBJ_BLOB)
-		{ r = 1; goto clean; }
+			if (EntryType != GIT_OBJ_BLOB)
+				{ r = 1; goto clean; }
 
-	const git_oid *BlobOid = git_tree_entry_id(Entry);
+			{
+				const git_oid *BlobOid = git_tree_entry_id(Entry);
 
-	if (oBlobOid)
-		git_oid_cpy(oBlobOid, BlobOid);
+				if (oBlobOid)
+					git_oid_cpy(oBlobOid, BlobOid);
+			}
+		}
+	}
 
 clean:
 	if (Tree)
@@ -262,6 +270,7 @@ int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, 
 	/* return value GIT_ENOTFOUND is part of the API for this function */
 
 	int r = 0;
+	int errC = 0;
 
 	git_oid CommitHeadOid = {};
 	git_commit *CommitHead = NULL;
@@ -271,7 +280,7 @@ int aux_oid_latest_commit_tree(git_repository *Repository, const char *RefName, 
 		goto clean;
 
 	// FIXME: not sure if GIT_ENOTFOUND return counts as official API for git_commit_lookup
-	int errC = git_commit_lookup(&CommitHead, Repository, &CommitHeadOid);
+	errC = git_commit_lookup(&CommitHead, Repository, &CommitHeadOid);
 	if (!!errC && errC != GIT_ENOTFOUND)
 		{ r = errC; goto clean; }
 
@@ -339,6 +348,8 @@ int serv_oid_treelist(git_repository *Repository, git_oid *TreeOid, std::vector<
 	topolist_t NodeListTopo;
 	std::vector<git_oid> Output;
 
+	int OutputIdx = 0;
+
 	if (!!(r = git_tree_lookup(&Tree, Repository, TreeOid)))
 		goto clean;
 
@@ -347,7 +358,6 @@ int serv_oid_treelist(git_repository *Repository, git_oid *TreeOid, std::vector<
 
 	/* output in reverse topological order */
 	Output.resize(NodeListTopo.size());  // FIXME: inefficient list size operation?
-	int OutputIdx = 0;
 	for (topolist_t::reverse_iterator it = NodeListTopo.rbegin(); it != NodeListTopo.rend(); OutputIdx++, it++)
 		git_oid_cpy(Output.data() + OutputIdx,  git_tree_id(*it));
 
@@ -764,10 +774,12 @@ int aux_commit_buffer_checkexist_dummy(git_odb *OdbT, git_buf *CommitBuf, uint32
 
 	git_oid CommitOid = {};
 
+	uint32_t Exists = 0;
+
 	if (!!(r = git_odb_hash(&CommitOid, CommitBuf->ptr, CommitBuf->size, GIT_OBJ_COMMIT)))
 		goto clean;
 
-	uint32_t Exists = git_odb_exists(OdbT, &CommitOid);
+	Exists = git_odb_exists(OdbT, &CommitOid);
 
 	if (oExists)
 		*oExists = Exists;

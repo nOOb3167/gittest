@@ -1,6 +1,6 @@
 #ifdef _MSC_VER
 #pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
-#endif _MSC_VER
+#endif /* _MSC_VER */
 
 #include <cassert>
 #include <cstdint>
@@ -40,6 +40,19 @@ int gs_strided_for_struct_member(
 clean:
 
 	return r;
+}
+
+GsFrameType aux_frametype_make(const char *TypeName, uint32_t TypeNum) {
+	GsFrameType FrameType = {};
+	size_t LenTypeName = 0;
+
+	if ((LenTypeName = strnlen(TypeName, sizeof(FrameType.mTypeName))) == sizeof(FrameType.mTypeName))
+		assert(0);
+
+	memcpy(FrameType.mTypeName, TypeName, LenTypeName);
+	FrameType.mTypeNum = TypeNum;
+
+	return FrameType;
 }
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {

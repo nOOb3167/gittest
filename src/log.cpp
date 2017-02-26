@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdarg>
+#include <cstring>
 
 #include <algorithm>
 #include <utility>
@@ -84,7 +85,7 @@ struct GsLog {
 };
 
 // FIXME: port to non-msvc (use thread_local keyword most likely)
-__declspec( thread ) GsLogTls g_tls_log_global = {};
+static GS_THREAD_LOCAL_DESIGNATOR GsLogTls g_tls_log_global = {};
 
 GsLogTls *gs_log_global_get() {
 	return &g_tls_log_global;

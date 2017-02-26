@@ -1,6 +1,6 @@
 #ifdef _MSC_VER
 #pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
-#endif _MSC_VER
+#endif /* _MSC_VER */
 
 #include <cstdlib>
 #include <cassert>
@@ -189,7 +189,7 @@ int aux_host_peer_pair_reset(sp<gs_host_peer_pair_t> *ioConnection) {
 
 		*ioConnection = sp<gs_host_peer_pair_t>();
 
-		enet_peer_disconnect_now(oldpeer, NULL);
+		enet_peer_disconnect_now(oldpeer, 0);
 		enet_host_destroy(oldhost);
 	}
 
@@ -217,13 +217,13 @@ int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t Of
 	return 0;
 }
 
-int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData) {
+int aux_make_serv_worker_request_data(ENetHost *host, ENetPeer *peer, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker) {
 	int r = 0;
 
-	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData(ioPacket, host, peer));
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(ioPacket, host, peer));
 
-	if (oServWorkerRequestData)
-		*oServWorkerRequestData = ServWorkerRequestData;
+	if (oRequestWorker)
+		*oRequestWorker = RequestWorker;
 
 clean:
 
@@ -231,15 +231,15 @@ clean:
 }
 
 int aux_make_serv_worker_request_data_for_response(
-	ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oServWorkerRequestData)
+	ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker)
 {
 	int r = 0;
 
-	sp<ServWorkerRequestData> ServWorkerRequestData(new ServWorkerRequestData(
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
 		ioPacket, RequestBeingResponded->mHost, RequestBeingResponded->mPeer));
 
-	if (oServWorkerRequestData)
-		*oServWorkerRequestData = ServWorkerRequestData;
+	if (oRequestWorker)
+		*oRequestWorker = RequestWorker;
 
 clean:
 
@@ -639,7 +639,7 @@ int aux_enet_host_connect_addr(ENetHost *host, ENetAddress *address, ENetPeer **
 
 	ENetPeer *peer = NULL;
 
-	if (!(peer = enet_host_connect(host, address, 1, NULL)))
+	if (!(peer = enet_host_connect(host, address, 1, 0)))
 		GS_GOTO_CLEAN();
 
 	if (oPeer)
@@ -648,7 +648,7 @@ int aux_enet_host_connect_addr(ENetHost *host, ENetAddress *address, ENetPeer **
 clean:
 	if (!!r) {
 		if (peer)
-			enet_peer_disconnect_now(peer, NULL);
+			enet_peer_disconnect_now(peer, 0);
 	}
 
 	return r;
@@ -678,7 +678,7 @@ int aux_enet_host_create_connect_addr(
 clean:
 	if (!!r) {
 		if (peer)
-			enet_peer_disconnect_now(peer, NULL);
+			enet_peer_disconnect_now(peer, 0);
 
 		if (host)
 			enet_host_destroy(host);
@@ -928,7 +928,7 @@ int aux_host_connect(
 	cleansub:
 		if (!!r || HasTimedOut) {
 			if (peer)
-				enet_peer_disconnect_now(peer, NULL);
+				enet_peer_disconnect_now(peer, 0);
 			if (client)
 				enet_host_destroy(client);
 		}
@@ -948,7 +948,7 @@ int aux_host_connect(
 clean:
 	if (!!r) {
 		if (nontimedout_peer)
-			enet_peer_disconnect_now(nontimedout_peer, NULL);
+			enet_peer_disconnect_now(nontimedout_peer, 0);
 		if (nontimedout_client)
 			enet_host_destroy(nontimedout_client);
 	}
@@ -972,12 +972,14 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	std::string BufferBlobs;
 	gs_packet_t GsPacketBlobOid;
 	gs_packet_t GsPacketBlob;
+	ENetPacket *PacketBlob = NULL;
+	ENetPacket *PacketBlobOid = NULL;
 	uint32_t Offset = 0;
 	uint32_t DataLengthLimit = 0;
 
 	git_oid BlobSelfUpdateOidT = {};
 
-	std::vector<git_oid> BlobSelfUpdateOidVec(1, {});
+	std::vector<git_oid> BlobSelfUpdateOidVec(1);
 	git_oid * const &BlobSelfUpdateOid = &BlobSelfUpdateOidVec.at(0);
 	GsStrided BlobSelfUpdateOidVecStrided = {};
 
@@ -1012,7 +1014,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlobOid)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &PacketBlobOid = *GsPacketBlobOid;
+	PacketBlobOid = *GsPacketBlobOid;
 
 	Offset = 0;
 
@@ -1044,7 +1046,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 	if (!!(r = aux_host_service_one_type_receive(host, GS_RECEIVE_TIMEOUT_MS, &GsPacketBlob)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &PacketBlob = *GsPacketBlob;
+	PacketBlob = *GsPacketBlob;
 
 	Offset = 0;
 
@@ -1114,7 +1116,7 @@ int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfU
 
 clean:
 	if (peer)
-		enet_peer_disconnect_now(peer, NULL);
+		enet_peer_disconnect_now(peer, 0);
 
 	if (host)
 		enet_host_destroy(host);
@@ -1249,7 +1251,7 @@ int aux_serv_host_service(ENetHost *server, const sp<ServWorkerData> &WorkerData
 			printf("[serv] A new client connected from %x:%u.\n",
 				Events[i].peer->address.host,
 				Events[i].peer->address.port);
-			Events[i].peer->data = "Client information";
+			Events[i].peer->data = (void *)"Client information";
 		}
 		break;
 
@@ -1485,7 +1487,7 @@ int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pa
 clean:
 	if (!!r) {
 		if (newpeer)
-			enet_peer_disconnect_now(newpeer, NULL);
+			enet_peer_disconnect_now(newpeer, 0);
 
 		if (newhost)
 			enet_host_destroy(newhost);
@@ -1619,6 +1621,7 @@ int clnt_state_2_noown(
 
 	std::string Buffer;
 	gs_packet_unique_t GsPacket;
+	ENetPacket *Packet = NULL;
 	uint32_t Offset = 0;
 
 	git_oid CommitHeadOidT = {};
@@ -1636,7 +1639,7 @@ int clnt_state_2_noown(
 	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacket)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &Packet = *GsPacket;
+	Packet = *GsPacket;
 
 	if (! Packet)
 		GS_ERR_CLEAN(1);
@@ -1674,6 +1677,7 @@ int clnt_state_3_noown(
 
 	std::string Buffer;
 	gs_packet_unique_t GsPacket;
+	ENetPacket *Packet = NULL;
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
@@ -1692,7 +1696,7 @@ int clnt_state_3_noown(
 	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacket)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &Packet = *GsPacket;
+	Packet = *GsPacket;
 
 	if (! Packet)
 		GS_ERR_CLEAN(1);
@@ -1728,6 +1732,8 @@ int clnt_state_4_noown(
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
+	ENetPacket *PacketTree = NULL;
+
 	GsStrided MissingTreelistStrided = {};
 
 	uint32_t BufferTreeLen = 0;
@@ -1749,7 +1755,7 @@ int clnt_state_4_noown(
 	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, oPacketTree)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &PacketTree = **oPacketTree;
+	PacketTree = **oPacketTree;
 
 	if (! PacketTree)
 		GS_ERR_CLEAN(1);
@@ -1793,6 +1799,8 @@ int clnt_state_5_noown(
 
 	std::string Buffer;
 	gs_packet_unique_t GsPacketBlob;
+	ENetPacket *PacketBlob = NULL;
+	ENetPacket *PacketTree = NULL;
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
@@ -1819,7 +1827,7 @@ int clnt_state_5_noown(
 	if (!!(r = aux_packet_request_dequeue_packet(WorkerDataRecv, &GsPacketBlob)))
 		GS_GOTO_CLEAN();
 
-	ENetPacket * const &PacketBlob = *GsPacketBlob;
+	PacketBlob = *GsPacketBlob;
 
 	if (! PacketBlob)
 		GS_ERR_CLEAN(1);
@@ -1847,7 +1855,7 @@ int clnt_state_5_noown(
 		GS_GOTO_CLEAN();
 	}
 
-	ENetPacket * const &PacketTree = *GsPacketTree;
+	PacketTree = *GsPacketTree;
 
 	// FIXME: using full size (PacketTree->dataLength) instead of LengthLimit of PacketTree (NOT of PacketBlob!)
 	if (!!(r = clnt_deserialize_trees(
@@ -2091,10 +2099,10 @@ int aux_full_create_connection_server(confmap_t ServKeyVal, sp<FullConnectionCli
 	{
 		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
 		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> ServAuxData(new ServAuxData);
+		sp<ServAuxData> DataAux(new ServAuxData);
 
-		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend));
-		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, ServAuxData));
+		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, DataAux, WorkerDataRecv, WorkerDataSend));
+		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, DataAux));
 		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, WorkerDataRecv, WorkerDataSend));
 
 		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ServerWorkerThread, ServerAuxThread, ServerThread));
@@ -2135,10 +2143,10 @@ int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionCli
 	{
 		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
 		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> ServAuxData(new ServAuxData);
+		sp<ServAuxData> DataAux(new ServAuxData);
 
-		sp<std::thread> ClientWorkerThread(new std::thread(clnt_worker_thread_func_f, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend, clnt, peer));
-		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, ServAuxData, AddressClnt));
+		sp<std::thread> ClientWorkerThread(new std::thread(clnt_worker_thread_func_f, ClntKeyVal, DataAux, WorkerDataRecv, WorkerDataSend, clnt, peer));
+		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, DataAux, AddressClnt));
 		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, WorkerDataRecv, WorkerDataSend, clnt));
 
 		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientWorkerThread, ClientAuxThread, ClientThread));

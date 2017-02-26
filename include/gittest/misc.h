@@ -9,6 +9,12 @@
 
 #include <gittest/log_defs.h>
 
+#if defined (_MSC_VER)
+#define GS_THREAD_LOCAL_DESIGNATOR __declspec( thread )
+#else
+#define GS_THREAD_LOCAL_DESIGNATOR __thread
+#endif
+
 //#define GS_DBG_CLEAN {}
 #define GS_DBG_CLEAN() { assert(0); }
 //#define GS_DBG_CLEAN { DebugBreak(); }
@@ -38,11 +44,11 @@ template<typename T>
 using sp = ::std::shared_ptr<T>;
 
 int gs_build_modified_filename(
-	char *BaseFileNameBuf, size_t LenBaseFileName,
-	char *ExpectedSuffix, size_t LenExpectedSuffix,
-	char *ExpectedExtension, size_t LenExpectedExtension,
-	char *ExtraSuffix, size_t LenExtraSuffix,
-	char *ExtraExtension, size_t LenExtraExtension,
+	const char *BaseFileNameBuf, size_t LenBaseFileName,
+	const char *ExpectedSuffix, size_t LenExpectedSuffix,
+	const char *ExpectedExtension, size_t LenExpectedExtension,
+	const char *ExtraSuffix, size_t LenExtraSuffix,
+	const char *ExtraExtension, size_t LenExtraExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
 
 #endif /* _GITTEST_MISC_H_ */
