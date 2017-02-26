@@ -6,7 +6,10 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 FIND_PACKAGE(LibGit2 REQUIRED)
 # dependency of LibGit2
-FIND_PACKAGE(ZLIB REQUIRED)
+#   if LibGit2 does not find ZLIB it will use bundled (happens on windows/MSVC)
+IF (NOT MSVC)
+  FIND_PACKAGE(ZLIB REQUIRED)
+ENDIF ()
 
 FIND_PACKAGE(ENet REQUIRED)
 
@@ -24,26 +27,41 @@ SET(GITTEST_LIBRARIES
   ${ZLIB_LIBRARIES}
 )
 
+SET(GITTEST_MISC_HEADERS
+  include/gittest/log_defs.h
+)
+
+SET(GITTEST_LIB_HEADERS
+  include/gittest/gittest.h
+  include/gittest/cbuf.h
+  include/gittest/log.h
+  include/gittest/misc.h
+)
 SET(GITTEST_LIB_SOURCES
   src/cbuf.cpp
   src/log.cpp
   src/misc.cpp
   src/main.cpp
 )
-
 SET(GITTEST_LIB_SOURCES_WIN
   src/log_win.cpp
 )
 
+SET(GITTEST_NET_HEADERS
+  include/gittest/frame.h
+  include/gittest/net.h
+)
 SET(GITTEST_NET_SOURCES
   src/frame.cpp
   src/net.cpp
 )
 
+SET(GITTEST_SELFUPDATE_HEADERS
+  include/gittest/gittest_selfupdate.h
+)
 SET(GITTEST_SELFUPDATE_SOURCES
   src/gittest_selfupdate.cpp
 )
-
 SET(GITTEST_SELFUPDATE_SOURCES_WIN
   src/gittest_selfupdate_win.cpp
 )
@@ -57,15 +75,19 @@ SET(GITTEST_CLNT_SOURCES
 )
 
 ADD_LIBRARY(gittest_lib STATIC
+  ${GITTEST_MISC_HEADERS}
+  ${GITTEST_LIB_HEADERS}
   ${GITTEST_LIB_SOURCES}
   ${GITTEST_LIB_SOURCES_WIN}
 )
 
 ADD_LIBRARY(gittest_net STATIC
+  ${GITTEST_NET_HEADERS}
   ${GITTEST_NET_SOURCES}
 )
 
 ADD_LIBRARY(gittest_selfupdate STATIC
+  ${GITTEST_SELFUPDATE_HEADERS}
   ${GITTEST_SELFUPDATE_SOURCES}
   ${GITTEST_SELFUPDATE_SOURCES_WIN}
 )
@@ -77,6 +99,15 @@ ADD_EXECUTABLE(gittest_serv
 ADD_EXECUTABLE(gittest_clnt
   ${GITTEST_CLNT_SOURCES}
 )
+
+SOURCE_GROUP("Header Files" FILES ${GITTEST_LIB_HEADERS})
+SOURCE_GROUP("Source Files" FILES ${GITTEST_LIB_SOURCES} ${GITTEST_LIB_SOURCES_WIN})
+SOURCE_GROUP("Header Files" FILES ${GITTEST_NET_HEADERS})
+SOURCE_GROUP("Source Files" FILES ${GITTEST_NET_SOURCES})
+SOURCE_GROUP("Header Files" FILES ${GITTEST_SELFUPDATE_HEADERS})
+SOURCE_GROUP("Source Files" FILES ${GITTEST_SELFUPDATE_SOURCES} ${GITTEST_SELFUPDATE_SOURCES_WIN})
+SOURCE_GROUP("Source Files" FILES ${GITTEST_SERV_SOURCES})
+SOURCE_GROUP("Source Files" FILES ${GITTEST_CLNT_SOURCES})
 
 TARGET_INCLUDE_DIRECTORIES(gittest_lib PUBLIC ${GITTEST_INCLUDE_DIRS})
 TARGET_INCLUDE_DIRECTORIES(gittest_net PUBLIC ${GITTEST_INCLUDE_DIRS})
@@ -95,6 +126,3 @@ INSTALL(DIRECTORY "data/"
     DESTINATION "data"
     PATTERN "marker.txt" EXCLUDE
 )
-
-SOURCE_GROUP("Header Files" REGULAR_EXPRESSION "include/gittest/*.h")
-SOURCE_GROUP("Source Files" REGULAR_EXPRESSION "src/*.cpp")
