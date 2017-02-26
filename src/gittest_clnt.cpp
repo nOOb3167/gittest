@@ -8,6 +8,7 @@
 
 #include <string>
 
+//#include <gittest/config_defs.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/net.h>
@@ -43,8 +44,13 @@ int startselfupdate(int argc, char **argv) {
 
 	uint32_t HaveUpdateShouldQuit = 0;
 
-	if (!!(r = aux_selfupdate_main(argc, argv, &HaveUpdateShouldQuit)))
+	if (!!(r = aux_selfupdate_main(
+		argc, argv,
+		GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB,
+		&HaveUpdateShouldQuit)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (HaveUpdateShouldQuit)
 		GS_ERR_NO_CLEAN(0);
@@ -116,8 +122,6 @@ int main(int argc, char **argv) {
 
 	if (!!(r = startselfupdate(argc, argv)))
 		GS_GOTO_CLEAN();
-
-	printf("dummy003\n");
 
 clean:
 	if (!!r) {

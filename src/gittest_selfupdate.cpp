@@ -84,7 +84,7 @@ clean:
 	return r;
 }
 
-int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit) {
+int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
 	uint32_t HaveUpdateShouldQuit = 0;
@@ -124,6 +124,11 @@ int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit) 
 			GS_GOTO_CLEAN();
 		}
 		GS_LOG(I, S, "chld end");
+	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_VERSUB) == 0) {
+		GS_LOG(I, S, "versub start");
+		if (argc != 3)
+			GS_ERR_CLEAN(1);
+		printf("%s\n", DefVerSub);
 	}
 
 noclean:

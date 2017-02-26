@@ -7,6 +7,7 @@
 #define GS_SELFUPDATE_ARG_UPDATEMODE "--gsselfupdate"
 #define GS_SELFUPDATE_ARG_MAIN "--xmain"
 #define GS_SELFUPDATE_ARG_CHILD "--xchild"
+#define GS_SELFUPDATE_ARG_VERSUB "--xversub"
 
 #define GS_STR_PARENT_EXPECTED_SUFFIX "gittest_clnt.exe"
 #define GS_STR_PARENT_EXPECTED_EXTENSION ".exe"
@@ -37,6 +38,6 @@ int aux_selfupdate_overwrite_parent(
 
 int aux_selfupdate_main_mode_main(uint32_t *oHaveUpdateShouldQuit);
 
-int aux_selfupdate_main(int argc, char **argv, uint32_t *oHaveUpdateShouldQuit);
+int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
 
 #endif /* _GITTEST_GITTEST_SELFUPDATE_H_ */
