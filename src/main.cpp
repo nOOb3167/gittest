@@ -235,29 +235,27 @@ int aux_oid_tree_blob_byname(git_repository *Repository, git_oid *TreeOid, const
 
 	git_tree *Tree = NULL;
 
+	const git_tree_entry *Entry = NULL;
+	git_otype EntryType = GIT_OBJ_BAD;
+	const git_oid *BlobOid = NULL;
+
 	if (!!(r = git_tree_lookup(&Tree, Repository, TreeOid)))
 		goto clean;
 
-	{
-		const git_tree_entry *Entry = git_tree_entry_byname(Tree, WantedBlobName);
+	Entry = git_tree_entry_byname(Tree, WantedBlobName);
 
-		if (! Entry)
-			{ r = 1; goto clean; }
+	if (! Entry)
+		{ r = 1; goto clean; }
 
-		{
-			const git_otype EntryType = git_tree_entry_type(Entry);
+	EntryType = git_tree_entry_type(Entry);
 
-			if (EntryType != GIT_OBJ_BLOB)
-				{ r = 1; goto clean; }
+	if (EntryType != GIT_OBJ_BLOB)
+		{ r = 1; goto clean; }
 
-			{
-				const git_oid *BlobOid = git_tree_entry_id(Entry);
+	BlobOid = git_tree_entry_id(Entry);
 
-				if (oBlobOid)
-					git_oid_cpy(oBlobOid, BlobOid);
-			}
-		}
-	}
+	if (oBlobOid)
+		git_oid_cpy(oBlobOid, BlobOid);
 
 clean:
 	if (Tree)
