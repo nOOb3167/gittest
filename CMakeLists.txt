@@ -1,4 +1,5 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
+# 3.4 for generator expressions ?
+CMAKE_MINIMUM_REQUIRED(VERSION 3.4)
 
 PROJECT (gittest)
 
@@ -120,6 +121,10 @@ SOURCE_GROUP("Source Files" FILES ${GITTEST_CLNT_SOURCES})
 
 INCLUDE_DIRECTORIES(${GITTEST_INCLUDE_DIRS})
 
+ADD_DEFINITIONS(
+  -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_CLEAN_HANDLING=GS_CONFIG_DEFS_NONE
+)
+
 TARGET_COMPILE_DEFINITIONS(gittest_clnt PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt")
 TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt_clone")
 
@@ -129,9 +134,20 @@ TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_lib gittest_net gittest_selfupd
 TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 
 INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup
-    LIBRARY DESTINATION "lib"
-    RUNTIME DESTINATION "bin"
-    ARCHIVE DESTINATION "lib"
+  LIBRARY DESTINATION "lib"
+  RUNTIME DESTINATION "bin"
+  ARCHIVE DESTINATION "lib"
+)
+
+# https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
+#   $<TARGET_PDB_FILE:tgt>
+
+INSTALL(FILES
+  "$<TARGET_PDB_FILE:gittest_serv>"
+  "$<TARGET_PDB_FILE:gittest_clnt>"
+  "$<TARGET_PDB_FILE:gittest_clnt_clone>"
+  "$<TARGET_PDB_FILE:gittest_repo_setup>"
+  DESTINATION "bin"
 )
 
 INSTALL(DIRECTORY "data/"

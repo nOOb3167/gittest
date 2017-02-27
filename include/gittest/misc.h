@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 
+#include <gittest/config_defs.h>
 #include <gittest/log_defs.h>
 
 #if defined (_MSC_VER)
@@ -15,9 +16,7 @@
 #define GS_THREAD_LOCAL_DESIGNATOR __thread
 #endif
 
-//#define GS_DBG_CLEAN {}
-#define GS_DBG_CLEAN() { assert(0); }
-//#define GS_DBG_CLEAN { DebugBreak(); }
+#define GS_DBG_CLEAN() GS_CONFIG_DEFS_MISC_GS_GOTO_CLEAN_HANDLING
 
 #define GS_DBG_LOG() GS_LOG(CLEAN, S, "CLEAN");
 
