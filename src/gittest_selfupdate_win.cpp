@@ -117,7 +117,7 @@ clean:
 
 int gs_build_current_executable_relative_filename(
 	const char *RelativeBuf, size_t LenRelativeBuf,
-	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf)
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombinedBuf)
 {
 	int r = 0;
 
@@ -146,6 +146,9 @@ int gs_build_current_executable_relative_filename(
 		GS_ERR_CLEAN(1);
 
 	strcpy(ioCombinedBuf, AppendedString.c_str());
+
+	if (oLenCombinedBuf)
+		*oLenCombinedBuf = AppendedString.size();
 
 clean:
 
