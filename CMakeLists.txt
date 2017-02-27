@@ -105,6 +105,10 @@ ADD_EXECUTABLE(gittest_clnt_clone
   ${GITTEST_CLNT_SOURCES}
 )
 
+ADD_EXECUTABLE(gittest_repo_setup
+  src/gittest_repo_setup.cpp
+)
+
 SOURCE_GROUP("Header Files" FILES ${GITTEST_LIB_HEADERS})
 SOURCE_GROUP("Source Files" FILES ${GITTEST_LIB_SOURCES} ${GITTEST_LIB_SOURCES_WIN})
 SOURCE_GROUP("Header Files" FILES ${GITTEST_NET_HEADERS})
@@ -122,8 +126,9 @@ TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLN
 TARGET_LINK_LIBRARIES(gittest_serv gittest_lib gittest_net ${GITTEST_LIBRARIES})
 TARGET_LINK_LIBRARIES(gittest_clnt gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 
-INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone
+INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup
     LIBRARY DESTINATION "lib"
     RUNTIME DESTINATION "bin"
     ARCHIVE DESTINATION "lib"

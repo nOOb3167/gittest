@@ -27,7 +27,6 @@ int gs_log_win_open_dump_file(
 
 struct GsLogCrashHandlerDumpData { uint32_t Tripwire; HANDLE hLogFile; size_t MaxWritePos; size_t CurrentWritePos; };
 int gs_log_crash_handler_dump_cb(void *ctx, const char *d, int64_t l);
-int gs_log_crash_handler_dump_global_log_list();
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo);
 

@@ -93,6 +93,7 @@ int gs_log_dump_construct_header_(
 	const char *PrefixBuf, size_t PrefixSize,
 	char *ioHeaderBuf, size_t HeaderSize, size_t *oLenHeader);
 
+int gs_log_crash_handler_dump_global_log_list();
 int gs_log_crash_handler_setup();
 
 
