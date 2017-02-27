@@ -16,7 +16,17 @@
 /* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
 #define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
 
+void gs_debug_break();
+
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelativeBuf,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf);
+
+int gs_build_current_executable_relative_filename_(
+	const char *RelativeBuf, size_t LenRelativeBuf,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf);
 
 int gs_build_child_filename(
 	const char *ParentFileNameBuf, size_t LenParentFileName,

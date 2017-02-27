@@ -142,13 +142,15 @@ INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup
 # https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
 #   $<TARGET_PDB_FILE:tgt>
 
-INSTALL(FILES
-  "$<TARGET_PDB_FILE:gittest_serv>"
-  "$<TARGET_PDB_FILE:gittest_clnt>"
-  "$<TARGET_PDB_FILE:gittest_clnt_clone>"
-  "$<TARGET_PDB_FILE:gittest_repo_setup>"
-  DESTINATION "bin"
-)
+IF (MSVC)
+    INSTALL(FILES
+      "$<TARGET_PDB_FILE:gittest_serv>"
+      "$<TARGET_PDB_FILE:gittest_clnt>"
+      "$<TARGET_PDB_FILE:gittest_clnt_clone>"
+      "$<TARGET_PDB_FILE:gittest_repo_setup>"
+      DESTINATION "bin"
+    )
+ENDIF ()
 
 INSTALL(DIRECTORY "data/"
     DESTINATION "data"

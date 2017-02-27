@@ -44,3 +44,7 @@ clean:
 
 	return r;
 }
+
+int gs_buf_ensure_haszero(const char *Buf, size_t BufSize) {
+	return !memchr(Buf, '\0', BufSize);
+}

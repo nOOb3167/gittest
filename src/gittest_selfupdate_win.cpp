@@ -14,7 +14,10 @@
 #include <cerrno>
 #include <cstring>
 
+#include <filesystem> // WARNING: NONSTANDARD (Win32)
+
 #include <windows.h>
+#include <shlwapi.h> // PathAppend
 
 #include <gittest/misc.h>
 
@@ -90,6 +93,11 @@ clean:
 	return r;
 }
 
+void gs_debug_break() {
+	assert(0);
+	DebugBreak();
+}
+
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName) {
 	int r = 0;
 
@@ -105,6 +113,101 @@ int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize,
 clean:
 
 	return r;
+}
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelativeBuf,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf)
+{
+	int r = 0;
+
+	size_t LenCurrentExecutable = 0;
+	char CurrentExecutableBuf[512] = {};
+
+	std::tr2::sys::path ExecutablePath;
+	std::tr2::sys::path ExecutableDirPath;
+	std::tr2::sys::path RelativePath;
+	std::tr2::sys::path AppendedPath;
+	std::string AppendedString;
+
+	if (!!(r = gs_get_current_executable_filename(CurrentExecutableBuf, sizeof CurrentExecutableBuf, &LenCurrentExecutable)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_buf_ensure_haszero(RelativeBuf, LenRelativeBuf + 1)))
+		GS_GOTO_CLEAN();
+
+	ExecutablePath = std::tr2::sys::path(CurrentExecutableBuf);
+	ExecutableDirPath = ExecutablePath.parent_path();
+	RelativePath = std::tr2::sys::path(RelativeBuf);
+	AppendedPath = (ExecutableDirPath / RelativePath);
+	AppendedString = AppendedPath.string();
+
+	if (AppendedString.size() >= CombinedBufSize)
+		GS_ERR_CLEAN(1);
+
+	strcpy(ioCombinedBuf, AppendedString.c_str());
+
+clean:
+
+	return r;
+}
+
+int gs_build_current_executable_relative_filename_(
+	const char *RelativeBuf, size_t LenRelativeBuf,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf)
+{
+	assert(0);
+	return 1;
+//	int r = 0;
+//
+//	size_t LenCurrentExecutable = 0;
+//	char CurrentExecutableBuf[512] = {};
+//	char CurrentExecutableDirBuf[512] = {};
+//	char AppendedBuf[512] = {};
+//
+//	char Drive[_MAX_DRIVE] = {};
+//	char Dir[_MAX_DIR] = {};
+//	char FName[_MAX_FNAME] = {};
+//	char Ext[_MAX_EXT] = {};
+//
+//	HRESULT hr = S_OK;
+//
+//	if (!!(r = gs_get_current_executable_filename(CurrentExecutableBuf, sizeof CurrentExecutableBuf, &LenCurrentExecutable)))
+//		GS_GOTO_CLEAN();
+//
+//	_splitpath(CurrentExecutableBuf, Drive, Dir, FName, Ext);
+//
+//	if (!!(r = _makepath_s(CurrentExecutableDirBuf, sizeof CurrentExecutableDirBuf, Drive, Dir, NULL, NULL)))
+//		GS_GOTO_CLEAN();
+//
+//	if (!!(r = gs_buf_ensure_haszero(CurrentExecutableDirBuf, sizeof CurrentExecutableDirBuf)))
+//		GS_GOTO_CLEAN();
+//
+//	assert(sizeof CurrentExecutableDirBuf != sizeof AppendedBuf);
+//
+//	memcpy(AppendedBuf, CurrentExecutableDirBuf, sizeof AppendedBuf);
+//
+//	if (LenRelativeBuf > MAX_PATH)
+//		GS_ERR_CLEAN(1);
+//
+//	if (! PathAppend(AppendedBuf, RelativeBuf))
+//		GS_ERR_CLEAN(1);
+//
+//	if (!!(r = gs_buf_ensure_haszero(AppendedBuf, sizeof AppendedBuf)))
+//		GS_GOTO_CLEAN();
+//
+//	if (CombinedBufSize < MAX_PATH)
+//		GS_ERR_CLEAN(1);
+//
+//	if (! PathCanonicalize(ioCombinedBuf, AppendedBuf))
+//		GS_ERR_CLEAN(1);
+//
+//	if (!!(r = gs_buf_ensure_haszero(ioCombinedBuf, CombinedBufSize)))
+//		GS_GOTO_CLEAN();
+//
+//clean:
+//
+//	return r;
 }
 
 int gs_build_child_command_line(

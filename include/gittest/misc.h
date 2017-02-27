@@ -16,6 +16,8 @@
 #define GS_THREAD_LOCAL_DESIGNATOR __thread
 #endif
 
+#define GS_DEBUG_BREAK gs_debug_break()
+
 #define GS_DBG_CLEAN() GS_CONFIG_DEFS_MISC_GS_GOTO_CLEAN_HANDLING
 
 #define GS_DBG_LOG() GS_LOG(CLEAN, S, "CLEAN");
@@ -49,5 +51,7 @@ int gs_build_modified_filename(
 	const char *ExtraSuffix, size_t LenExtraSuffix,
 	const char *ExtraExtension, size_t LenExtraExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
+
+int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 #endif /* _GITTEST_MISC_H_ */
