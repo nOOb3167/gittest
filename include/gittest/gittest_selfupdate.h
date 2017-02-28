@@ -18,6 +18,8 @@
 
 void gs_debug_break();
 
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
+
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
 
 int gs_build_current_executable_relative_filename(

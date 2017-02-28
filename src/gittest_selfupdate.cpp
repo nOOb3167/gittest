@@ -129,6 +129,9 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
 		printf("%s\n", DefVerSub);
+	} else {
+		GS_LOG(I, PF, "unrecognized argument [%.s]", argv[2]);
+		GS_ERR_CLEAN(1);
 	}
 
 noclean:

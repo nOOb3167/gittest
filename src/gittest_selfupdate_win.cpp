@@ -98,6 +98,22 @@ void gs_debug_break() {
 	DebugBreak();
 }
 
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
+	int r = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	/* https://blogs.msdn.microsoft.com/oldnewthing/20071023-00/?p=24713/ */
+	/* INVALID_FILE_ATTRIBUTES if file does not exist, apparently */
+	if (INVALID_FILE_ATTRIBUTES == GetFileAttributes(FileNameBuf))
+		GS_ERR_CLEAN(1);
+
+clean:
+
+	return r;
+}
+
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName) {
 	int r = 0;
 
