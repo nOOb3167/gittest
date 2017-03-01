@@ -9,12 +9,14 @@
 
 #include <string>
 
+#include <gittest/misc.h>
+#include <gittest/gittest.h>
 #include <gittest/net.h>
 #include <gittest/log.h>
 
 #include <gittest/gittest_selfupdate.h>
 
-int aux_selfupdate_main_mode_main(uint32_t *oHaveUpdateShouldQuit) {
+int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
 	size_t LenFileNameCurrent = 0;
@@ -84,6 +86,24 @@ clean:
 	return r;
 }
 
+int aux_selfupdate_main_mode_main() {
+	int r = 0;
+
+	confmap_t KeyVal;
+
+	sp<FullConnectionClient> FcsClnt;
+
+	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_full_create_connection_client(KeyVal, &FcsClnt)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
@@ -100,13 +120,13 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 	if (argc < 3)
 		GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
 
-	if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0) {
-		GS_LOG(I, S, "main start");
+	if (strcmp(argv[2], GS_SELFUPDATE_ARG_PARENT) == 0) {
+		GS_LOG(I, S, "parent start");
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
-		if (!!(r = aux_selfupdate_main_mode_main(&HaveUpdateShouldQuit)))
+		if (!!(r = aux_selfupdate_main_mode_parent(&HaveUpdateShouldQuit)))
 			GS_GOTO_CLEAN();
-		GS_LOG(I, PF, "main end [HaveUpdateShouldQuit = %d]", (int)HaveUpdateShouldQuit);
+		GS_LOG(I, PF, "parent end [HaveUpdateShouldQuit = %d]", (int)HaveUpdateShouldQuit);
 		if (HaveUpdateShouldQuit)
 			GS_ERR_NO_CLEAN(0);
 	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_CHILD) == 0) {
@@ -124,6 +144,12 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 			GS_GOTO_CLEAN();
 		}
 		GS_LOG(I, S, "chld end");
+	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0) {
+		GS_LOG(I, S, "main start");
+		if (argc != 3)
+			GS_ERR_CLEAN(1);
+		if (!!(r = aux_selfupdate_main_mode_main()))
+			GS_GOTO_CLEAN();
 	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_VERSUB) == 0) {
 		GS_LOG(I, S, "versub start");
 		if (argc != 3)

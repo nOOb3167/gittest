@@ -5,8 +5,9 @@
 #include <cstdint>
 
 #define GS_SELFUPDATE_ARG_UPDATEMODE "--gsselfupdate"
-#define GS_SELFUPDATE_ARG_MAIN "--xmain"
+#define GS_SELFUPDATE_ARG_PARENT "--xparent"
 #define GS_SELFUPDATE_ARG_CHILD "--xchild"
+#define GS_SELFUPDATE_ARG_MAIN "--xmain"
 #define GS_SELFUPDATE_ARG_VERSUB "--xversub"
 
 #define GS_STR_PARENT_EXPECTED_SUFFIX "gittest_clnt.exe"
@@ -48,7 +49,12 @@ int aux_selfupdate_overwrite_parent(
 	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
 	const char *ArgvChildFileName, size_t ArgvChildFileNameSize);
 
-int aux_selfupdate_main_mode_main(uint32_t *oHaveUpdateShouldQuit);
+int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
+int aux_selfupdate_main_mode_child(
+	const char *ArgvHandleSerialized, size_t ArgvHandleSerializedSize,
+	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
+	const char *ArgvChildFileName, size_t ArgvChildFileNameSize);
+int aux_selfupdate_main_mode_main();
 
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
 
