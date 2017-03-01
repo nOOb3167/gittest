@@ -939,12 +939,12 @@ clean:
 	return r;
 }
 
-int stuff(const confmap_t &KeyVal) {
+int stuff(
+	const char *RefName, size_t LenRefName,
+	const char *RepoOpenPath, size_t LenRepoOpenPath,
+	const char *RepoTOpenPath, size_t LenRepoTOpenPath)
+{
 	int r = 0;
-
-	const char *ConfRefName = aux_config_key(KeyVal, "RefName");
-	const char *ConfRepoDiscoverPath = aux_config_key(KeyVal, "ConfRepoDiscoverPath");
-	const char *ConfRepoTOpenPath = aux_config_key(KeyVal, "ConfRepoTOpenPath");
 
 	git_buf RepoPath = {};
 	git_repository *Repository = NULL;
@@ -971,19 +971,16 @@ int stuff(const confmap_t &KeyVal) {
 	git_oid LastReverseToposortAkaFirstToposort = {};
 	git_oid CreatedCommitOid = {};
 
-	if (!ConfRefName || !ConfRepoDiscoverPath || !ConfRepoTOpenPath)
-		{ r = 1; goto clean; }
-
-	if (!!(r = aux_repository_discover_open(ConfRepoDiscoverPath, &Repository)))
+	if (!!(r = aux_repository_open(RepoOpenPath, &Repository)))
 		goto clean;
 
-	if (!!(r = aux_repository_open(ConfRepoTOpenPath, &RepositoryT)))
+	if (!!(r = aux_repository_open(RepoTOpenPath, &RepositoryT)))
 		goto clean;
 
-	if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName, &CommitHeadOid, &TreeHeadOid)))
+	if (!!(r = serv_latest_commit_tree_oid(Repository, RefName, &CommitHeadOid, &TreeHeadOid)))
 		goto clean;
 
-	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, ConfRefName, &CommitHeadOidT, &TreeHeadOidT)))
+	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, RefName, &CommitHeadOidT, &TreeHeadOidT)))
 		goto clean;
 
 	if (git_oid_cmp(&TreeHeadOidT, &TreeHeadOid) == 0) {
@@ -1028,7 +1025,7 @@ int stuff(const confmap_t &KeyVal) {
 	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
 	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
 		goto clean;
-	if (!!(r = clnt_commit_setref(RepositoryT, ConfRefName, &CreatedCommitOid)))
+	if (!!(r = clnt_commit_setref(RepositoryT, RefName, &CreatedCommitOid)))
 		goto clean;
 
 clean:
@@ -1045,14 +1042,32 @@ int gittest_main(int argc, char **argv) {
 
 	confmap_t KeyVal;
 
+	std::string ConfRefName;
+	std::string ConfRepoOpenPath;
+	std::string ConfRepoTOpenPath;
+
 	if (!!(r = aux_gittest_init()))
 		goto clean;
 
 	if (!!(r = aux_config_read("../data/", "gittest_config.conf", &KeyVal)))
 		goto clean;
 
-	if (!!(r = stuff(KeyVal)))
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameDUMMYINEXISTENT", &ConfRefName)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoOpenPathDUMMYINEXISTENT", &ConfRepoOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoTOpenPathTDUMMYINEXISTENT", &ConfRepoTOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = stuff(
+		ConfRefName.c_str(), ConfRefName.size(),
+		ConfRepoOpenPath.c_str(), ConfRepoOpenPath.size(),
+		ConfRepoTOpenPath.c_str(), ConfRepoTOpenPath.size())))
+	{
 		goto clean;
+	}
 
 clean:
 	if (!!r)

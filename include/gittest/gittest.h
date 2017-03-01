@@ -89,7 +89,10 @@ int clnt_commit_setref(git_repository *RepositoryT, const char *RefName, git_oid
 int aux_repository_open(const char *RepoOpenPath, git_repository **oRepository);
 int aux_repository_discover_open(const char *RepoDiscoverPath, git_repository **oRepository);
 
-int stuff(const confmap_t &KeyVal);
+int stuff(
+	const char *RefName, size_t LenRefName,
+	const char *RepoOpenPath, size_t LenRepoOpenPath,
+	const char *RepoTOpenPath, size_t LenRepoTOpenPath);
 int gittest_main(int argc, char **argv);
 
 #endif /* _GITTEST_GITTEST_H_ */

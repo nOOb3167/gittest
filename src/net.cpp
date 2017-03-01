@@ -303,35 +303,25 @@ clean:
 	return r;
 }
 
-int serv_worker_thread_func(const confmap_t &ServKeyVal,
-	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend)
+int serv_worker_thread_func(
+	const confmap_t &ServKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
 
 	git_repository *Repository = NULL;
 	git_repository *RepositorySelfUpdate = NULL;
 
-	std::string ConfRefName;
-	std::string ConfRefNameSelfUpdate;
-	std::string ConfRepoOpenPath;
-	std::string ConfRepoSelfUpdateOpenPath;
-
-	if (!!(r = aux_config_key_ex(ServKeyVal, "RefName", &ConfRefName)))
+	if (!!(r = aux_repository_open(RepoMainOpenPathBuf, &Repository)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(ServKeyVal, "RefNameSelfUpdate", &ConfRefNameSelfUpdate)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoOpenPath", &ConfRepoOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(ServKeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_repository_open(ConfRepoOpenPath.c_str(), &Repository)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_repository_open(ConfRepoSelfUpdateOpenPath.c_str(), &RepositorySelfUpdate)))
+	if (!!(r = aux_repository_open(RepoSelfUpdateOpenPathBuf, &RepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -366,7 +356,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(Repository, ConfRefName.c_str(), &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
@@ -491,7 +481,7 @@ int serv_worker_thread_func(const confmap_t &ServKeyVal,
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, ConfRefNameSelfUpdate.c_str(), &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, RefNameSelfUpdateBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
@@ -529,9 +519,15 @@ clean:
 	return r;
 }
 
-int clnt_worker_thread_func(const confmap_t &ClntKeyVal,
-	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend,
-	ENetHost *clnt, ENetPeer *peer)
+int clnt_worker_thread_func(
+	const confmap_t &ClntKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	ENetHost *clnt,
+	ENetPeer *peer)
 {
 	int r = 0;
 
@@ -544,8 +540,14 @@ int clnt_worker_thread_func(const confmap_t &ClntKeyVal,
 		GS_GOTO_CLEAN();
 
 	while (true) {
-		if (!!(r = clnt_state_crank(State, ClntKeyVal,
-			ServAuxData, WorkerDataRecv.get(), WorkerDataSend.get(),
+		if (!!(r = clnt_state_crank(
+			State,
+			ClntKeyVal,
+			RefNameMainBuf, LenRefNameMain,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			ServAuxData,
+			WorkerDataRecv.get(),
+			WorkerDataSend.get(),
 			RequestForSend.get())))
 		{
 			GS_GOTO_CLEAN();
@@ -1208,15 +1210,16 @@ clean:
 	return r;
 }
 
-int serv_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
+int serv_serv_aux_thread_func(
+	const confmap_t &ServKeyVal,
+	uint32_t ServPort,
+	sp<ServAuxData> ServAuxData)
+{
 	int r = 0;
 
-	uint32_t ServPort = 0;
+	// FIXME: 127.0.0.1 hardcoded
 	uint32_t ServHostIp = ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24);
 	ENetAddress address = {};
-
-	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
-		GS_GOTO_CLEAN();
 
 	assert(ServHostIp == ENET_HOST_TO_NET_32(1 | 0 << 8 | 0 << 16 | 0x7F << 24));
 
@@ -1343,15 +1346,15 @@ clean:
 	return r;
 }
 
-int serv_serv_thread_func(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
+int serv_serv_thread_func(
+	const confmap_t &ServKeyVal,
+	uint32_t ServPort,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend)
+{
 	int r = 0;
 
 	ENetHost *server = NULL;
-
-	uint32_t ServPort = 0;
-
-	if (!!(r = aux_config_key_uint32(ServKeyVal, "ConfServPort", &ServPort)))
-		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_enet_host_create_serv(ServPort, &server)))
 		GS_GOTO_CLEAN();
@@ -1457,6 +1460,7 @@ clean:
 	return r;
 }
 
+/* FIXME: presumably unused - refactor */
 int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pair_t> *ioConnection) {
 	int r = 0;
 
@@ -1497,8 +1501,13 @@ clean:
 }
 
 int clnt_state_crank(
-	const sp<ClntState> &State, const confmap_t &ClntKeyVal,
-	const sp<ServAuxData> &ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	const sp<ClntState> &State,
+	const confmap_t &ClntKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const sp<ServAuxData> &ServAuxData,
+	ServWorkerData *WorkerDataRecv,
+	ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend)
 {
 	int r = 0;
@@ -1511,8 +1520,14 @@ int clnt_state_crank(
 	switch (Code) {
 	case 0:
 	{
-		if (!!(r = clnt_state_0_setup(State, ClntKeyVal, ServAuxData)))
+		if (!!(r = clnt_state_0_setup(
+			State,
+			ClntKeyVal,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			ServAuxData)))
+		{
 			GS_GOTO_CLEAN();
+		}
 	}
 	break;
 
@@ -1526,8 +1541,14 @@ int clnt_state_crank(
 
 	case 2:
 	{
-		if (!!(r = clnt_state_2_setup(State, ClntKeyVal,
-			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
+		if (!!(r = clnt_state_2_setup(
+			State,
+			ClntKeyVal,
+			RefNameMainBuf, LenRefNameMain,
+			ServAuxData.get(),
+			WorkerDataRecv,
+			WorkerDataSend,
+			RequestForSend)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -1600,10 +1621,13 @@ int clnt_state_crank_reconnecter(
 	//	return r;
 }
 
-int clnt_state_0_noown(const char *ConfRepoTOpenPath, git_repository **oRepositoryT) {
+int clnt_state_0_noown(
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	git_repository **oRepositoryT)
+{
 	int r = 0;
 
-	if (!!(r = aux_repository_open(ConfRepoTOpenPath, oRepositoryT)))
+	if (!!(r = aux_repository_open(RepoMainOpenPathBuf, oRepositoryT)))
 		GS_GOTO_CLEAN();
 
 clean:
@@ -1612,8 +1636,11 @@ clean:
 }
 
 int clnt_state_2_noown(
-	const char *ConfRefName, git_repository *RepositoryT,
-	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	git_repository *RepositoryT,
+	ServAuxData *ServAuxData,
+	ServWorkerData *WorkerDataRecv,
+	ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	git_oid *oTreeHeadOid)
 {
@@ -1653,7 +1680,7 @@ int clnt_state_2_noown(
 	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, oTreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, ConfRefName, &CommitHeadOidT, &TreeHeadOidT)))
+	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, RefNameMainBuf, &CommitHeadOidT, &TreeHeadOidT)))
 		GS_GOTO_CLEAN();
 
 	if (git_oid_cmp(&TreeHeadOidT, oTreeHeadOid) == 0) {
@@ -1872,18 +1899,22 @@ clean:
 	return r;
 }
 
-int clnt_state_0_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData) {
+int clnt_state_0_setup(
+	const sp<ClntState> &State,
+	const confmap_t &ClntKeyVal,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const sp<ServAuxData> &ServAuxData)
+{
 	int r = 0;
 
 	sp<git_repository *> RepositoryT(new git_repository *);
 
-	std::string ConfRepoTOpenPath;
-
-	if (!!(r = aux_config_key_ex(ClntKeyVal, "ConfRepoTOpenPath", &ConfRepoTOpenPath)))
+	if (!!(r = clnt_state_0_noown(
+		RepoMainOpenPathBuf, LenRepoMainOpenPath,
+		RepositoryT.get())))
+	{
 		GS_GOTO_CLEAN();
-
-	if (!!(r = clnt_state_0_noown(ConfRepoTOpenPath.c_str(), RepositoryT.get())))
-		GS_GOTO_CLEAN();
+	}
 
 	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
 		{ a.mRepositoryT = RepositoryT; });
@@ -1908,16 +1939,20 @@ clean:
 	return r;
 }
 
-int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
-	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
+int clnt_state_2_setup(
+	const sp<ClntState> &State,
+	const confmap_t &ClntKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	ServAuxData *ServAuxData,
+	ServWorkerData *WorkerDataRecv,
+	ServWorkerData *WorkerDataSend,
+	ServWorkerRequestData *RequestForSend)
 {
 	int r = 0;
 
 	sp<git_oid> TreeHeadOid(new git_oid);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
-
-	std::string ConfRefName;
 
 	std::string Buffer;
 	gs_packet_t Packet;
@@ -1926,12 +1961,13 @@ int clnt_state_2_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
-	if (!!(r = aux_config_key_ex(ClntKeyVal, "RefName", &ConfRefName)))
-		GS_GOTO_CLEAN();
-
 	if (!!(r = clnt_state_2_noown(
-		ConfRefName.c_str(), RepositoryT,
-		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
+		RefNameMainBuf, LenRefNameMain,
+		RepositoryT,
+		ServAuxData,
+		WorkerDataRecv,
+		WorkerDataSend,
+		RequestForSend,
 		TreeHeadOid.get())))
 	{
 		GS_GOTO_CLEAN();
@@ -2046,52 +2082,104 @@ clean:
 	return r;
 }
 
-void serv_worker_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
-	int r = 0;
-	if (!!(r = serv_worker_thread_func(ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend)))
-		assert(0);
-	for (;;) {}
-}
-
-void serv_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData) {
-	int r = 0;
-	if (!!(r = serv_serv_aux_thread_func(ServKeyVal, ServAuxData)))
-		assert(0);
-	for (;;) {}
-}
-
-void serv_thread_func_f(const confmap_t &ServKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend) {
-	int r = 0;
-	if (!!(r = serv_serv_thread_func(ServKeyVal, WorkerDataRecv, WorkerDataSend)))
-		assert(0);
-	for (;;) {}
-}
-
-void clnt_worker_thread_func_f(const confmap_t &ServKeyVal,
-	sp<ServAuxData> ServAuxData, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend,
-	ENetHost *clnt, ENetPeer *peer)
+void serv_worker_thread_func_f(
+	const confmap_t &ServKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
-	if (!!(r = clnt_worker_thread_func(ServKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend, clnt, peer)))
+	if (!!(r = serv_worker_thread_func(
+		ServKeyVal,
+		RefNameMainBuf, LenRefNameMain,
+		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+		RepoMainOpenPathBuf, LenRepoMainOpenPath,
+		RepoSelfUpdateOpenPathBuf, LenRepoSelfUpdateOpenPath,
+		ServAuxData,
+		WorkerDataRecv,
+		WorkerDataSend)))
+	{
 		assert(0);
-	for (;;) {}
+	}
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+}
+
+void serv_serv_aux_thread_func_f(
+	const confmap_t &ServKeyVal,
+	uint32_t ServPort,
+	sp<ServAuxData> ServAuxData)
+{
+	int r = 0;
+	if (!!(r = serv_serv_aux_thread_func(ServKeyVal, ServPort, ServAuxData)))
+		assert(0);
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+}
+
+void serv_thread_func_f(
+	const confmap_t &ServKeyVal,
+	uint32_t ServPort,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend)
+{
+	int r = 0;
+	if (!!(r = serv_serv_thread_func(ServKeyVal, ServPort, WorkerDataRecv, WorkerDataSend)))
+		assert(0);
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+}
+
+void clnt_worker_thread_func_f(
+	const confmap_t &ServKeyVal,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	ENetHost *clnt,
+	ENetPeer *peer)
+{
+	int r = 0;
+	if (!!(r = clnt_worker_thread_func(
+		ServKeyVal,
+		RefNameMainBuf, LenRefNameMain,
+		RepoMainOpenPathBuf, LenRepoMainOpenPath,
+		ServAuxData,
+		WorkerDataRecv,
+		WorkerDataSend,
+		clnt,
+		peer)))
+	{
+		assert(0);
+	}
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
 void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */) {
 	int r = 0;
 	if (!!(r = aux_serv_aux_thread_func(ServKeyVal, ServAuxData, address)))
 		assert(0);
-	for (;;) {}
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
 void clnt_thread_func_f(const confmap_t &ClntKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host) {
 	int r = 0;
 	if (!!(r = clnt_serv_thread_func(ClntKeyVal, WorkerDataRecv, WorkerDataSend, host)))
 		assert(0);
-	for (;;) {}
+	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
-int aux_full_create_connection_server(confmap_t ServKeyVal, sp<FullConnectionClient> *oConnectionClient) {
+int aux_full_create_connection_server(
+	confmap_t ServKeyVal,
+	uint32_t ServPort,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<FullConnectionClient> *oConnectionClient)
+{
 	int r = 0;
 
 	sp<FullConnectionClient> ConnectionClient;
@@ -2101,9 +2189,27 @@ int aux_full_create_connection_server(confmap_t ServKeyVal, sp<FullConnectionCli
 		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
 		sp<ServAuxData> DataAux(new ServAuxData);
 
-		sp<std::thread> ServerWorkerThread(new std::thread(serv_worker_thread_func_f, ServKeyVal, DataAux, WorkerDataRecv, WorkerDataSend));
-		sp<std::thread> ServerAuxThread(new std::thread(serv_serv_aux_thread_func_f, ServKeyVal, DataAux));
-		sp<std::thread> ServerThread(new std::thread(serv_thread_func_f, ServKeyVal, WorkerDataRecv, WorkerDataSend));
+		sp<std::thread> ServerWorkerThread(new std::thread(
+			serv_worker_thread_func_f,
+			ServKeyVal,
+			RefNameMainBuf, LenRefNameMain,
+			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			RepoSelfUpdateOpenPathBuf, LenRepoSelfUpdateOpenPath,
+			DataAux,
+			WorkerDataRecv,
+			WorkerDataSend));
+		sp<std::thread> ServerAuxThread(new std::thread(
+			serv_serv_aux_thread_func_f,
+			ServKeyVal,
+			ServPort,
+			DataAux));
+		sp<std::thread> ServerThread(new std::thread(
+			serv_thread_func_f,
+			ServKeyVal,
+			ServPort,
+			WorkerDataRecv,
+			WorkerDataSend));
 
 		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ServerWorkerThread, ServerAuxThread, ServerThread));
 	}
@@ -2116,25 +2222,27 @@ clean:
 	return r;
 }
 
-int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionClient> *oConnectionClient) {
+int aux_full_create_connection_client(
+	confmap_t ClntKeyVal,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	sp<FullConnectionClient> *oConnectionClient)
+{
 	int r = 0;
 
 	sp<FullConnectionClient> ConnectionClient;
-
-	uint32_t ServPort = 0;
 
 	ENetHost *clnt = NULL;
 	ENetAddress AddressClnt = {};
 	ENetAddress AddressServ = {};
 	ENetPeer *peer = NULL;
 
-	if (!!(r = aux_config_key_uint32(ClntKeyVal, "ConfServPort", &ServPort)))
-		GS_GOTO_CLEAN();
-
 	if (!!(r = aux_enet_host_client_create_addr(&clnt, &AddressClnt)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_enet_address_create_hostname(ServPort, "localhost", &AddressServ)))
+	if (!!(r = aux_enet_address_create_hostname(ServPort, ServHostNameBuf, &AddressServ)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_enet_host_connect_addr(clnt, &AddressServ, &peer)))
@@ -2145,7 +2253,16 @@ int aux_full_create_connection_client(confmap_t ClntKeyVal, sp<FullConnectionCli
 		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
 		sp<ServAuxData> DataAux(new ServAuxData);
 
-		sp<std::thread> ClientWorkerThread(new std::thread(clnt_worker_thread_func_f, ClntKeyVal, DataAux, WorkerDataRecv, WorkerDataSend, clnt, peer));
+		sp<std::thread> ClientWorkerThread(new std::thread(
+			clnt_worker_thread_func_f,
+			ClntKeyVal,
+			RefNameMainBuf, LenRefNameMain,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			DataAux,
+			WorkerDataRecv,
+			WorkerDataSend,
+			clnt,
+			peer));
 		sp<std::thread> ClientAuxThread(new std::thread(clnt_serv_aux_thread_func_f, ClntKeyVal, DataAux, AddressClnt));
 		sp<std::thread> ClientThread(new std::thread(clnt_thread_func_f, ClntKeyVal, WorkerDataRecv, WorkerDataSend, clnt));
 
@@ -2163,21 +2280,61 @@ clean:
 int stuff2() {
 	int r = 0;
 
-	confmap_t ServKeyVal;
-	confmap_t ClntKeyVal;
+	confmap_t KeyVal;
+
+	std::string ConfServHostName;
+	uint32_t ConfServPort = 0;
+	std::string ConfRefNameSelfUpdate;
+	std::string ConfRefNameMain;
+	std::string ConfRepoMainOpenPath;
+	std::string ConfRepoSelfUpdateOpenPath;
 
 	sp<FullConnectionClient> FcsServ;
 	sp<FullConnectionClient> FcsClnt;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &ServKeyVal)))
-		GS_GOTO_CLEAN();
-	ClntKeyVal = ServKeyVal;
-
-	if (!!(r = aux_full_create_connection_server(ServKeyVal, &FcsServ)))
+	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_full_create_connection_client(ServKeyVal, &FcsClnt)))
+	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
 		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfServHostName", &ConfServHostName)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainOpenPath", &ConfRepoMainOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_full_create_connection_server(
+		KeyVal,
+		ConfServPort,
+		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
+		ConfRefNameSelfUpdate.c_str(), ConfRefNameSelfUpdate.size(),
+		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		ConfRepoSelfUpdateOpenPath.c_str(), ConfRepoSelfUpdateOpenPath.size(),
+		&FcsServ)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_full_create_connection_client(
+		KeyVal,
+		ConfServPort,
+		ConfServHostName.c_str(), ConfServHostName.size(),
+		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
+		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		&FcsClnt)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	for (;;)
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));

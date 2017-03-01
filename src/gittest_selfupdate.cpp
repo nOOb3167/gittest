@@ -91,13 +91,46 @@ int aux_selfupdate_main_mode_main() {
 
 	confmap_t KeyVal;
 
+	std::string ConfServHostName;
+	uint32_t ConfServPort = 0;
+	std::string ConfRefNameSelfUpdate;
+	std::string ConfRefNameMain;
+	std::string ConfRepoMainOpenPath;
+	std::string ConfRepoSelfUpdateOpenPath;
+
 	sp<FullConnectionClient> FcsClnt;
 
 	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_full_create_connection_client(KeyVal, &FcsClnt)))
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfServHostName", &ConfServHostName)))
 		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainOpenPath", &ConfRepoMainOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_full_create_connection_client(
+		KeyVal,
+		ConfServPort,
+		ConfServHostName.c_str(), ConfServHostName.size(),
+		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
+		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		&FcsClnt)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 clean:
 
