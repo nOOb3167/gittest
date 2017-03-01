@@ -6,6 +6,7 @@
 #include <filesystem>  // FIXME: NONSTANDARD
 
 #include <git2.h>
+#include <git2/sys/memes.h>
 
 #include <gittest/misc.h>
 #include <gittest/log.h>
@@ -14,6 +15,7 @@
 
 #define GS_REPO_SETUP_ARG_UPDATEMODE            "--gsreposetup"
 #define GS_REPO_SETUP_ARG_COMMIT_SELFUPDATE     "--xcommit_selfupdate"
+#define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
@@ -22,7 +24,7 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath) {
 
 	git_repository *Repository = NULL;
 	int errR = 0;
-	int InitFlags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
+	int InitFlags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR | GIT_REPOSITORY_INIT_BARE;
 	git_repository_init_options InitOptions = GIT_REPOSITORY_INIT_OPTIONS_INIT;
 	
 	assert(InitOptions.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
@@ -143,9 +145,85 @@ clean:
 	return r;
 }
 
+int gs_repo_setup_main_mode_commit_main(
+	const char *RepoPathBuf, size_t LenRepoPath,
+	const char *RefNameMain, size_t LenRefNameMain,
+	const char *DirectoryFileNameBuf, size_t LenDirectoryFileName)
+{
+	int r = 0;
+
+	git_repository *Repository = NULL;
+	const char *OldWorkDir = NULL;
+	git_index *Index = NULL;
+	
+	const char *PathSpecAllC = "*";
+	const char **ArrPathSpecAllC = &PathSpecAllC;
+	git_strarray PathSpecAll = {};
+	PathSpecAll.count = 1;
+	PathSpecAll.strings = (char **)ArrPathSpecAllC;
+
+	git_oid TreeOid = {};
+	git_oid CommitOid = {};
+
+	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "better way to commit a directory once libgit2 multiple worktree support lands");
+
+	OldWorkDir = git_repository_workdir(Repository);
+
+	GS_LOG(I, PF, "old workdir [%s]", OldWorkDir ? OldWorkDir : "(bare)");
+
+	// FIXME: consider git_repository_state_cleanup
+	// FIXME: consider setting an in-memory index, all all entries, then updating the main index
+
+	if (!!(r = git_repository_set_workdir(Repository, DirectoryFileNameBuf, 0)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "updating index");
+
+	// FIXME: it would be nice to use an in-memory index - but git_index_add_all is a filesystem operation
+	if (!!(r = git_repository_index(&Index, Repository)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_index_clear(Index)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_index_add_all(Index, &PathSpecAll, GIT_INDEX_ADD_FORCE, NULL, NULL)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "creating tree");
+
+	if (!!(r = git_index_write_tree_to(&TreeOid, Index, Repository)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "creating commit");
+
+	if (!!(r = clnt_commit_ensure_dummy(Repository, &TreeOid, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, PF, "updating ref [%.*s]", LenRefNameMain, RefNameMain);
+
+	if (!!(r = clnt_commit_setref(Repository, RefNameMain, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+clean:
+	if (Index)
+		git_index_free(Index);
+
+	if (Repository)
+		git_repository_free(Repository);
+
+	return r;
+}
+
 int gs_repo_setup_main(int argc, char **argv,
 	const char *ConfRepoRelativePathBuf, size_t LenConfRepoRelativePath,
-	const char *ConfRefNameSelfUpdateBuf, size_t LenConfRefNameSelfUpdate)
+	const char *ConfRefNameSelfUpdateBuf, size_t LenConfRefNameSelfUpdate,
+	const char *ConfRefNameMainBuf, size_t LenConfRefNameMain)
 {
 	int r = 0;
 
@@ -182,6 +260,18 @@ int gs_repo_setup_main(int argc, char **argv,
 		{
 			GS_GOTO_CLEAN();
 		}
+	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_COMMIT_MAIN) == 0) {
+		GS_LOG(I, S, "commit_main start");
+		if (argc != 4)
+			GS_ERR_CLEAN(1);
+		const size_t LenArgvDirectoryFileName = strlen(argv[3]);
+		if (!!(r = gs_repo_setup_main_mode_commit_main(
+			ConfRepoRelativePathBuf, LenConfRepoRelativePath,
+			ConfRefNameMainBuf, LenConfRefNameMain,
+			argv[3], LenArgvDirectoryFileName)))
+		{
+			GS_GOTO_CLEAN();
+		}
 	} else {
 		GS_LOG(I, PF, "unrecognized argument [%.s]", argv[2]);
 		GS_ERR_CLEAN(1);
@@ -200,6 +290,7 @@ int main(int argc, char **argv) {
 	confmap_t KeyVal;
 	std::string RepoRelativePath;
 	std::string RefNameSelfUpdate;
+	std::string RefNameMain;
 
 	if (!!(r = aux_gittest_init()))
 		GS_GOTO_CLEAN();
@@ -218,13 +309,17 @@ int main(int argc, char **argv) {
 	if (!!(r = aux_config_key_ex(KeyVal, "RefNameSelfUpdate", &RefNameSelfUpdate)))
 		GS_GOTO_CLEAN();
 
+	if (!!(r = aux_config_key_ex(KeyVal, "RefNameMain", &RefNameMain)))
+		GS_GOTO_CLEAN();
+
 	{
 		log_guard_t log(GS_LOG_GET("repo_setup"));
 	
 		if (!!(r = gs_repo_setup_main(
 			argc, argv,
 			RepoRelativePath.c_str(), RepoRelativePath.size(),
-			RefNameSelfUpdate.c_str(), RefNameSelfUpdate.size())))
+			RefNameSelfUpdate.c_str(), RefNameSelfUpdate.size(),
+			RefNameMain.c_str(), RefNameMain.size())))
 		{
 			GS_GOTO_CLEAN();
 		}
