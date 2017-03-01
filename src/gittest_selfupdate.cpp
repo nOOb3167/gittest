@@ -96,7 +96,6 @@ int aux_selfupdate_main_mode_main() {
 	std::string ConfRefNameSelfUpdate;
 	std::string ConfRefNameMain;
 	std::string ConfRepoMainOpenPath;
-	std::string ConfRepoSelfUpdateOpenPath;
 
 	sp<FullConnectionClient> FcsClnt;
 
@@ -116,9 +115,6 @@ int aux_selfupdate_main_mode_main() {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainOpenPath", &ConfRepoMainOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_client(
