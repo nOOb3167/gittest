@@ -36,7 +36,6 @@ int startserv() {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_server(
-		KeyVal,
 		ConfServPort,
 		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
 		ConfRefNameSelfUpdate.c_str(), ConfRefNameSelfUpdate.size(),

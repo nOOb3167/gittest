@@ -122,7 +122,6 @@ int aux_selfupdate_main_mode_main() {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_client(
-		KeyVal,
 		ConfServPort,
 		ConfServHostName.c_str(), ConfServHostName.size(),
 		ConfRefNameMain.c_str(), ConfRefNameMain.size(),

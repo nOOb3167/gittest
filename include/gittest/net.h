@@ -176,7 +176,6 @@ int aux_serv_worker_thread_service_request_blobs(
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
 	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse);
 int serv_worker_thread_func(
-	const confmap_t &ServKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
@@ -185,7 +184,6 @@ int serv_worker_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
 int clnt_worker_thread_func(
-	const confmap_t &ClntKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	sp<ServAuxData> ServAuxData,
@@ -208,6 +206,7 @@ int aux_enet_address_create_hostname(
 	uint32_t EnetAddressPort, const char *EnetHostName,
 	ENetAddress *oAddress);
 
+int aux_packet_bare_send(ENetHost *host, ENetPeer *peer, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxData, const char *Data, uint32_t DataSize, uint32_t EnetPacketFlags);
 int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
 int aux_packet_request_dequeue(ServWorkerData *WorkerDataRecv, sp<ServWorkerRequestData> *oRequestForRecv);
@@ -224,21 +223,19 @@ int aux_host_connect(
 int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfUpdate, uint32_t *oHaveUpdate, std::string *oBufferUpdate);
 
 int aux_serv_aux_host_service(ENetHost *client);
-int aux_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
+int aux_serv_aux_thread_func(sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
 int serv_serv_aux_thread_func(
-	const confmap_t &ServKeyVal,
 	uint32_t ServPort,
 	sp<ServAuxData> ServAuxData);
-int clnt_serv_aux_thread_func(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
+int clnt_serv_aux_thread_func(sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
 
 int aux_serv_host_service(ENetHost *server, const sp<ServWorkerData> &WorkerDataRecv, const sp<ServWorkerData> &WorkerDataSend);
 int aux_serv_thread_func(ENetHost *host, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend);
 int serv_serv_thread_func(
-	const confmap_t &ServKeyVal,
 	uint32_t ServPort,
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
-int clnt_serv_thread_func(const confmap_t &ClntKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host);
+int clnt_serv_thread_func(sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host);
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect);
 int clnt_state_make_default(ClntState *oState);
@@ -249,7 +246,6 @@ int clnt_state_connection_remake(const confmap_t &ClntKeyVal, sp<gs_host_peer_pa
 
 int clnt_state_crank(
 	const sp<ClntState> &State,
-	const confmap_t &ClntKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	const sp<ServAuxData> &ServAuxData,
@@ -293,27 +289,24 @@ int clnt_state_5_noown(
 	std::vector<git_oid> *oWrittenBlob, std::vector<git_oid> *oWrittenTree);
 int clnt_state_0_setup(
 	const sp<ClntState> &State,
-	const confmap_t &ClntKeyVal,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	const sp<ServAuxData> &ServAuxData);
-int clnt_state_1_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData);
+int clnt_state_1_setup(const sp<ClntState> &State, const sp<ServAuxData> &ServAuxData);
 int clnt_state_2_setup(
 	const sp<ClntState> &State,
-	const confmap_t &ClntKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	ServAuxData *ServAuxData,
 	ServWorkerData *WorkerDataRecv,
 	ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend);
-int clnt_state_3_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+int clnt_state_3_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
-int clnt_state_4_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+int clnt_state_4_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
-int clnt_state_5_setup(const sp<ClntState> &State, const confmap_t &ClntKeyVal,
+int clnt_state_5_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
 
 void serv_worker_thread_func_f(
-	const confmap_t &ServKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
@@ -322,16 +315,13 @@ void serv_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
 void serv_serv_aux_thread_func_f(
-	const confmap_t &ServKeyVal,
 	uint32_t ServPort,
 	sp<ServAuxData> ServAuxData);
 void serv_thread_func_f(
-	const confmap_t &ServKeyVal,
 	uint32_t ServPort,
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
 void clnt_worker_thread_func_f(
-	const confmap_t &ServKeyVal,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	sp<ServAuxData> ServAuxData,
@@ -339,11 +329,10 @@ void clnt_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend,
 	ENetHost *clnt,
 	ENetPeer *peer);
-void clnt_serv_aux_thread_func_f(const confmap_t &ServKeyVal, sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
-void clnt_thread_func_f(const confmap_t &ClntKeyVal, sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host);
+void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData, ENetAddress address /* by val */);
+void clnt_thread_func_f(sp<ServWorkerData> WorkerDataRecv, sp<ServWorkerData> WorkerDataSend, ENetHost *host);
 
 int aux_full_create_connection_server(
-	confmap_t ServKeyVal,
 	uint32_t ServPort,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
@@ -351,7 +340,6 @@ int aux_full_create_connection_server(
 	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
 	sp<FullConnectionClient> *oConnectionClient);
 int aux_full_create_connection_client(
-	confmap_t ClntKeyVal,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
