@@ -3,11 +3,14 @@
 
 #include <gittest/gittest.h>
 #include <gittest/net.h>
+#include <gittest/gittest_selfupdate.h>
 
 int startserv() {
 	int r = 0;
 
 	confmap_t KeyVal;
+
+	GsAuxConfigCommonVars CommonVars = {};
 
 	uint32_t ConfServPort = 0;
 	std::string ConfRefNameSelfUpdate;
@@ -17,30 +20,18 @@ int startserv() {
 
 	sp<FullConnectionClient> FcsServ;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdatePath", &ConfRepoSelfUpdateOpenPath)))
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_server(
-		ConfServPort,
-		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
-		ConfRefNameSelfUpdate.c_str(), ConfRefNameSelfUpdate.size(),
-		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
-		ConfRepoSelfUpdateOpenPath.c_str(), ConfRepoSelfUpdateOpenPath.size(),
+		CommonVars.ServPort,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
+		CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
+		CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
 		&FcsServ)))
 	{
 		GS_GOTO_CLEAN();

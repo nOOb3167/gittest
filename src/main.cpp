@@ -1052,7 +1052,7 @@ int gittest_main(int argc, char **argv) {
 	if (!!(r = aux_gittest_init()))
 		goto clean;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config.conf", &KeyVal)))
 		goto clean;
 
 	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameDUMMYINEXISTENT", &ConfRefName)))

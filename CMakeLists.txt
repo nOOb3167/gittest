@@ -132,7 +132,7 @@ ADD_DEFINITIONS(
 TARGET_COMPILE_DEFINITIONS(gittest_clnt PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt")
 TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt_clone")
 
-TARGET_LINK_LIBRARIES(gittest_serv gittest_lib gittest_net ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_serv gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 TARGET_LINK_LIBRARIES(gittest_clnt gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
 TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})

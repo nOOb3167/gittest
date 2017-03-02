@@ -2133,8 +2133,8 @@ int aux_full_create_connection_server(
 	uint32_t ServPort,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
-	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	sp<FullConnectionClient> *oConnectionClient)
 {
 	int r = 0;
@@ -2150,8 +2150,8 @@ int aux_full_create_connection_server(
 			serv_worker_thread_func_f,
 			RefNameMainBuf, LenRefNameMain,
 			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
-			RepoMainOpenPathBuf, LenRepoMainOpenPath,
-			RepoSelfUpdateOpenPathBuf, LenRepoSelfUpdateOpenPath,
+			RepoMainPathBuf, LenRepoMainPath,
+			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
 			DataAux,
 			WorkerDataRecv,
 			WorkerDataSend));
@@ -2182,7 +2182,7 @@ int aux_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<FullConnectionClient> *oConnectionClient)
 {
 	int r = 0;
@@ -2211,7 +2211,7 @@ int aux_full_create_connection_client(
 		sp<std::thread> ClientWorkerThread(new std::thread(
 			clnt_worker_thread_func_f,
 			RefNameMainBuf, LenRefNameMain,
-			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			RepoMainPathBuf, LenRepoMainPath,
 			DataAux,
 			WorkerDataRecv,
 			WorkerDataSend,
@@ -2245,53 +2245,33 @@ int stuff2() {
 
 	confmap_t KeyVal;
 
-	std::string ConfServHostName;
-	uint32_t ConfServPort = 0;
-	std::string ConfRefNameSelfUpdate;
-	std::string ConfRefNameMain;
-	std::string ConfRepoMainOpenPath;
-	std::string ConfRepoSelfUpdateOpenPath;
+	GsAuxConfigCommonVars CommonVars = {};
 
 	sp<FullConnectionClient> FcsServ;
 	sp<FullConnectionClient> FcsClnt;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfServHostName", &ConfServHostName)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdatePath", &ConfRepoSelfUpdateOpenPath)))
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_server(
-		ConfServPort,
-		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
-		ConfRefNameSelfUpdate.c_str(), ConfRefNameSelfUpdate.size(),
-		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
-		ConfRepoSelfUpdateOpenPath.c_str(), ConfRepoSelfUpdateOpenPath.size(),
+		CommonVars.ServPort,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
+		CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
+		CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
 		&FcsServ)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
 	if (!!(r = aux_full_create_connection_client(
-		ConfServPort,
-		ConfServHostName.c_str(), ConfServHostName.size(),
-		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
-		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		CommonVars.ServPort,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
 		&FcsClnt)))
 	{
 		GS_GOTO_CLEAN();

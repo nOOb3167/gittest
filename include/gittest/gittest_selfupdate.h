@@ -19,10 +19,50 @@
 /* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
 #define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
 
+#define GS_AUX_CONFIG_COMMON_VAR_UINT32_NONUCF(KEYVAL, COMVARS, NAME)                  \
+	{                                                                                  \
+		uint32_t Conf ## NAME = 0;                                                     \
+		if (!!(r = aux_config_key_uint32((KEYVAL), "Conf" ## # NAME, & Conf ## NAME))) \
+			goto clean;                                                                \
+		(COMVARS).NAME = Conf ## NAME;                                                 \
+	}
+
+#define GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KEYVAL, COMVARS, NAME)                                         \
+		{                                                                                                     \
+		std::string Conf ## NAME;                                                                             \
+		if (!!(r = aux_config_key_ex((KEYVAL), "Conf" ## # NAME, & Conf ## NAME)))                            \
+			goto clean;                                                                                       \
+		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME))) \
+			goto clean;                                                                                       \
+		}
+
+#define GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KEYVAL, COMVARS, NAME)                                                    \
+	{                                                                                                                    \
+		std::string Conf ## NAME;                                                                                        \
+		if (!!(r = aux_config_key_ex_interpret_relative_current_executable((KEYVAL), "Conf" ## # NAME, & Conf ## NAME))) \
+			goto clean;                                                                                                  \
+		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME)))            \
+			goto clean;                                                                                                  \
+	}
+
+
+struct GsAuxConfigCommonVars {
+	uint32_t ServPort;
+	char *ServHostNameBuf; size_t LenServHostName;
+	char *RefNameMainBuf; size_t LenRefNameMain;
+	char *RefNameSelfUpdateBuf; size_t LenRefNameSelfUpdate;
+	char *RepoMainPathBuf; size_t LenRepoMainPath;
+	char *RepoSelfUpdatePathBuf; size_t LenRepoSelfUpdatePath;
+	char *RepoMasterUpdatePathBuf; size_t LenRepoMasterUpdatePath;
+};
+
 int aux_config_read_interpret_relative_current_executable(
 	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
 int aux_config_key_ex_interpret_relative_current_executable(
 	const confmap_t &KeyVal, const char *Key, std::string *oVal);
+int aux_config_get_common_vars(
+	const confmap_t &KeyVal,
+	GsAuxConfigCommonVars *oCommonVars);
 
 void gs_debug_break();
 

@@ -21,38 +21,23 @@ int startclnt() {
 
 	confmap_t KeyVal;
 
-	uint32_t ConfServPort = 0;
-	std::string ConfServHostName;
-	std::string ConfRefNameMain;
-	std::string ConfRepoMainOpenPath;
-	std::string ConfRepoSelfUpdateOpenPath;
+	GsAuxConfigCommonVars CommonVars = {};
 
 	sp<FullConnectionClient> FcsServ;
 	sp<FullConnectionClient> FcsClnt;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfServHostName", &ConfServHostName)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdatePath", &ConfRepoSelfUpdateOpenPath)))
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_client(
-		ConfServPort,
-		ConfServHostName.c_str(), ConfServHostName.size(),
-		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
-		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		CommonVars.ServPort,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		/* MasterUpdate is the Main repository for client */
+		CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
 		&FcsClnt)))
 	{
 		GS_GOTO_CLEAN();

@@ -286,11 +286,8 @@ int main(int argc, char **argv) {
 	int r = 0;
 
 	confmap_t KeyVal;
-	std::string RepoMainPath;
-	std::string RepoSelfUpdatePath;
-	std::string RepoMasterUpdatePath;
-	std::string RefNameSelfUpdate;
-	std::string RefNameMain;
+
+	GsAuxConfigCommonVars CommonVars = {};
 
 	if (!!(r = aux_gittest_init()))
 		GS_GOTO_CLEAN();
@@ -303,31 +300,19 @@ int main(int argc, char **argv) {
 	if (!!(r = aux_config_read_interpret_relative_current_executable("../data", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoMainPath", &RepoMainPath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoSelfUpdatePath", &RepoSelfUpdatePath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoMasterUpdatePath", &RepoMasterUpdatePath)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &RefNameSelfUpdate)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &RefNameMain)))
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	{
-		log_guard_t log(GS_LOG_GET("repo_setup"));
-	
+		log_guard_t log(GS_LOG_GET("repo_setup"));			
+			
 		if (!!(r = gs_repo_setup_main(
 			argc, argv,
-			RepoMainPath.c_str(), RepoMainPath.size(),
-			RepoSelfUpdatePath.c_str(), RepoSelfUpdatePath.size(),
-			RepoMasterUpdatePath.c_str(), RepoMasterUpdatePath.size(),
-			RefNameSelfUpdate.c_str(), RefNameSelfUpdate.size(),
-			RefNameMain.c_str(), RefNameMain.size())))
+			CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
+			CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
+			CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
+			CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
+			CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain)))
 		{
 			GS_GOTO_CLEAN();
 		}

@@ -16,6 +16,77 @@
 
 #include <gittest/gittest_selfupdate.h>
 
+int aux_config_read_interpret_relative_current_executable(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
+{
+	size_t string_len_arbitrary_max = 2048;
+
+	size_t LenExpectedLocation = 0;
+
+	size_t LenPath = 0;
+	char PathBuf[512];
+
+	if ((LenExpectedLocation = strnlen(ExpectedLocation, 2048)) == string_len_arbitrary_max)
+		return 1;
+
+	if (!!(gs_build_path_interpret_relative_current_executable(
+		ExpectedLocation, LenExpectedLocation, PathBuf, sizeof PathBuf, &LenPath)))
+	{
+		return 1;
+	}
+
+	return aux_config_read(PathBuf, ExpectedName, oKeyVal);
+}
+
+int aux_config_key_ex_interpret_relative_current_executable(
+	const confmap_t &KeyVal, const char *Key, std::string *oVal)
+{
+
+	const confmap_t::const_iterator &it = KeyVal.find(Key);
+
+	size_t LenPath = 0;
+	char PathBuf[512];
+
+	if (it == KeyVal.end())
+		return 1;
+
+	{
+		std::string RawVal = it->second;
+
+		if (!!(gs_build_path_interpret_relative_current_executable(
+			RawVal.c_str(), RawVal.size(), PathBuf, sizeof PathBuf, &LenPath)))
+		{
+			return 1;
+		}
+	}
+
+	if (oVal)
+		oVal->swap(std::string(PathBuf, LenPath));
+
+	return 0;
+}
+
+int aux_config_get_common_vars(
+	const confmap_t &KeyVal,
+	GsAuxConfigCommonVars *oCommonVars)
+{
+	int r = 0;
+
+	GsAuxConfigCommonVars CommonVars = {};
+
+	GS_AUX_CONFIG_COMMON_VAR_UINT32_NONUCF(KeyVal, CommonVars, ServPort);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KeyVal, CommonVars, ServHostName);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KeyVal, CommonVars, RefNameMain);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KeyVal, CommonVars, RefNameSelfUpdate);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMainPath);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoSelfUpdatePath);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdatePath);
+
+clean:
+
+	return r;
+}
+
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
@@ -91,6 +162,8 @@ int aux_selfupdate_main_mode_main() {
 
 	confmap_t KeyVal;
 
+	GsAuxConfigCommonVars CommonVars = {};
+
 	std::string ConfServHostName;
 	uint32_t ConfServPort = 0;
 	std::string ConfRefNameSelfUpdate;
@@ -99,29 +172,18 @@ int aux_selfupdate_main_mode_main() {
 
 	sp<FullConnectionClient> FcsClnt;
 
-	if (!!(r = aux_config_read("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfServHostName", &ConfServHostName)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_uint32(KeyVal, "ConfServPort", &ConfServPort)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_client(
-		ConfServPort,
-		ConfServHostName.c_str(), ConfServHostName.size(),
-		ConfRefNameMain.c_str(), ConfRefNameMain.size(),
-		ConfRepoMainOpenPath.c_str(), ConfRepoMainOpenPath.size(),
+		CommonVars.ServPort,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		/* MasterUpdate is the Main repository for client */
+		CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
 		&FcsClnt)))
 	{
 		GS_GOTO_CLEAN();

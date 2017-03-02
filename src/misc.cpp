@@ -48,3 +48,30 @@ clean:
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize) {
 	return !memchr(Buf, '\0', BufSize);
 }
+
+int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr) {
+	int r = 0;
+
+	size_t LenStr = 0;
+	char *StrBuf = NULL;
+	size_t StrBufSize = 0;
+
+	if (String.size() == 0)
+		GS_ERR_CLEAN(1);
+
+	/* chars plus null terminator */
+	LenStr = String.size();
+	StrBufSize = LenStr + 1;
+	StrBuf = new char[StrBufSize];
+	memcpy(StrBuf, String.c_str(), StrBufSize);
+
+	if (oStrBuf)
+		*oStrBuf = StrBuf;
+
+	if (oLenStr)
+		*oLenStr = LenStr;
+
+clean:
+
+	return r;
+}

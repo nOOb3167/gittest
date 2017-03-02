@@ -54,4 +54,6 @@ int gs_build_modified_filename(
 
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
+int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);
+
 #endif /* _GITTEST_MISC_H_ */

@@ -345,14 +345,14 @@ int aux_full_create_connection_server(
 	uint32_t ServPort,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
-	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	sp<FullConnectionClient> *oConnectionClient);
 int aux_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<FullConnectionClient> *oConnectionClient);
 
 int stuff2();
