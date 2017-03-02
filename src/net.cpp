@@ -1391,34 +1391,32 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 	int Code = 0;
 
 	if (! State->mRepositoryT)
-		{ Code = 0; goto s0; }
-	//if (0) /* FIXME: unused - refactor */
-	//	{ Code = 1; goto s1; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_REPOSITORY; goto need_repository; }
 	if (! State->mTreeHeadOid)
-		{ Code = 2; goto s2; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_TREE_HEAD; goto need_tree_head; }
 	if (! State->mTreelist || ! State->mMissingTreelist)
-		{ Code = 3; goto s3; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_TREELIST; goto need_treelist; }
 	if (! State->mMissingBloblist || ! State->mTreePacketWithOffset)
-		{ Code = 4; goto s4; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_BLOBLIST; goto need_bloblist; }
 	if (! State->mWrittenBlob || ! State->mWrittenTree)
-		{ Code = 5; goto s5; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE; goto need_written_blob_and_tree; }
 	if (true)
-		{ Code = 6; goto s6; }
+		{ Code = GS_CLNT_STATE_CODE_NEED_NOTHING; goto need_nothing; }
 
-s0:
+need_repository:
 	if (State->mTreeHeadOid)
 		GS_ERR_CLEAN(1);
-s2:
+need_tree_head:
 	if (State->mTreelist || State->mMissingTreelist)
 		GS_ERR_CLEAN(1);
-s3:
+need_treelist:
 	if (State->mMissingBloblist || State->mTreePacketWithOffset)
 		GS_ERR_CLEAN(1);
-s4:
+need_bloblist:
 	if (State->mWrittenBlob || State->mWrittenTree)
 		GS_ERR_CLEAN(1);
-s5:
-s6:
+need_written_blob_and_tree:
+need_nothing:
 
 	if (oCode)
 		*oCode = Code;
@@ -1501,9 +1499,9 @@ int clnt_state_crank(
 		GS_GOTO_CLEAN();
 
 	switch (Code) {
-	case 0:
+	case GS_CLNT_STATE_CODE_NEED_REPOSITORY:
 	{
-		if (!!(r = clnt_state_0_setup(
+		if (!!(r = clnt_state_need_repository_setup(
 			State,
 			RepoMainOpenPathBuf, LenRepoMainOpenPath,
 			ServAuxData)))
@@ -1513,17 +1511,9 @@ int clnt_state_crank(
 	}
 	break;
 
-	case 1:
+	case GS_CLNT_STATE_CODE_NEED_TREE_HEAD:
 	{
-		assert(0); // FIXME: unused - refactor
-		if (!!(r = clnt_state_1_setup(State, ServAuxData)))
-			GS_GOTO_CLEAN();
-	}
-	break;
-
-	case 2:
-	{
-		if (!!(r = clnt_state_2_setup(
+		if (!!(r = clnt_state_need_tree_head_setup(
 			State,
 			RefNameMainBuf, LenRefNameMain,
 			ServAuxData.get(),
@@ -1536,9 +1526,9 @@ int clnt_state_crank(
 	}
 	break;
 
-	case 3:
+	case GS_CLNT_STATE_CODE_NEED_TREELIST:
 	{
-		if (!!(r = clnt_state_3_setup(State,
+		if (!!(r = clnt_state_need_treelist_setup(State,
 			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
 		{
 			GS_GOTO_CLEAN();
@@ -1546,9 +1536,9 @@ int clnt_state_crank(
 	}
 	break;
 
-	case 4:
+	case GS_CLNT_STATE_CODE_NEED_BLOBLIST:
 	{
-		if (!!(r = clnt_state_4_setup(State,
+		if (!!(r = clnt_state_need_bloblist_setup(State,
 			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
 		{
 			GS_GOTO_CLEAN();
@@ -1556,13 +1546,19 @@ int clnt_state_crank(
 	}
 	break;
 
-	case 5:
+	case GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE:
 	{
-		if (!!(r = clnt_state_5_setup(State,
+		if (!!(r = clnt_state_need_written_blob_and_tree_setup(State,
 			ServAuxData.get(), WorkerDataRecv, WorkerDataSend, RequestForSend)))
 		{
 			GS_GOTO_CLEAN();
 		}
+	}
+	break;
+
+	case GS_CLNT_STATE_CODE_NEED_NOTHING:
+	{
+		assert(0);
 	}
 	break;
 
@@ -1602,7 +1598,7 @@ int clnt_state_crank_reconnecter(
 	//	return r;
 }
 
-int clnt_state_0_noown(
+int clnt_state_need_repository_noown(
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	git_repository **oRepositoryT)
 {
@@ -1616,7 +1612,7 @@ clean:
 	return r;
 }
 
-int clnt_state_2_noown(
+int clnt_state_need_tree_head_noown(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData,
@@ -1675,7 +1671,7 @@ clean:
 	return r;
 }
 
-int clnt_state_3_noown(
+int clnt_state_need_treelist_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
@@ -1726,7 +1722,7 @@ clean:
 	return r;
 }
 
-int clnt_state_4_noown(
+int clnt_state_need_bloblist_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
@@ -1795,7 +1791,7 @@ clean:
 	return r;
 }
 
-int clnt_state_5_noown(
+int clnt_state_need_written_blob_and_tree_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
@@ -1880,7 +1876,7 @@ clean:
 	return r;
 }
 
-int clnt_state_0_setup(
+int clnt_state_need_repository_setup(
 	const sp<ClntState> &State,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	const sp<ServAuxData> &ServAuxData)
@@ -1889,7 +1885,7 @@ int clnt_state_0_setup(
 
 	sp<git_repository *> RepositoryT(new git_repository *);
 
-	if (!!(r = clnt_state_0_noown(
+	if (!!(r = clnt_state_need_repository_noown(
 		RepoMainOpenPathBuf, LenRepoMainOpenPath,
 		RepositoryT.get())))
 	{
@@ -1908,18 +1904,7 @@ clean:
 	return r;
 }
 
-int clnt_state_1_setup(const sp<ClntState> &State,const sp<ServAuxData> &ServAuxData) {
-	int r = 0;
-
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
-		{ });
-
-clean:
-
-	return r;
-}
-
-int clnt_state_2_setup(
+int clnt_state_need_tree_head_setup(
 	const sp<ClntState> &State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	ServAuxData *ServAuxData,
@@ -1940,7 +1925,7 @@ int clnt_state_2_setup(
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
-	if (!!(r = clnt_state_2_noown(
+	if (!!(r = clnt_state_need_tree_head_noown(
 		RefNameMainBuf, LenRefNameMain,
 		RepositoryT,
 		ServAuxData,
@@ -1960,7 +1945,7 @@ clean:
 	return r;
 }
 
-int clnt_state_3_setup(const sp<ClntState> &State,
+int clnt_state_need_treelist_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
 {
 	int r = 0;
@@ -1971,7 +1956,7 @@ int clnt_state_3_setup(const sp<ClntState> &State,
 	git_repository * const RepositoryT = *State->mRepositoryT;
 	const sp<git_oid> &TreeHeadOid = State->mTreeHeadOid;
 
-	if (!!(r = clnt_state_3_noown(
+	if (!!(r = clnt_state_need_treelist_noown(
 		RepositoryT,
 		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		TreeHeadOid.get(), Treelist.get(), MissingTreelist.get())))
@@ -1988,7 +1973,7 @@ clean:
 	return r;
 }
 
-int clnt_state_4_setup(const sp<ClntState> &State,
+int clnt_state_need_bloblist_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
 {
 	int r = 0;
@@ -2006,7 +1991,7 @@ int clnt_state_4_setup(const sp<ClntState> &State,
 
 	sp<PacketUniqueWithOffset> TmpTreePacketWithOffset(new PacketUniqueWithOffset);
 
-	if (!!(r = clnt_state_4_noown(
+	if (!!(r = clnt_state_need_bloblist_noown(
 		RepositoryT,
 		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		MissingTreelist.get(), MissingBloblist.get(), &PacketTree, &OffsetSizeBufferTree, &OffsetObjectBufferTree)))
@@ -2026,7 +2011,7 @@ clean:
 	return r;
 }
 
-int clnt_state_5_setup(const sp<ClntState> &State,
+int clnt_state_need_written_blob_and_tree_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend)
 {
 	int r = 0;
@@ -2042,7 +2027,7 @@ int clnt_state_5_setup(const sp<ClntState> &State,
 	const uint32_t &OffsetSizeBufferTree = PacketTreeWithOffset->mOffsetSize;
 	const uint32_t &OffsetObjectBufferTree = PacketTreeWithOffset->mOffsetObject;
 
-	if (!!(r = clnt_state_5_noown(
+	if (!!(r = clnt_state_need_written_blob_and_tree_noown(
 		RepositoryT,
 		ServAuxData, WorkerDataRecv, WorkerDataSend, RequestForSend,
 		MissingTreelist.get(), MissingBloblist.get(),

@@ -36,6 +36,16 @@
 	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
 	    GS_ERR_CLEAN(9998); }
 
+enum gs_clnt_state_code_t {
+	GS_CLNT_STATE_CODE_NEED_REPOSITORY = 0,
+	GS_CLNT_STATE_CODE_NEED_TREE_HEAD = 1,
+	GS_CLNT_STATE_CODE_NEED_TREELIST = 2,
+	GS_CLNT_STATE_CODE_NEED_BLOBLIST = 3,
+	GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE = 4,
+	GS_CLNT_STATE_CODE_NEED_NOTHING = 5,
+	GS_CLNT_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
+};
+
 /* GsBypartCbDataOidVector */
 GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
 #define GS_BYPART_TRIPWIRE_OidVector 0x23132358
@@ -257,10 +267,10 @@ int clnt_state_crank_reconnecter(
 	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
 	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend);
 
-int clnt_state_0_noown(
+int clnt_state_need_repository_noown(
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	git_repository **oRepositoryT);
-int clnt_state_2_noown(
+int clnt_state_need_tree_head_noown(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData,
@@ -268,42 +278,41 @@ int clnt_state_2_noown(
 	ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	git_oid *oTreeHeadOid);
-int clnt_state_3_noown(
+int clnt_state_need_treelist_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	git_oid *TreeHeadOid, std::vector<git_oid> *oTreelist, std::vector<git_oid> *oMissingTreelist);
-int clnt_state_4_noown(
+int clnt_state_need_bloblist_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	std::vector<git_oid> *MissingTreelist,
 	std::vector<git_oid> *oMissingBloblist,
 	gs_packet_unique_t *oPacketTree, uint32_t *oOffsetSizeBufferTree, uint32_t *oOffsetObjectBufferTree);
-int clnt_state_5_noown(
+int clnt_state_need_written_blob_and_tree_noown(
 	git_repository *RepositoryT,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend,
 	std::vector<git_oid> *MissingTreelist, std::vector<git_oid> *MissingBloblist,
 	const gs_packet_unique_t &GsPacketTree, uint32_t OffsetSizeBufferTree, uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob, std::vector<git_oid> *oWrittenTree);
-int clnt_state_0_setup(
+int clnt_state_need_repository_setup(
 	const sp<ClntState> &State,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	const sp<ServAuxData> &ServAuxData);
-int clnt_state_1_setup(const sp<ClntState> &State, const sp<ServAuxData> &ServAuxData);
-int clnt_state_2_setup(
+int clnt_state_need_tree_head_setup(
 	const sp<ClntState> &State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	ServAuxData *ServAuxData,
 	ServWorkerData *WorkerDataRecv,
 	ServWorkerData *WorkerDataSend,
 	ServWorkerRequestData *RequestForSend);
-int clnt_state_3_setup(const sp<ClntState> &State,
+int clnt_state_need_treelist_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
-int clnt_state_4_setup(const sp<ClntState> &State,
+int clnt_state_need_bloblist_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
-int clnt_state_5_setup(const sp<ClntState> &State,
+int clnt_state_need_written_blob_and_tree_setup(const sp<ClntState> &State,
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend, ServWorkerRequestData *RequestForSend);
 
 void serv_worker_thread_func_f(
