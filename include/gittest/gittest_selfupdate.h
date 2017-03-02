@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <gittest/gittest.h>
+
 #define GS_SELFUPDATE_ARG_UPDATEMODE "--gsselfupdate"
 #define GS_SELFUPDATE_ARG_PARENT "--xparent"
 #define GS_SELFUPDATE_ARG_CHILD "--xchild"
@@ -16,6 +18,11 @@
 
 /* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
 #define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
+
+int aux_config_read_interpret_relative_current_executable(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
+int aux_config_key_ex_interpret_relative_current_executable(
+	const confmap_t &KeyVal, const char *Key, std::string *oVal);
 
 void gs_debug_break();
 

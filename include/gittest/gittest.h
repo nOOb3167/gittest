@@ -28,13 +28,9 @@ int tree_toposort(git_repository *Repository, git_tree *Tree, topolist_t *oNodeL
 int aux_gittest_init();
 int aux_config_read(
 	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
-int aux_config_read_interpret_relative_current_executable(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
 const char * aux_config_key(const confmap_t &KeyVal, const char *Key);
 int aux_config_key_ex(const confmap_t &KeyVal, const char *Key, std::string *oVal);
 int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oVal);
-int aux_config_key_ex_interpret_relative_current_executable(
-	const confmap_t &KeyVal, const char *Key, std::string *oVal);
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize);
 void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize);
 void aux_topolist_print(const topolist_t &NodeListTopo);
