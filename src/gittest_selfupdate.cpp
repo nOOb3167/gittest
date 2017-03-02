@@ -114,7 +114,7 @@ int aux_selfupdate_main_mode_main() {
 	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &ConfRefNameMain)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainOpenPath", &ConfRepoMainOpenPath)))
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_client(

@@ -29,10 +29,10 @@ int startserv() {
 	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &ConfRefNameSelfUpdate)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainOpenPath", &ConfRepoMainOpenPath)))
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMainPath", &ConfRepoMainOpenPath)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdateOpenPath", &ConfRepoSelfUpdateOpenPath)))
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoSelfUpdatePath", &ConfRepoSelfUpdateOpenPath)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_full_create_connection_server(
