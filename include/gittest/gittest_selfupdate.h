@@ -31,6 +31,10 @@ int gs_build_current_executable_relative_filename_(
 	const char *RelativeBuf, size_t LenRelativeBuf,
 	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf);
 
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
+
 int gs_build_child_filename(
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	const char *ExpectedSuffix, size_t LenExpectedSuffix,

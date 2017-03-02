@@ -25,6 +25,7 @@
 #include <git2/sys/mempack.h>     /* in-memory backend */
 
 #include <gittest/gittest.h>
+#include <gittest/gittest_selfupdate.h> // gs_build_path_interpret_relative_current_executable
 
 /*
 = git init =
@@ -94,7 +95,9 @@ int aux_gittest_init() {
 	return 0;
 }
 
-int aux_config_read(const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal) {
+int aux_config_read(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
+{
 	int r = 0;
 
 	std::map<std::string, std::string> KeyVal;
@@ -163,6 +166,28 @@ clean:
 	return r;
 }
 
+int aux_config_read_interpret_relative_current_executable(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
+{
+	size_t string_len_arbitrary_max = 2048;
+	
+	size_t LenExpectedLocation = 0;
+
+	size_t LenPath = 0;
+	char PathBuf[512];
+
+	if ((LenExpectedLocation = strnlen(ExpectedLocation, 2048)) == string_len_arbitrary_max)
+		return 1;
+
+	if (!!(gs_build_path_interpret_relative_current_executable(
+		ExpectedLocation, LenExpectedLocation, PathBuf, sizeof PathBuf, &LenPath)))
+	{
+		return 1;
+	}
+
+	return aux_config_read(PathBuf, ExpectedName, oKeyVal);
+}
+
 /* returned value scoped not even to map lifetime - becomes invalid on map modification so do not do that */
 const char * aux_config_key(const confmap_t &KeyVal, const char *Key) {
 	const confmap_t::const_iterator &it = KeyVal.find(Key);
@@ -201,6 +226,34 @@ int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oV
 		if (oVal)
 			*oVal = (uint32_t)valLL;
 	}
+	return 0;
+}
+
+int aux_config_key_ex_interpret_relative_current_executable(
+	const confmap_t &KeyVal, const char *Key, std::string *oVal)
+{
+
+	const confmap_t::const_iterator &it = KeyVal.find(Key);
+
+	size_t LenPath = 0;
+	char PathBuf[512];
+
+	if (it == KeyVal.end())
+		return 1;
+
+	{
+		std::string RawVal = it->second;
+
+		if (!!(gs_build_path_interpret_relative_current_executable(
+			RawVal.c_str(), RawVal.size(), PathBuf, sizeof PathBuf, &LenPath)))
+		{
+			return 1;
+		}
+	}
+
+	if (oVal)
+		oVal->swap(std::string(PathBuf, LenPath));
+
 	return 0;
 }
 

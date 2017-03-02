@@ -16,10 +16,11 @@
 #define GS_REPO_SETUP_ARG_UPDATEMODE            "--gsreposetup"
 #define GS_REPO_SETUP_ARG_COMMIT_SELFUPDATE     "--xcommit_selfupdate"
 #define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
+#define GS_REPO_SETUP_ARG_CREATE_MASTER_UPDATE  "--xcreate_master_update"
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath) {
+int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHardcodedSanityCheck) {
 	int r = 0;
 
 	git_repository *Repository = NULL;
@@ -30,6 +31,9 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath) {
 	assert(InitOptions.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
 
 	GS_LOG(I, PF, "Repository initializing [%.*s]", LenRepoPath, RepoPathBuf);
+
+	if (OptHardcodedSanityCheck && (strstr(RepoPathBuf, OptHardcodedSanityCheck) == NULL))
+		GS_ERR_CLEAN(1);
 
 	if (std::string(RepoPathBuf, LenRepoPath).find("RepoMasterUpdate") == std::string::npos)
 		GS_ERR_CLEAN_L(1, E, PF, "Repository path suspicious [%.*s]", (int)LenRepoPath, RepoPathBuf);
@@ -64,30 +68,6 @@ clean:
 	return r;
 }
 
-int gs_build_repo_master_update_path(
-	const char *RepoRelativePathBuf, size_t LenRepoRelativePath,
-	char *ioRepoPathBuf, size_t RepoPathSize, size_t *oLenRepoPath)
-{
-	int r = 0;
-
-	if (!!(r = gs_build_current_executable_relative_filename(
-		RepoRelativePathBuf, LenRepoRelativePath,
-		ioRepoPathBuf, RepoPathSize, oLenRepoPath)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = gs_buf_ensure_haszero(ioRepoPathBuf, RepoPathSize)))
-		GS_GOTO_CLEAN();
-
-	if (strstr(ioRepoPathBuf, "RepoMasterUpdate") == NULL)
-		GS_ERR_CLEAN(1);
-
-clean:
-
-	return r;
-}
-
 int gs_repo_setup_main_mode_commit_selfupdate(
 	const char *RepoPathBuf, size_t LenRepoPath,
 	const char *RefNameSelfUpdate, size_t LenRefNameSelfUpdate,
@@ -101,7 +81,7 @@ int gs_repo_setup_main_mode_commit_selfupdate(
 	git_oid TreeOid = {};
 	git_oid CommitOid = {};
 
-	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath)))
+	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
@@ -165,7 +145,7 @@ int gs_repo_setup_main_mode_commit_main(
 	git_oid TreeOid = {};
 	git_oid CommitOid = {};
 
-	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath)))
+	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
@@ -220,10 +200,26 @@ clean:
 	return r;
 }
 
-int gs_repo_setup_main(int argc, char **argv,
-	const char *ConfRepoRelativePathBuf, size_t LenConfRepoRelativePath,
-	const char *ConfRefNameSelfUpdateBuf, size_t LenConfRefNameSelfUpdate,
-	const char *ConfRefNameMainBuf, size_t LenConfRefNameMain)
+int gs_repo_setup_main_mode_create_master_update(
+	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath)
+{
+	int r = 0;
+
+	if (!!(r = gs_repo_init(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath, "RepoMasterUpdate")))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_repo_setup_main(
+	int argc, char **argv,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RefNameMainBuf, size_t LenRefNameMain)
 {
 	int r = 0;
 
@@ -231,13 +227,6 @@ int gs_repo_setup_main(int argc, char **argv,
 	char RepoPathBuf[512] = {};
 
 	GS_LOG(I, S, "start");
-
-	if (!!(r = gs_build_repo_master_update_path(
-		ConfRepoRelativePathBuf, LenConfRepoRelativePath,
-		RepoPathBuf, sizeof RepoPathBuf, &LenRepoPath)))
-	{
-		GS_GOTO_CLEAN();
-	}
 
 	if (argc < 2)
 		GS_ERR_NO_CLEAN_L(0, I, PF, "no update done ([argc=%d])", argc);
@@ -254,8 +243,8 @@ int gs_repo_setup_main(int argc, char **argv,
 			GS_ERR_CLEAN(1);
 		const size_t LenArgvExecutableFileName = strlen(argv[3]);
 		if (!!(r = gs_repo_setup_main_mode_commit_selfupdate(
-			ConfRepoRelativePathBuf, LenConfRepoRelativePath,
-			ConfRefNameSelfUpdateBuf, LenConfRefNameSelfUpdate,
+			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
 			argv[3], LenArgvExecutableFileName)))
 		{
 			GS_GOTO_CLEAN();
@@ -266,9 +255,18 @@ int gs_repo_setup_main(int argc, char **argv,
 			GS_ERR_CLEAN(1);
 		const size_t LenArgvDirectoryFileName = strlen(argv[3]);
 		if (!!(r = gs_repo_setup_main_mode_commit_main(
-			ConfRepoRelativePathBuf, LenConfRepoRelativePath,
-			ConfRefNameMainBuf, LenConfRefNameMain,
+			RepoMainPathBuf, LenRepoMainPath,
+			RefNameMainBuf, LenRefNameMain,
 			argv[3], LenArgvDirectoryFileName)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_CREATE_MASTER_UPDATE) == 0) {
+		GS_LOG(I, S, "create_master_update start");
+		if (argc != 3)
+			GS_ERR_CLEAN(1);
+		if (!!(r = gs_repo_setup_main_mode_create_master_update(
+			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -288,7 +286,9 @@ int main(int argc, char **argv) {
 	int r = 0;
 
 	confmap_t KeyVal;
-	std::string RepoRelativePath;
+	std::string RepoMainPath;
+	std::string RepoSelfUpdatePath;
+	std::string RepoMasterUpdatePath;
 	std::string RefNameSelfUpdate;
 	std::string RefNameMain;
 
@@ -300,16 +300,22 @@ int main(int argc, char **argv) {
 
 	GS_LOG_ADD(gs_log_create_ret("repo_setup"));
 
-	if (!!(r = aux_config_read("../data", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_interpret_relative_current_executable("../data", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "ConfRepoMasterUpdateRelativePath", &RepoRelativePath)))
+	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoMainPath", &RepoMainPath)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "RefNameSelfUpdate", &RefNameSelfUpdate)))
+	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoSelfUpdatePath", &RepoSelfUpdatePath)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_key_ex(KeyVal, "RefNameMain", &RefNameMain)))
+	if (!!(r = aux_config_key_ex_interpret_relative_current_executable(KeyVal, "ConfRepoMasterUpdatePath", &RepoMasterUpdatePath)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameSelfUpdate", &RefNameSelfUpdate)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_key_ex(KeyVal, "ConfRefNameMain", &RefNameMain)))
 		GS_GOTO_CLEAN();
 
 	{
@@ -317,7 +323,9 @@ int main(int argc, char **argv) {
 	
 		if (!!(r = gs_repo_setup_main(
 			argc, argv,
-			RepoRelativePath.c_str(), RepoRelativePath.size(),
+			RepoMainPath.c_str(), RepoMainPath.size(),
+			RepoSelfUpdatePath.c_str(), RepoSelfUpdatePath.size(),
+			RepoMasterUpdatePath.c_str(), RepoMasterUpdatePath.size(),
 			RefNameSelfUpdate.c_str(), RefNameSelfUpdate.size(),
 			RefNameMain.c_str(), RefNameMain.size())))
 		{

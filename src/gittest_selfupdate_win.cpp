@@ -229,6 +229,53 @@ int gs_build_current_executable_relative_filename_(
 //	return r;
 }
 
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf)
+{
+	int r = 0;
+
+	std::tr2::sys::path PossiblyRelativePath;
+	bool PossiblyRelativePathIsAbsolute = false;
+
+	if (!!(r = gs_buf_ensure_haszero(PossiblyRelativePathBuf, LenPossiblyRelativePath + 1)))
+		GS_GOTO_CLEAN();
+
+	PossiblyRelativePath = std::tr2::sys::path(PossiblyRelativePathBuf);
+
+	// https://msdn.microsoft.com/en-us/library/hh874769.aspx
+	//   """For Windows, the function returns has_root_name() && has_root_directory().
+	//      For Posix, the function returns has_root_directory()."""
+	PossiblyRelativePathIsAbsolute = PossiblyRelativePath.has_root_name() && PossiblyRelativePath.has_root_directory();
+
+	if (PossiblyRelativePathIsAbsolute) {
+
+		const std::string BuiltString = PossiblyRelativePath.string();
+
+		if (BuiltString.size() >= PathBufSize)
+			GS_ERR_CLEAN(1);
+
+		strcpy(ioPathBuf, BuiltString.c_str());
+
+		if (oLenPathBuf)
+			*oLenPathBuf = BuiltString.size();
+
+	} else {
+
+		if (!!(r = gs_build_current_executable_relative_filename(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_build_child_command_line(
 	const char *ChildFileNameBuf, size_t LenChildFileName,
 	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
