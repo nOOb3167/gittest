@@ -190,6 +190,7 @@ public:
 	ServAuxData();
 
 	void InterruptRequestedEnqueue();
+	void InterruptRequestedEnqueueData(ServAuxRequestData RequestData);
 	bool InterruptRequestedDequeueTimeout(
 		const std::chrono::milliseconds &WaitForMillis,
 		ServAuxRequestData *oRequestData);
@@ -320,7 +321,7 @@ int aux_host_connect(
 
 int aux_selfupdate_basic(const char *HostName, const char *FileNameAbsoluteSelfUpdate, uint32_t *oHaveUpdate, std::string *oBufferUpdate);
 
-int aux_serv_aux_wait_reconnect(ServAuxData *AuxData);
+int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress);
 int aux_serv_aux_wait_reconnect_and_connect(ServAuxData *AuxData, sp<GsConnectionSurrogate> *oConnectionSurrogate);
 int aux_serv_aux_host_service(ENetHost *client);
 int aux_serv_aux_reconnect_expend_cond(
@@ -329,6 +330,7 @@ int aux_serv_aux_reconnect_expend_cond(
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate);
 int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData);
 int aux_serv_aux_make_premade_frame_interrupt_requested(std::string *oBufferFrameInterruptRequested);
+int aux_serv_aux_enqueue_reconnect(ServAuxData *AuxData, ENetAddress *address);
 int aux_serv_aux_interrupt_perform(
 	GsConnectionSurrogate *ConnectionSurrogate,
 	ENetHost *host,
@@ -345,15 +347,36 @@ int aux_serv_host_service(
 int aux_serv_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,
-	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap,
-	sp<GsHostSurrogate> HostSurrogate);
+	sp<GsHostSurrogate> HostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int serv_serv_thread_func(
 	uint32_t ServPort,
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
+int aux_serv_clnt_connect_immediately(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	ENetAddress *oAddressClnt);
+int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+	ServAuxData *AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	ClntStateReconnect *ioStateReconnect,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate);
+int clnt_serv_thread_func_reconnecter(
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName);
 int clnt_serv_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend);
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate);
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect);
 bool clnt_state_reconnect_have_remaining(ClntStateReconnect *StateReconnect);
@@ -447,7 +470,10 @@ void clnt_worker_thread_func_f(
 void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData);
 void clnt_thread_func_f(
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend);
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName);
 
 int aux_full_create_connection_server(
 	uint32_t ServPort,

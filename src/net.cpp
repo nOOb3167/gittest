@@ -132,6 +132,14 @@ void ServAuxData::InterruptRequestedEnqueue() {
 	mAuxDataCond->notify_one();
 }
 
+void ServAuxData::InterruptRequestedEnqueueData(ServAuxRequestData RequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		mAuxQueue->push_back(RequestData);
+	}
+	mAuxDataCond->notify_one();
+}
+
 bool ServAuxData::InterruptRequestedDequeueTimeout(
 	const std::chrono::milliseconds &WaitForMillis,
 	ServAuxRequestData *oRequestData)
@@ -1382,6 +1390,11 @@ clean:
 	return r;
 }
 
+int aux_serv_aux_enqueue_reconnect(ServAuxData *AuxData, ENetAddress *address) {
+	AuxData->InterruptRequestedEnqueueData(ServAuxRequestData(address));
+	return 0;
+}
+
 int aux_serv_aux_interrupt_perform(
 	GsConnectionSurrogate *ConnectionSurrogate,
 	ENetHost *host,
@@ -1626,13 +1639,13 @@ clean:
 int aux_serv_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,
-	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap,
-	sp<GsHostSurrogate> HostSurrogate)
+	sp<GsHostSurrogate> HostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	int r = 0;
 
 	while (true) {
-		if (!!(r = aux_serv_host_service(ConnectionSurrogateMap.get(), WorkerDataRecv, WorkerDataSend, HostSurrogate)))
+		if (!!(r = aux_serv_host_service(ioConnectionSurrogateMap, WorkerDataRecv, WorkerDataSend, HostSurrogate)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -1666,9 +1679,11 @@ clean:
 	return r;
 }
 
-int clnt_serv_thread_func(
-	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend)
+int aux_serv_clnt_connect_immediately(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	ENetAddress *oAddressClnt)
 {
 	int r = 0;
 
@@ -1676,11 +1691,6 @@ int clnt_serv_thread_func(
 	ENetAddress AddressClnt = {};
 	ENetAddress AddressServ = {};
 	ENetPeer *peer = NULL;
-
-	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap(new GsConnectionSurrogateMap());
-	sp<GsConnectionSurrogate> ConnectionSurrogate;
-	sp<GsHostSurrogate> HostSurrogate;
-	gs_connection_surrogate_id_t Id = 0;
 
 	if (!!(r = aux_enet_host_client_create_addr(&clnt, &AddressClnt)))
 		GS_GOTO_CLEAN();
@@ -1691,17 +1701,142 @@ int clnt_serv_thread_func(
 	if (!!(r = aux_enet_host_connect_addr(clnt, &AddressServ, &peer)))
 		GS_GOTO_CLEAN();
 
-	ConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(clnt, peer));
-	HostSurrogate = sp<GsHostSurrogate>(new GsHostSurrogate(clnt));
+	if (ioConnectionSurrogate)
+		*ioConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(clnt, peer));
 
-	if (!!(r = gs_connection_surrogate_map_insert(ConnectionSurrogateMap.get(), ConnectionSurrogate, &Id)))
+	if (oAddressClnt)
+		*oAddressClnt = AddressClnt;
+
+clean:
+	if (!!r) {
+		if (peer)
+			enet_peer_disconnect_now(peer, 0);
+
+		if (clnt)
+			enet_host_destroy(clnt);
+	}
+
+	return r;
+}
+
+int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+	ServAuxData *AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	ClntStateReconnect *ioStateReconnect,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+{
+	int r = 0;
+
+	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_serv_thread_func(WorkerDataRecv, WorkerDataSend, ConnectionSurrogateMap, HostSurrogate)))
+	if (ioConnectionSurrogate->get())
+		GS_ERR_NO_CLEAN(0);
+
+	{
+		ENetAddress AuxDataNotificationAddress = {};
+		gs_connection_surrogate_id_t Id = 0;
+
+		if (!!(r = aux_serv_clnt_connect_immediately(
+			ServPort,
+			ServHostNameBuf, LenServHostName,
+			ioConnectionSurrogate,
+			&AuxDataNotificationAddress)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+		// FIXME: clear connection map after reconnect? probably
+
+		if (!!(r = gs_connection_surrogate_map_insert(ioConnectionSurrogateMap, *ioConnectionSurrogate, &Id)))
+			GS_GOTO_CLEAN();
+
+		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
+			GS_GOTO_CLEAN();
+	}
+
+noclean:
+
+clean :
+
+	return r;
+}
+
+int clnt_serv_thread_func_reconnecter(
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName)
+{
+	int r = 0;
+
+	sp<GsConnectionSurrogate> ConnectionSurrogate;
+
+	ClntStateReconnect StateReconnect = {};
+
+	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap(new GsConnectionSurrogateMap());
+
+	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: special error handling */
+	while (true) {
+
+		/* protocol between serv and serv_aux starts with notifying serv_aux about serv address
+		*  after every reconnection (including initial connect) */
+		/* NOTE: no_clean */
+		if (!!(r = aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+			AuxData.get(),
+			ServPort,
+			ServHostNameBuf, LenServHostName,
+			&StateReconnect,
+			ConnectionSurrogateMap.get(),
+			&ConnectionSurrogate)))
+		{
+			GS_ERR_NO_CLEAN(r);
+		}
+
+		/* NOTE: cleansub */
+		if (!!(r = clnt_serv_thread_func(
+			WorkerDataRecv,
+			WorkerDataSend,
+			AuxData,
+			ConnectionSurrogateMap.get(),
+			&ConnectionSurrogate)))
+		{
+			GS_GOTO_CLEANSUB();
+		}
+
+	cleansub:
+		/* allow errors and go into the next reconnection attempt */
+	}
+
+noclean:
+
+clean :
+
+	return r;
+}
+
+int clnt_serv_thread_func(
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+{
+	int r = 0;
+
+	ENetHost * const &client = (*ioConnectionSurrogate)->mHost;
+	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate(client));
+
+	if (!!(r = aux_serv_thread_func(WorkerDataRecv, WorkerDataSend, HostSurrogate, ioConnectionSurrogateMap)))
 		GS_GOTO_CLEAN();
 
 clean:
-	// FIXME: what is the resource ownership model for this function?
 
 	return r;
 }
@@ -2431,7 +2566,7 @@ void serv_worker_thread_func_f(
 
 void serv_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
-	if (!!(r = aux_serv_aux_thread_func(ServAuxData)))
+	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
 		assert(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
@@ -2476,11 +2611,21 @@ void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 
 void clnt_thread_func_f(
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend)
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName)
 {
 	int r = 0;
-	if (!!(r = clnt_serv_thread_func(WorkerDataRecv, WorkerDataSend)))
+	if (!!(r = clnt_serv_thread_func_reconnecter(
+		WorkerDataRecv,
+		WorkerDataSend,
+		AuxData,
+		ServPort,
+		ServHostNameBuf, LenServHostName)))
+	{
 		assert(0);
+	}
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
@@ -2547,24 +2692,27 @@ int aux_full_create_connection_client(
 	{
 		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
 		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> DataAux(new ServAuxData);
+		sp<ServAuxData> AuxData(new ServAuxData);
 
 		sp<std::thread> ClientWorkerThread(new std::thread(
 			clnt_worker_thread_func_f,
 			RefNameMainBuf, LenRefNameMain,
 			RepoMainPathBuf, LenRepoMainPath,
-			DataAux,
+			AuxData,
 			WorkerDataRecv,
 			WorkerDataSend));
 
 		sp<std::thread> ClientAuxThread(new std::thread(
 			clnt_serv_aux_thread_func_f,
-			DataAux));
+			AuxData));
 
 		sp<std::thread> ClientThread(new std::thread(
 			clnt_thread_func_f,
 			WorkerDataRecv,
-			WorkerDataSend));
+			WorkerDataSend,
+			AuxData,
+			ServPort,
+			ServHostNameBuf, LenServHostName));
 
 		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientWorkerThread, ClientAuxThread, ClientThread));
 	}
