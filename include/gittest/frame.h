@@ -73,6 +73,11 @@
 			{ r = 1; goto clean; }                                               \
 	}
 
+#define GS_BYPART_DATA_VAR_AUX_TRIPWIRE_CHECK_NONUCF(SUBNAME, PVAR) \
+	if ((PVAR)->Tripwire != GS_BYPART_TRIPWIRE_ ## SUBNAME)         \
+		{ r = 1; goto clean; }                                      \
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
