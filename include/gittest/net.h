@@ -391,10 +391,10 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 	ServAuxData *AuxData,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
-	uint32_t WantRecoonect,
 	ClntStateReconnect *ioStateReconnect,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	sp<GsConnectionSurrogate> *ioConnectionSurrogate);
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	uint32_t *ioWantReconnect);
 int clnt_serv_thread_func_reconnecter(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,

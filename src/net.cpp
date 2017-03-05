@@ -1955,17 +1955,17 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 	ServAuxData *AuxData,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
-	uint32_t WantReconnect,
 	ClntStateReconnect *ioStateReconnect,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	uint32_t *ioWantReconnect)
 {
 	int r = 0;
 
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (WantReconnect) {
+	if (ioWantReconnect) {
 
 		ENetAddress AuxDataNotificationAddress = {};
 		gs_connection_surrogate_id_t Id = 0;
@@ -1990,6 +1990,9 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 			GS_GOTO_CLEAN();
 
 	}
+
+	if (ioWantReconnect)
+		*ioWantReconnect = false;
 
 clean :
 
@@ -2026,10 +2029,10 @@ int clnt_serv_thread_func_reconnecter(
 			AuxData.get(),
 			ServPort,
 			ServHostNameBuf, LenServHostName,
-			WantReconnect,
 			&StateReconnect,
 			ConnectionSurrogateMap.get(),
-			&ConnectionSurrogate)))
+			&ConnectionSurrogate,
+			&WantReconnect)))
 		{
 			GS_ERR_NO_CLEAN(r);
 		}
@@ -2040,7 +2043,8 @@ int clnt_serv_thread_func_reconnecter(
 			WorkerDataSend,
 			AuxData,
 			ConnectionSurrogateMap.get(),
-			&ConnectionSurrogate, &WantReconnect)))
+			&ConnectionSurrogate,
+			&WantReconnect)))
 		{
 			GS_GOTO_CLEANSUB();
 		}
