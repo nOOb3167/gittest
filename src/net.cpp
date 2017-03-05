@@ -398,6 +398,8 @@ int aux_make_serv_worker_request_data_for_response(
 {
 	int r = 0;
 
+	assert(RequestBeingResponded->mIsWithId);
+
 	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
 		ioPacket, true, RequestBeingResponded->mId));
 
@@ -729,12 +731,15 @@ int clnt_worker_thread_func(
 
 	sp<ClntState> State(new ClntState);
 
-	// here receive id from serv (non-worker)
-	//gs_packet_unique_t NullPacket;
-	//sp<ServWorkerRequestData> RequestForSend(new ServWorkerRequestData(&NullPacket, Id));
+	sp<ServWorkerRequestData> RequestReconnect;
+	sp<ServWorkerRequestData> RequestForSend;
 
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
+
+	WorkerDataRecv->RequestDequeue(&RequestReconnect);
+	assert(RequestReconnect->isReconnectRequest() && RequestReconnect->isReconnectRequestWithId());
+	RequestForSend = RequestReconnect;
 
 	while (true) {
 		if (!!(r = clnt_state_crank(
@@ -1937,8 +1942,9 @@ int serv_serv_thread_func_reconnecter(
 		/* protocol between serv and serv_aux starts with notifying serv_aux about serv address
 		*  after every reconnection (including initial connect) */
 		/* NOTE: no_clean */
-		if (!!(r = aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
+		if (!!(r = aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 			AuxData.get(),
+			WorkerDataRecv.get(),
 			ServPort,
 			&StateReconnect,
 			&HostSurrogate,
