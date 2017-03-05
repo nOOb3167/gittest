@@ -188,6 +188,13 @@ clean:
 	return r;
 }
 
+int gs_connection_surrogate_map_clear(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+{
+	ioConnectionSurrogateMap->mConnectionSurrogateMap->clear();
+	return 0;
+}
+
 int gs_connection_surrogate_map_insert_id(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
@@ -1329,49 +1336,42 @@ clean:
 	return r;
 }
 
-int aux_serv_aux_host_service(ENetHost *client) {
-	int r = 0;
-
-	std::vector<ENetEvent> Events;
-
-	if (!!(r = aux_host_service(client, 0, &Events)))
-		GS_GOTO_CLEAN();
-
-	for (uint32_t i = 0; i < Events.size(); i++) {
-		switch (Events[i].type)
-		{
-		case ENET_EVENT_TYPE_CONNECT:
-		case ENET_EVENT_TYPE_DISCONNECT:
-			break;
-		case ENET_EVENT_TYPE_RECEIVE:
-			assert(0);
-			enet_packet_destroy(Events[i].packet);
-			break;
-		}
-	}
-
-clean:
-
-	return r;
-}
-
-int aux_serv_aux_reconnect_expend_cond(
+int aux_serv_aux_reconnect_expend_cond_interrupt_perform(
 	ServAuxData *AuxData,
 	ClntStateReconnect *ioStateReconnect,
-	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	uint32_t *ioWantReconnect)
 {
 	int r = 0;
-
-	if (ioConnectionSurrogate->get())
-		GS_ERR_NO_CLEAN(0);
 
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_serv_aux_wait_reconnect_and_connect(AuxData, ioConnectionSurrogate)))
-		GS_GOTO_CLEAN();
+	if (ioWantReconnect) {
 
-noclean:
+		if (!!(r = aux_serv_aux_wait_reconnect_and_connect(AuxData, ioConnectionSurrogate)))
+			GS_GOTO_CLEAN();
+
+		/* NOTE: serv_aux/serv may have swallowed some interrupt requests due to reconnection:
+		* sequence:
+		*   - serv reconnects
+		*   - serv can not receive serv_aux packets
+		*   - simultaneously:
+		*   -   serv notifies serv_aux about reconnection (ex enqueued through ServAuxData)
+		*   -   serv_aux attempts to send some interrupt requested frames
+		*   - serv_aux fails to send those frames due to losing serv connection due to the serv reconnect
+		*   - serv_aux reconnects
+		*   - packets meant for serv which caused the serv_aux interrupt requests might never get dequeued by serv
+		*       (presumably serv stuck in the enet host service wait)
+		* as a remedy, always send an extra interrupt requested frame upon serv_aux reconnect.
+		* this is the extra frame send-site. */
+		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
+			GS_GOTO_CLEAN();
+
+	}
+
+	if (ioWantReconnect)
+		*ioWantReconnect = false;
 
 clean:
 
@@ -1385,6 +1385,8 @@ int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData) {
 
 	ClntStateReconnect StateReconnect = {};
 
+	uint32_t WantReconnect = true;
+
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
 
@@ -1392,12 +1394,23 @@ int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData) {
 	while (true) {
 
 		/* NOTE: no_clean */
-		if (!!(r = aux_serv_aux_reconnect_expend_cond(ServAuxData.get(), &StateReconnect, &ConnectionSurrogate)))
+		if (!!(r = aux_serv_aux_reconnect_expend_cond_interrupt_perform(
+			ServAuxData.get(),
+			&StateReconnect,
+			&ConnectionSurrogate,
+			&WantReconnect)))
+		{
 			GS_ERR_NO_CLEAN(r);
+		}
 
 		/* NOTE: cleansub */
-		if (!!(r = aux_serv_aux_thread_func(ServAuxData, &ConnectionSurrogate)))
+		if (!!(r = serv_aux_thread_func(
+			ServAuxData,
+			&ConnectionSurrogate,
+			&WantReconnect)))
+		{
 			GS_GOTO_CLEANSUB();
+		}
 
 	cleansub:
 		/* allow errors and go into the next reconnection attempt */
@@ -1435,11 +1448,12 @@ int aux_serv_aux_enqueue_reconnect(ServAuxData *AuxData, ENetAddress *address) {
 }
 
 int aux_serv_aux_interrupt_perform(
-	GsConnectionSurrogate *ConnectionSurrogate,
-	ENetHost *host,
-	ENetPeer *peer)
+	GsConnectionSurrogate *ConnectionSurrogate)
 {
 	int r = 0;
+
+	ENetHost * const &host = ConnectionSurrogate->mHost;
+	ENetPeer * const &peer = ConnectionSurrogate->mPeer;
 
 	std::string BufferFrameInterruptRequested;
 
@@ -1472,7 +1486,36 @@ clean:
 	return r;
 }
 
-int aux_serv_aux_thread_func(
+int aux_serv_aux_host_service_sub(ENetHost *client) {
+	int r = 0;
+
+	std::vector<ENetEvent> Events;
+
+	if (!!(r = aux_host_service(client, 0, &Events)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < Events.size(); i++) {
+		switch (Events[i].type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+			GS_LOG(E, S, "unexpected connection to serv_aux - just passthrough");
+			break;
+		case ENET_EVENT_TYPE_DISCONNECT:
+			GS_ERR_CLEAN_L(1, E, S, "unexpected (?) disconnection from serv_aux");
+			break;
+		case ENET_EVENT_TYPE_RECEIVE:
+			assert(0);
+			enet_packet_destroy(Events[i].packet);
+			break;
+		}
+	}
+
+clean:
+
+	return r;
+}
+
+int aux_serv_aux_host_service(
 	sp<ServAuxData> ServAuxData,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
 {
@@ -1483,22 +1526,6 @@ int aux_serv_aux_thread_func(
 	ENetHost * const &client = (*ioConnectionSurrogate)->mHost;
 	ENetPeer * const &peer = (*ioConnectionSurrogate)->mPeer;
 
-	/* NOTE: serv_aux/serv may have swallowed some interrupt requests due to reconnection:
-	* sequence:
-	*   - serv reconnects
-	*   - serv can not receive serv_aux packets
-	*   - simultaneously:
-	*   -   serv notifies serv_aux about reconnection (ex enqueued through ServAuxData)
-	*   -   serv_aux attempts to send some interrupt requested frames
-	*   - serv_aux fails to send those frames due to losing serv connection due to the serv reconnect
-	*   - serv_aux reconnects
-	*   - packets meant for serv which caused the serv_aux interrupt requests might never get dequeued by serv
-	*       (presumably serv stuck in the enet host service wait)
-	* as a remedy, always send an extra interrupt requested frame upon serv_aux reconnect.
-	* this is the extra frame send-site. */
-	if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get(), client, peer)))
-		GS_GOTO_CLEAN();
-
 	while (true) {
 
 		ServAuxRequestData RequestData;
@@ -1506,7 +1533,7 @@ int aux_serv_aux_thread_func(
 		/* NOTE: waiting for ServAuxRequestData with mIsReconnectRequest is enough.
 		*    receiving an ENET_EVENT_TYPE_DISCONNECT indicates we should reconnect but
 		*    the reconnection address is not known at that point. */
-		if (!!(r = aux_serv_aux_host_service(client)))
+		if (!!(r = aux_serv_aux_host_service_sub(client)))
 			GS_GOTO_CLEAN();
 
 		/* set a timeout to ensure serv_aux_host_service cranks the enet event loop regularly */
@@ -1522,14 +1549,52 @@ int aux_serv_aux_thread_func(
 			GS_ERR_CLEAN(1);
 
 		if (RequestData.mIsInterruptRequest)
-			if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get(), client, peer)))
+			if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
 				GS_GOTO_CLEAN();
 	}
 
 clean:
+
+	return r;
+}
+
+int serv_aux_thread_func(
+	sp<ServAuxData> ServAuxData,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	uint32_t *oWantReconnect)
+{
+	int r = 0;
+
+	uint32_t WantReconnect = false;
+
+	if (!!(r = aux_serv_aux_thread_func(ServAuxData, ioConnectionSurrogate)))
+		GS_ERR_NO_CLEAN(1);
+
+noclean:
 	if (!!r) {
-		*ioConnectionSurrogate = sp<GsConnectionSurrogate>();
+		WantReconnect = true;
 	}
+
+	if (oWantReconnect)
+		*oWantReconnect = WantReconnect;
+
+clean:
+
+	return r;
+}
+
+int aux_serv_aux_thread_func(
+	sp<ServAuxData> ServAuxData,
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+{
+	int r = 0;
+
+	while (true) {
+		if (!!(r = aux_serv_aux_host_service(ServAuxData, ioConnectionSurrogate)))
+			GS_ERR_CLEAN(1);
+	}
+
+clean:
 
 	return r;
 }
@@ -1546,6 +1611,7 @@ int aux_serv_host_service(
 
 	std::vector<ENetEvent> Events;
 
+	// FIXME: serv_aux arbitrary timeout?
 	if (!!(r = aux_host_service(server, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Events)))
 		GS_GOTO_CLEAN();
 
@@ -1727,17 +1793,16 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
 	ServAuxData *AuxData,
 	uint32_t ServPort,
 	ClntStateReconnect *ioStateReconnect,
-	sp<GsHostSurrogate> *ioHostSurrogate)
+	sp<GsHostSurrogate> *ioHostSurrogate,
+	uint32_t *ioWantReconnect)
 {
 	int r = 0;
 
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (ioHostSurrogate->get())
-		GS_ERR_NO_CLEAN(0);
+	if (ioWantReconnect) {
 
-	{
 		ENetAddress AuxDataNotificationAddress = {};
 
 		if (!!(r = aux_serv_serv_connect_immediately(
@@ -1752,7 +1817,10 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
 			GS_GOTO_CLEAN();
 	}
 
-noclean:
+	/* connection is ensured if no errors occurred (either existing or newly established)
+	*  in either case we no longer need to reconnect */
+	if (ioWantReconnect)
+		*ioWantReconnect = false;
 
 clean :
 
@@ -1773,6 +1841,8 @@ int serv_serv_thread_func_reconnecter(
 
 	sp<GsHostSurrogate> HostSurrogate;
 
+	uint32_t WantReconnect = true;
+
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
 
@@ -1786,7 +1856,8 @@ int serv_serv_thread_func_reconnecter(
 			AuxData.get(),
 			ServPort,
 			&StateReconnect,
-			&HostSurrogate)))
+			&HostSurrogate,
+			&WantReconnect)))
 		{
 			GS_ERR_NO_CLEAN(r);
 		}
@@ -1796,7 +1867,8 @@ int serv_serv_thread_func_reconnecter(
 			WorkerDataRecv,
 			WorkerDataSend,
 			ConnectionSurrogateMap.get(),
-			&HostSurrogate)))
+			&HostSurrogate,
+			&WantReconnect)))
 		{
 			GS_GOTO_CLEANSUB();
 		}
@@ -1816,12 +1888,23 @@ int serv_serv_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	sp<GsHostSurrogate> *ioHostSurrogate)
+	sp<GsHostSurrogate> *ioHostSurrogate,
+	uint32_t *oWantReconnect)
 {
 	int r = 0;
 
+	uint32_t WantReconnect = false;
+
 	if (!!(r = aux_serv_thread_func(WorkerDataRecv, WorkerDataSend, ioHostSurrogate, ioConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
+		GS_ERR_NO_CLEAN(1);
+
+noclean:
+	if (!!r) {
+		WantReconnect = true;
+	}
+
+	if (oWantReconnect)
+		*oWantReconnect = WantReconnect;
 
 clean:
 
@@ -1872,6 +1955,7 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 	ServAuxData *AuxData,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
+	uint32_t WantReconnect,
 	ClntStateReconnect *ioStateReconnect,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
@@ -1881,10 +1965,8 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (ioConnectionSurrogate->get())
-		GS_ERR_NO_CLEAN(0);
+	if (WantReconnect) {
 
-	{
 		ENetAddress AuxDataNotificationAddress = {};
 		gs_connection_surrogate_id_t Id = 0;
 
@@ -1898,15 +1980,16 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 		}
 
 		// FIXME: clear connection map after reconnect? probably
+		if (!!(r = gs_connection_surrogate_map_clear(ioConnectionSurrogateMap)))
+			GS_GOTO_CLEAN();
 
 		if (!!(r = gs_connection_surrogate_map_insert(ioConnectionSurrogateMap, *ioConnectionSurrogate, &Id)))
 			GS_GOTO_CLEAN();
 
 		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
-	}
 
-noclean:
+	}
 
 clean :
 
@@ -1928,6 +2011,8 @@ int clnt_serv_thread_func_reconnecter(
 
 	sp<GsConnectionSurrogate> ConnectionSurrogate;
 
+	uint32_t WantReconnect = true;
+
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
 
@@ -1941,6 +2026,7 @@ int clnt_serv_thread_func_reconnecter(
 			AuxData.get(),
 			ServPort,
 			ServHostNameBuf, LenServHostName,
+			WantReconnect,
 			&StateReconnect,
 			ConnectionSurrogateMap.get(),
 			&ConnectionSurrogate)))
@@ -1954,7 +2040,7 @@ int clnt_serv_thread_func_reconnecter(
 			WorkerDataSend,
 			AuxData,
 			ConnectionSurrogateMap.get(),
-			&ConnectionSurrogate)))
+			&ConnectionSurrogate, &WantReconnect)))
 		{
 			GS_GOTO_CLEANSUB();
 		}
@@ -1975,16 +2061,25 @@ int clnt_serv_thread_func(
 	sp<ServWorkerData> WorkerDataSend,
 	sp<ServAuxData> AuxData,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
+	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
+	uint32_t *oWantReconnect)
 {
-	// FIXME: confusing API?? if aux_serv_thread_func resets HostSurrogate to signal disconnection
 	int r = 0;
 
-	ENetHost * const &client = (*ioConnectionSurrogate)->mHost;
-	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate(client));
+	uint32_t WantReconnect = false;
+
+	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate((*ioConnectionSurrogate)->mHost));
 
 	if (!!(r = aux_serv_thread_func(WorkerDataRecv, WorkerDataSend, &HostSurrogate, ioConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
+		GS_ERR_NO_CLEAN(1);
+
+noclean:
+	if (!!r) {
+		WantReconnect = true;
+	}
+
+	if (oWantReconnect)
+		*oWantReconnect = WantReconnect;
 
 clean:
 
@@ -2814,7 +2909,6 @@ int aux_full_create_connection_server(
 
 		sp<std::thread> ServerThread(new std::thread(
 			serv_thread_func_f,
-
 			WorkerDataRecv,
 			WorkerDataSend,
 			DataAux,
