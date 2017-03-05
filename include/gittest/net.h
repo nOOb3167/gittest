@@ -81,12 +81,14 @@ public:
 
 class GsConnectionSurrogate {
 public:
-	GsConnectionSurrogate(ENetHost *host, ENetPeer *peer);
+	GsConnectionSurrogate(ENetHost *host, ENetPeer *peer, uint32_t IsPrincipalClientConnection);
 
 	void Invalidate();
+	void IsPrincipalClientConnection();
 
 private:
-	std::atomic_uint32_t mValid;
+	std::atomic_uint32_t mIsValid;
+	std::atomic_uint32_t mIsPrincipalClientConnection;
 
 public:
 	ENetHost *mHost;
@@ -125,14 +127,16 @@ struct PacketUniqueWithOffset {
 
 class ServWorkerRequestData {
 public:
-	ServWorkerRequestData(gs_packet_unique_t *ioPacket, gs_connection_surrogate_id_t Id);
+	ServWorkerRequestData(gs_packet_unique_t *ioPacket, uint32_t IsWithId, gs_connection_surrogate_id_t Id);
 
 	bool isReconnectRequest();
+	bool isReconnectRequestWithId();
 
 public:
 	gs_packet_unique_t mPacket;
 
 private:
+	uint32_t mIsWithId;
 	gs_connection_surrogate_id_t mId;
 
 private:
@@ -271,6 +275,11 @@ int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_
 int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t OffsetSize, uint32_t OffsetObject, PacketUniqueWithOffset *oPacketWithOffset);
 
 int aux_make_serv_worker_request_data(gs_connection_surrogate_id_t Id, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker);
+int aux_make_serv_worker_request_data_reconnect_no_id(
+	sp<ServWorkerRequestData> *oRequestWorker);
+int aux_make_serv_worker_request_data_reconnect_with_id(
+	gs_connection_surrogate_id_t Id,
+	sp<ServWorkerRequestData> *oRequestWorker);
 int aux_make_serv_worker_request_data_for_response(
 	ServWorkerRequestData *RequestBeingResponded, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker);
 void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, gs_connection_surrogate_id_t *oId);
@@ -278,6 +287,11 @@ void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, gs_conn
 int aux_serv_worker_thread_service_request_blobs(
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
 	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse);
+int aux_worker_enqueue_reconnect_no_id(
+	ServWorkerData *WorkerDataRecv);
+int aux_worker_enqueue_reconnect_with_id(
+	ServWorkerData *WorkerDataRecv,
+	gs_connection_surrogate_id_t Id);
 int serv_worker_thread_func(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
@@ -365,12 +379,13 @@ int aux_serv_serv_connect_immediately(
 	uint32_t ServPort,
 	sp<GsHostSurrogate> *ioHostSurrogate,
 	ENetAddress *oAddressForServAux);
-int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
+int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 	ServAuxData *AuxData,
+	ServWorkerData *WorkerDataRecv,
 	uint32_t ServPort,
 	ClntStateReconnect *ioStateReconnect,
 	sp<GsHostSurrogate> *ioHostSurrogate,
-	uint32_t WantReconnect);
+	uint32_t *ioWantReconnect);
 int serv_serv_thread_func_reconnecter(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,
@@ -387,8 +402,9 @@ int aux_clnt_serv_connect_immediately(
 	const char *ServHostNameBuf, size_t LenServHostName,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
 	ENetAddress *oAddressClnt);
-int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_notify_worker(
 	ServAuxData *AuxData,
+	ServWorkerData *WorkerDataRecv,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	ClntStateReconnect *ioStateReconnect,

@@ -62,18 +62,20 @@ GsHostSurrogate::GsHostSurrogate(ENetHost *host)
 	: mHost(host)
 {}
 
-GsConnectionSurrogate::GsConnectionSurrogate(ENetHost *host, ENetPeer *peer)
-	: mValid(1),
+GsConnectionSurrogate::GsConnectionSurrogate(ENetHost *host, ENetPeer *peer, uint32_t IsPrincipalClientConnection)
+	: mIsValid(1),
+	mIsPrincipalClientConnection(IsPrincipalClientConnection),
 	mHost(host),
 	mPeer(peer)
 {}
 
 void GsConnectionSurrogate::Invalidate() {
-	mValid.store(0);
+	mIsValid.store(0);
 }
 
-ServWorkerRequestData::ServWorkerRequestData(gs_packet_unique_t *ioPacket, gs_connection_surrogate_id_t Id)
+ServWorkerRequestData::ServWorkerRequestData(gs_packet_unique_t *ioPacket, uint32_t IsWithId, gs_connection_surrogate_id_t Id)
 	: mPacket(),
+	mIsWithId(IsWithId),
 	mId(Id)
 {
 	mPacket = std::move(*ioPacket);
@@ -343,7 +345,45 @@ int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t Of
 int aux_make_serv_worker_request_data(gs_connection_surrogate_id_t Id, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker) {
 	int r = 0;
 
-	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(ioPacket, Id));
+	if (! ioPacket->get())
+		GS_ERR_CLEAN_L(1, E, S, "ServWorkerRequestData uses null packet as special value");
+
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(ioPacket, true, Id));
+
+	if (oRequestWorker)
+		*oRequestWorker = RequestWorker;
+
+clean:
+
+	return r;
+}
+
+int aux_make_serv_worker_request_data_reconnect_no_id(
+	sp<ServWorkerRequestData> *oRequestWorker)
+{
+	int r = 0;
+
+	gs_packet_unique_t GsPacket;
+
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(&GsPacket, false, -1));
+
+	if (oRequestWorker)
+		*oRequestWorker = RequestWorker;
+
+clean:
+
+	return r;
+}
+
+int aux_make_serv_worker_request_data_reconnect_with_id(
+	gs_connection_surrogate_id_t Id,
+	sp<ServWorkerRequestData> *oRequestWorker)
+{
+	int r = 0;
+
+	gs_packet_unique_t GsPacket;
+
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(&GsPacket, true, Id));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -359,7 +399,7 @@ int aux_make_serv_worker_request_data_for_response(
 	int r = 0;
 
 	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
-		ioPacket, RequestBeingResponded->mId));
+		ioPacket, true, RequestBeingResponded->mId));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -416,6 +456,47 @@ int aux_serv_worker_thread_service_request_blobs(
 	{
 		GS_GOTO_CLEAN();
 	}
+
+clean:
+
+	return r;
+}
+
+int aux_worker_enqueue_reconnect_no_id(
+	ServWorkerData *WorkerDataRecv)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> Request;
+
+	if (!!(r = aux_make_serv_worker_request_data_reconnect_no_id(&Request)))
+		GS_GOTO_CLEAN();
+
+	assert(Request->isReconnectRequest() && ! Request->isReconnectRequestWithId());
+
+	WorkerDataRecv->RequestEnqueue(Request);
+
+clean:
+
+	return r;
+}
+
+int aux_worker_enqueue_reconnect_with_id(
+	ServWorkerData *WorkerDataRecv,
+	gs_connection_surrogate_id_t Id)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> Request;
+
+	gs_packet_unique_t GsPacket;
+
+	if (!!(r = aux_make_serv_worker_request_data_reconnect_with_id(Id, &Request)))
+		GS_GOTO_CLEAN();
+
+	assert(Request->isReconnectRequest() && Request->isReconnectRequestWithId());
+
+	WorkerDataRecv->RequestEnqueue(Request);
 
 clean:
 
@@ -1319,7 +1400,7 @@ int aux_serv_aux_wait_reconnect_and_connect(ServAuxData *AuxData, sp<GsConnectio
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
 		GS_GOTO_CLEAN();
 
-	ConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(host, peer));
+	ConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(host, peer, false));
 
 	if (oConnectionSurrogate)
 		*oConnectionSurrogate = ConnectionSurrogate;
@@ -1625,7 +1706,7 @@ int aux_serv_host_service(
 			GS_BYPART_DATA_VAR(GsConnectionSurrogateId, ctxstruct);
 
 			gs_connection_surrogate_id_t AssignedId = 0;
-			sp<GsConnectionSurrogate> ConnectionSurrogate(new GsConnectionSurrogate(server, peer));
+			sp<GsConnectionSurrogate> ConnectionSurrogate(new GsConnectionSurrogate(server, peer, false));
 
 			// FIXME: also need to store server and peer aka host and peer
 			if (!!(r = gs_connection_surrogate_map_insert(ioConnectionSurrogateMap, ConnectionSurrogate, &AssignedId)))
@@ -1789,8 +1870,9 @@ clean:
 	return r;
 }
 
-int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
+int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 	ServAuxData *AuxData,
+	ServWorkerData *WorkerDataRecv,
 	uint32_t ServPort,
 	ClntStateReconnect *ioStateReconnect,
 	sp<GsHostSurrogate> *ioHostSurrogate,
@@ -1814,6 +1896,9 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
 		}
 
 		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
+			GS_GOTO_CLEAN();
+
+		if (!!(r = aux_worker_enqueue_reconnect_no_id(WorkerDataRecv)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -1934,7 +2019,7 @@ int aux_clnt_serv_connect_immediately(
 		GS_GOTO_CLEAN();
 
 	if (ioConnectionSurrogate)
-		*ioConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(clnt, peer));
+		*ioConnectionSurrogate = sp<GsConnectionSurrogate>(new GsConnectionSurrogate(clnt, peer, true));
 
 	if (oAddressClnt)
 		*oAddressClnt = AddressClnt;
@@ -1951,8 +2036,9 @@ clean:
 	return r;
 }
 
-int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_notify_worker(
 	ServAuxData *AuxData,
+	ServWorkerData *WorkerDataRecv,
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	ClntStateReconnect *ioStateReconnect,
@@ -1979,6 +2065,7 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 			GS_GOTO_CLEAN();
 		}
 
+		// FIXME: create an atomic clear + insert to ensure principalclientconnection always available (no races)
 		// FIXME: clear connection map after reconnect? probably
 		if (!!(r = gs_connection_surrogate_map_clear(ioConnectionSurrogateMap)))
 			GS_GOTO_CLEAN();
@@ -1989,6 +2076,8 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
 		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
 
+		if (!!(r = aux_worker_enqueue_reconnect_with_id(WorkerDataRecv, Id)))
+			GS_GOTO_CLEAN();
 	}
 
 	if (ioWantReconnect)
@@ -2022,11 +2111,10 @@ int clnt_serv_thread_func_reconnecter(
 	/* NOTE: special error handling */
 	while (true) {
 
-		/* protocol between serv and serv_aux starts with notifying serv_aux about serv address
-		*  after every reconnection (including initial connect) */
 		/* NOTE: no_clean */
-		if (!!(r = aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux(
+		if (!!(r = aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_notify_worker(
 			AuxData.get(),
+			WorkerDataRecv.get(),
 			ServPort,
 			ServHostNameBuf, LenServHostName,
 			&StateReconnect,
