@@ -292,6 +292,10 @@ int clnt_worker_thread_func(
 	sp<ServWorkerData> WorkerDataSend);
 
 int aux_enet_host_create_serv(uint32_t EnetAddressPort, ENetHost **oServer);
+int aux_enet_host_server_create_addr_extra_for_serv_aux(
+	uint32_t ServPort,
+	ENetHost **oHost,
+	ENetAddress *oAddressForServAux);
 int aux_enet_host_client_create_addr(ENetHost **oHost, ENetAddress *oAddressHost);
 int aux_enet_host_connect_addr(ENetHost *host, ENetAddress *address, ENetPeer **oPeer);
 int aux_enet_host_create_connect_addr(
@@ -343,17 +347,32 @@ int aux_serv_host_service(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	const sp<ServWorkerData> &WorkerDataRecv,
 	const sp<ServWorkerData> &WorkerDataSend,
-	sp<GsHostSurrogate> HostSurrogate);
+	sp<GsHostSurrogate> *ioHostSurrogate);
 int aux_serv_thread_func(
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend,
-	sp<GsHostSurrogate> HostSurrogate,
+	sp<GsHostSurrogate> *ioHostSurrogate,
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap);
-int serv_serv_thread_func(
+int aux_serv_serv_connect_immediately(
 	uint32_t ServPort,
+	sp<GsHostSurrogate> *ioHostSurrogate,
+	ENetAddress *oAddressForServAux);
+int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux(
+	ServAuxData *AuxData,
+	uint32_t ServPort,
+	ClntStateReconnect *ioStateReconnect,
+	sp<GsHostSurrogate> *ioHostSurrogate);
+int serv_serv_thread_func_reconnecter(
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend);
-int aux_serv_clnt_connect_immediately(
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort);
+int serv_serv_thread_func(
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	sp<GsHostSurrogate> *ioHostSurrogate);
+int aux_clnt_serv_connect_immediately(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
@@ -458,9 +477,10 @@ void serv_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend);
 void serv_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData);
 void serv_thread_func_f(
-	uint32_t ServPort,
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend);
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServAuxData> AuxData,
+	uint32_t ServPort);
 void clnt_worker_thread_func_f(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
