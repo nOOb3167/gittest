@@ -292,11 +292,43 @@ int aux_worker_enqueue_reconnect_no_id(
 int aux_worker_enqueue_reconnect_with_id(
 	ServWorkerData *WorkerDataRecv,
 	gs_connection_surrogate_id_t Id);
+int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
+	ServWorkerData *WorkerDataRecv,
+	ClntStateReconnect *ioStateReconnect,
+	uint32_t *ioWantReconnect);
+int serv_worker_thread_func_reconnecter(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend);
+int serv_state_crank(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend);
 int serv_worker_thread_func(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	uint32_t *oWantReconnect);
+int aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
+	ServWorkerData *WorkerDataRecv,
+	ClntStateReconnect *ioStateReconnect,
+	sp<ServWorkerRequestData> *oRequestForSend,
+	uint32_t *ioWantReconnect);
+int clnt_worker_thread_func_reconnecter(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	sp<ServAuxData> ServAuxData,
 	sp<ServWorkerData> WorkerDataRecv,
 	sp<ServWorkerData> WorkerDataSend);
@@ -305,7 +337,10 @@ int clnt_worker_thread_func(
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	sp<ServAuxData> ServAuxData,
 	sp<ServWorkerData> WorkerDataRecv,
-	sp<ServWorkerData> WorkerDataSend);
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServWorkerRequestData> RequestForSend,
+	sp<ClntState> State,
+	uint32_t *oWantReconnect);
 
 int aux_enet_host_create_serv(uint32_t EnetAddressPort, ENetHost **oServer);
 int aux_enet_host_server_create_addr_extra_for_serv_aux(

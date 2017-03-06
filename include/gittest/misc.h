@@ -32,6 +32,9 @@
 #define GS_ERR_CLEAN_L(THE_R, LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_CLEAN(THE_R); }
 #define GS_GOTO_CLEAN_L(LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_GOTO_CLEAN(); }
 
+/* should not clash with other error codes etc - just used random.org */
+#define GS_ERRCODE_RECONNECT 0x7BDD6EAF
+
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 
 #define GS_DUMMY_BLOCK() ((void) 0)

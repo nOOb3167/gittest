@@ -511,7 +511,91 @@ clean:
 	return r;
 }
 
-int serv_worker_thread_func(
+int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
+	ServWorkerData *WorkerDataRecv,
+	ClntStateReconnect *ioStateReconnect,
+	uint32_t *ioWantReconnect)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> RequestReconnect;
+
+	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (*ioWantReconnect) {
+
+		WorkerDataRecv->RequestDequeue(&RequestReconnect);
+		assert(RequestReconnect->isReconnectRequest() && ! RequestReconnect->isReconnectRequestWithId());
+
+	}
+
+	if (ioWantReconnect)
+		*ioWantReconnect = false;
+
+clean:
+
+	return r;
+}
+
+int serv_worker_thread_func_reconnecter(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend)
+{
+	int r = 0;
+
+	ClntStateReconnect StateReconnect = {};
+
+	uint32_t WantReconnect = true;
+
+	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: special error handling */
+	while (true) {
+
+		/* NOTE: no_clean */
+		if (!!(r = aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
+			WorkerDataRecv.get(),
+			&StateReconnect,
+			&WantReconnect)))
+		{
+			GS_ERR_NO_CLEAN(1);
+		}
+
+		/* NOTE: cleansub */
+		if (!!(r = serv_worker_thread_func(
+			RefNameMainBuf, LenRefNameMain,
+			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			RepoSelfUpdateOpenPathBuf, LenRepoSelfUpdateOpenPath,
+			ServAuxData,
+			WorkerDataRecv,
+			WorkerDataSend,
+			&WantReconnect)))
+		{
+			GS_GOTO_CLEANSUB();
+		}
+
+	cleansub:
+		if (!!r) {
+			GS_LOG(E, S, "serv_worker error into reconnect attempt");
+		}
+	}
+
+noclean:
+
+clean :
+
+	return r;
+}
+
+int serv_state_crank(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
@@ -534,7 +618,8 @@ int serv_worker_thread_func(
 	while (true) {
 		sp<ServWorkerRequestData> Request;
 
-		WorkerDataRecv->RequestDequeue(&Request);
+		if (!!(r = aux_packet_request_dequeue(WorkerDataRecv.get(), &Request)))
+			GS_GOTO_CLEAN();
 
 		ENetPacket * const &Packet = *Request->mPacket;
 
@@ -726,7 +811,78 @@ clean:
 	return r;
 }
 
-int clnt_worker_thread_func(
+int serv_worker_thread_func(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	const char *RepoSelfUpdateOpenPathBuf, size_t LenRepoSelfUpdateOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	uint32_t *oWantReconnect)
+{
+	int r = 0;
+
+	uint32_t WantReconnect = false;
+
+	if (!!(r = serv_state_crank(
+		RefNameMainBuf, LenRefNameMain,
+		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+		RepoMainOpenPathBuf, LenRepoMainOpenPath,
+		RepoSelfUpdateOpenPathBuf, LenRepoSelfUpdateOpenPath,
+		ServAuxData,
+		WorkerDataRecv,
+		WorkerDataSend)))
+	{
+		GS_ERR_NO_CLEAN(r);
+	}
+
+noclean:
+	if (!!r && r == GS_ERRCODE_RECONNECT) {
+		WantReconnect = true;
+	}
+
+	if (oWantReconnect)
+		*oWantReconnect = WantReconnect;
+
+clean:
+
+	return r;
+}
+
+int aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
+	ServWorkerData *WorkerDataRecv,
+	ClntStateReconnect *ioStateReconnect,
+	sp<ServWorkerRequestData> *oRequestForSend,
+	uint32_t *ioWantReconnect)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> RequestReconnect;
+
+	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (*ioWantReconnect) {
+
+		WorkerDataRecv->RequestDequeue(&RequestReconnect);
+		assert(RequestReconnect->isReconnectRequest() && RequestReconnect->isReconnectRequestWithId());
+
+	}
+
+	// FIXME: rebuild ServWorkerRequestData instead of using RequestReconnect directly
+	if (oRequestForSend)
+		*oRequestForSend = RequestReconnect;
+
+	if (ioWantReconnect)
+		*ioWantReconnect = false;
+
+clean:
+
+	return r;
+}
+
+int clnt_worker_thread_func_reconnecter(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	sp<ServAuxData> ServAuxData,
@@ -735,17 +891,73 @@ int clnt_worker_thread_func(
 {
 	int r = 0;
 
+	ClntStateReconnect StateReconnect = {};
+
 	sp<ClntState> State(new ClntState);
 
-	sp<ServWorkerRequestData> RequestReconnect;
 	sp<ServWorkerRequestData> RequestForSend;
+
+	uint32_t WantReconnect = true;
+
+	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
 
-	WorkerDataRecv->RequestDequeue(&RequestReconnect);
-	assert(RequestReconnect->isReconnectRequest() && RequestReconnect->isReconnectRequestWithId());
-	RequestForSend = RequestReconnect;
+	/* NOTE: special error handling */
+	while (true) {
+
+		/* NOTE: no_clean */
+		if (!!(r = aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
+			WorkerDataRecv.get(),
+			&StateReconnect,
+			&RequestForSend,
+			&WantReconnect)))
+		{
+			GS_ERR_NO_CLEAN(1);
+		}
+
+		/* NOTE: cleansub */
+		if (!!(r = clnt_worker_thread_func(
+			RefNameMainBuf, LenRefNameMain,
+			RepoMainOpenPathBuf, LenRepoMainOpenPath,
+			ServAuxData,
+			WorkerDataRecv,
+			WorkerDataSend,
+			RequestForSend,
+			State,
+			&WantReconnect)))
+		{
+			GS_GOTO_CLEANSUB();
+		}
+
+	cleansub:
+		if (!!r) {
+			GS_LOG(E, S, "clnt_worker error into reconnect attempt");
+		}
+	}
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int clnt_worker_thread_func(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
+	sp<ServAuxData> ServAuxData,
+	sp<ServWorkerData> WorkerDataRecv,
+	sp<ServWorkerData> WorkerDataSend,
+	sp<ServWorkerRequestData> RequestForSend,
+	sp<ClntState> State,
+	uint32_t *oWantReconnect)
+{
+	int r = 0;
+
+	uint32_t WantReconnect = false;
 
 	while (true) {
 		if (!!(r = clnt_state_crank(
@@ -757,9 +969,17 @@ int clnt_worker_thread_func(
 			WorkerDataSend.get(),
 			RequestForSend.get())))
 		{
-			GS_GOTO_CLEAN();
+			GS_ERR_NO_CLEAN(r);
 		}
 	}
+
+noclean:
+	if (!!r && r == GS_ERRCODE_RECONNECT) {
+		WantReconnect = true;
+	}
+
+	if (oWantReconnect)
+		*oWantReconnect = WantReconnect;
 
 clean:
 
@@ -1036,6 +1256,7 @@ clean:
 	return r;
 }
 
+/* @err: GS_ERRCODE_RECONNECT if reconnect request dequeued */
 int aux_packet_request_dequeue(ServWorkerData *WorkerDataRecv, sp<ServWorkerRequestData> *oRequestForRecv) {
 	int r = 0;
 
@@ -1044,7 +1265,7 @@ int aux_packet_request_dequeue(ServWorkerData *WorkerDataRecv, sp<ServWorkerRequ
 	WorkerDataRecv->RequestDequeue(&RequestForRecv);
 
 	if (RequestForRecv->isReconnectRequest())
-		GS_ERR_CLEAN(1);
+		GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
 
 	if (oRequestForRecv)
 		*oRequestForRecv = RequestForRecv;
@@ -1054,6 +1275,7 @@ clean:
 	return r;
 }
 
+/* @err: GS_ERRCODE_RECONNECT if reconnect request dequeued */
 int aux_packet_request_dequeue_packet(ServWorkerData *WorkerDataRecv, gs_packet_unique_t *oPacket) {
 	int r = 0;
 
@@ -1445,7 +1667,7 @@ int aux_serv_aux_reconnect_expend_cond_interrupt_perform(
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (ioWantReconnect) {
+	if (*ioWantReconnect) {
 
 		if (!!(r = aux_serv_aux_wait_reconnect_and_connect(AuxData, ioConnectionSurrogate)))
 			GS_GOTO_CLEAN();
@@ -1511,8 +1733,9 @@ int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData) {
 		}
 
 	cleansub:
-		/* allow errors and go into the next reconnection attempt */
-		GS_DUMMY_BLOCK();
+		if (!!r) {
+			GS_LOG(E, S, "serv_aux error into reconnect attempt");
+		}
 	}
 
 noclean:
@@ -1901,7 +2124,7 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (ioWantReconnect) {
+	if (*ioWantReconnect) {
 
 		ENetAddress AuxDataNotificationAddress = {};
 
@@ -1978,8 +2201,9 @@ int serv_serv_thread_func_reconnecter(
 		}
 
 	cleansub:
-		/* allow errors and go into the next reconnection attempt */
-		GS_DUMMY_BLOCK();
+		if (!!r) {
+			GS_LOG(E, S, "serv_serv error into reconnect attempt");
+		}
 	}
 
 noclean:
@@ -2158,8 +2382,9 @@ int clnt_serv_thread_func_reconnecter(
 		}
 
 	cleansub:
-		/* allow errors and go into the next reconnection attempt */
-		GS_DUMMY_BLOCK();
+		if (!!r) {
+			GS_LOG(E, S, "clnt_serv error into reconnect attempt");
+		}
 	}
 
 noclean:
@@ -2908,7 +3133,7 @@ void serv_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
-	if (!!(r = serv_worker_thread_func(
+	if (!!(r = serv_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
 		RepoMainOpenPathBuf, LenRepoMainOpenPath,
@@ -2949,7 +3174,7 @@ void clnt_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
-	if (!!(r = clnt_worker_thread_func(
+	if (!!(r = clnt_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RepoMainOpenPathBuf, LenRepoMainOpenPath,
 		ServAuxData,
