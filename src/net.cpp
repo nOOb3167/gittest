@@ -85,6 +85,10 @@ bool ServWorkerRequestData::isReconnectRequest() {
 	return ! mPacket;
 }
 
+bool ServWorkerRequestData::isReconnectRequestWithId() {
+	return ! mPacket && mIsWithId;
+}
+
 ServWorkerData::ServWorkerData()
 	: mWorkerQueue(new std::deque<sp<ServWorkerRequestData> >),
 	mWorkerDataMutex(new std::mutex),
@@ -345,10 +349,12 @@ int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t Of
 int aux_make_serv_worker_request_data(gs_connection_surrogate_id_t Id, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker) {
 	int r = 0;
 
+	sp<ServWorkerRequestData> RequestWorker;
+
 	if (! ioPacket->get())
 		GS_ERR_CLEAN_L(1, E, S, "ServWorkerRequestData uses null packet as special value");
 
-	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(ioPacket, true, Id));
+	RequestWorker = sp<ServWorkerRequestData>(new ServWorkerRequestData(ioPacket, true, Id));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -1370,6 +1376,8 @@ clean:
 }
 
 int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress) {
+	int r = 0;
+
 	bool HaveRequestData = false;
 	ServAuxRequestData RequestData;
 
@@ -1387,6 +1395,10 @@ int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress) {
 
 	if (oAddress)
 		*oAddress = RequestData.mAddress;
+
+clean:
+
+	return r;
 }
 
 int aux_serv_aux_wait_reconnect_and_connect(ServAuxData *AuxData, sp<GsConnectionSurrogate> *oConnectionSurrogate) {
@@ -1500,6 +1512,7 @@ int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData) {
 
 	cleansub:
 		/* allow errors and go into the next reconnection attempt */
+		GS_DUMMY_BLOCK();
 	}
 
 noclean:
@@ -1966,6 +1979,7 @@ int serv_serv_thread_func_reconnecter(
 
 	cleansub:
 		/* allow errors and go into the next reconnection attempt */
+		GS_DUMMY_BLOCK();
 	}
 
 noclean:
@@ -2145,6 +2159,7 @@ int clnt_serv_thread_func_reconnecter(
 
 	cleansub:
 		/* allow errors and go into the next reconnection attempt */
+		GS_DUMMY_BLOCK();
 	}
 
 noclean:
@@ -3002,7 +3017,6 @@ int aux_full_create_connection_server(
 
 		sp<std::thread> ServerAuxThread(new std::thread(
 			serv_serv_aux_thread_func_f,
-			ServPort,
 			DataAux));
 
 		sp<std::thread> ServerThread(new std::thread(

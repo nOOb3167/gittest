@@ -34,6 +34,8 @@
 
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 
+#define GS_DUMMY_BLOCK() ((void) 0)
+
 /* WARNING: evaluates arguments multiple times. rework using block with decltype assignment. */
 #define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
