@@ -73,20 +73,36 @@ void GsConnectionSurrogate::Invalidate() {
 	mIsValid.store(0);
 }
 
-ServWorkerRequestData::ServWorkerRequestData(gs_packet_unique_t *ioPacket, uint32_t IsWithId, gs_connection_surrogate_id_t Id)
-	: mPacket(),
-	mIsWithId(IsWithId),
-	mId(Id)
+ServWorkerRequestData::ServWorkerRequestData(
+	gs_packet_unique_t *ioPacket,
+	uint32_t IsPrepare,
+	uint32_t IsWithId,
+	gs_connection_surrogate_id_t Id)
 {
 	mPacket = std::move(*ioPacket);
+	mIsPrepare = IsPrepare;
+	mIsWithId = IsWithId;
+	mId = Id;
 }
 
 bool ServWorkerRequestData::isReconnectRequest() {
 	return ! mPacket;
 }
 
-bool ServWorkerRequestData::isReconnectRequestWithId() {
-	return ! mPacket && mIsWithId;
+bool ServWorkerRequestData::isReconnectRequestPrepare() {
+	return ! mPacket && mIsPrepare;
+}
+
+bool ServWorkerRequestData::isReconnectRequestRegular() {
+	return ! mPacket && ! mIsPrepare;
+}
+
+bool ServWorkerRequestData::isReconnectRequestRegularWithId() {
+	return ! mPacket && ! mIsPrepare && mIsWithId;
+}
+
+bool ServWorkerRequestData::isReconnectRequestRegularNoId() {
+	return ! mPacket && ! mIsPrepare && ! mIsWithId;
 }
 
 ServWorkerData::ServWorkerData()
@@ -354,7 +370,11 @@ int aux_make_serv_worker_request_data(gs_connection_surrogate_id_t Id, gs_packet
 	if (! ioPacket->get())
 		GS_ERR_CLEAN_L(1, E, S, "ServWorkerRequestData uses null packet as special value");
 
-	RequestWorker = sp<ServWorkerRequestData>(new ServWorkerRequestData(ioPacket, true, Id));
+	RequestWorker = sp<ServWorkerRequestData>(new ServWorkerRequestData(
+		ioPacket,
+		false,
+		true,
+		Id));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -364,14 +384,18 @@ clean:
 	return r;
 }
 
-int aux_make_serv_worker_request_data_reconnect_no_id(
+int aux_make_serv_worker_request_data_reconnect_prepare(
 	sp<ServWorkerRequestData> *oRequestWorker)
 {
 	int r = 0;
 
 	gs_packet_unique_t GsPacket;
 
-	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(&GsPacket, false, -1));
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
+		&GsPacket,
+		true,
+		false,
+		-1));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -381,7 +405,28 @@ clean:
 	return r;
 }
 
-int aux_make_serv_worker_request_data_reconnect_with_id(
+int aux_make_serv_worker_request_data_reconnect_regular_no_id(
+	sp<ServWorkerRequestData> *oRequestWorker)
+{
+	int r = 0;
+
+	gs_packet_unique_t GsPacket;
+
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
+		&GsPacket,
+		false,
+		false,
+		-1));
+
+	if (oRequestWorker)
+		*oRequestWorker = RequestWorker;
+
+clean:
+
+	return r;
+}
+
+int aux_make_serv_worker_request_data_reconnect_regular_with_id(
 	gs_connection_surrogate_id_t Id,
 	sp<ServWorkerRequestData> *oRequestWorker)
 {
@@ -389,7 +434,11 @@ int aux_make_serv_worker_request_data_reconnect_with_id(
 
 	gs_packet_unique_t GsPacket;
 
-	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(&GsPacket, true, Id));
+	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
+		&GsPacket,
+		false,
+		true,
+		Id));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -407,7 +456,10 @@ int aux_make_serv_worker_request_data_for_response(
 	assert(RequestBeingResponded->mIsWithId);
 
 	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
-		ioPacket, true, RequestBeingResponded->mId));
+		ioPacket,
+		false,
+		true,
+		RequestBeingResponded->mId));
 
 	if (oRequestWorker)
 		*oRequestWorker = RequestWorker;
@@ -470,17 +522,15 @@ clean:
 	return r;
 }
 
-int aux_worker_enqueue_reconnect_no_id(
+int aux_worker_enqueue_reconnect_prepare(
 	ServWorkerData *WorkerDataRecv)
 {
 	int r = 0;
 
 	sp<ServWorkerRequestData> Request;
 
-	if (!!(r = aux_make_serv_worker_request_data_reconnect_no_id(&Request)))
+	if (!!(r = aux_make_serv_worker_request_data_reconnect_prepare(&Request)))
 		GS_GOTO_CLEAN();
-
-	assert(Request->isReconnectRequest() && ! Request->isReconnectRequestWithId());
 
 	WorkerDataRecv->RequestEnqueue(Request);
 
@@ -489,7 +539,24 @@ clean:
 	return r;
 }
 
-int aux_worker_enqueue_reconnect_with_id(
+int aux_worker_enqueue_reconnect_regular_no_id(
+	ServWorkerData *WorkerDataRecv)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> Request;
+
+	if (!!(r = aux_make_serv_worker_request_data_reconnect_regular_no_id(&Request)))
+		GS_GOTO_CLEAN();
+
+	WorkerDataRecv->RequestEnqueue(Request);
+
+clean:
+
+	return r;
+}
+
+int aux_worker_enqueue_reconnect_regular_with_id(
 	ServWorkerData *WorkerDataRecv,
 	gs_connection_surrogate_id_t Id)
 {
@@ -497,14 +564,70 @@ int aux_worker_enqueue_reconnect_with_id(
 
 	sp<ServWorkerRequestData> Request;
 
-	gs_packet_unique_t GsPacket;
-
-	if (!!(r = aux_make_serv_worker_request_data_reconnect_with_id(Id, &Request)))
+	if (!!(r = aux_make_serv_worker_request_data_reconnect_regular_with_id(Id, &Request)))
 		GS_GOTO_CLEAN();
 
-	assert(Request->isReconnectRequest() && Request->isReconnectRequestWithId());
-
 	WorkerDataRecv->RequestEnqueue(Request);
+
+clean:
+
+	return r;
+}
+
+int aux_worker_enqueue_reconnect_double_notify_no_id(
+	ServWorkerData *WorkerDataRecv)
+{
+	int r = 0;
+
+	if (!!(r = aux_worker_enqueue_reconnect_prepare(WorkerDataRecv)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_worker_enqueue_reconnect_regular_no_id(WorkerDataRecv)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int aux_worker_enqueue_reconnect_double_notify_with_id(
+	ServWorkerData *WorkerDataRecv,
+	gs_connection_surrogate_id_t Id)
+{
+	int r = 0;
+
+	if (!!(r = aux_worker_enqueue_reconnect_prepare(WorkerDataRecv)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_worker_enqueue_reconnect_regular_with_id(WorkerDataRecv, Id)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+/* we are expecting: possibly a reconnect_prepare, mandatorily a reconnect */
+int aux_worker_dequeue_handling_double_notify(
+	ServWorkerData *WorkerDataRecv,
+	sp<ServWorkerRequestData> *oRequest)
+{
+	int r = 0;
+
+	sp<ServWorkerRequestData> Request;
+
+	/* possibly reconnect_prepare */
+	WorkerDataRecv->RequestDequeue(&Request);
+
+	/* if indeed reconnect_prepare, skip it */
+	if (Request->isReconnectRequestPrepare())
+		WorkerDataRecv->RequestDequeue(&Request);
+
+	if (!Request->isReconnectRequestRegular())
+		GS_ERR_CLEAN_L(1, E, S, "suspected invalid double notify sequence");
+
+	if (oRequest)
+		*oRequest = Request;
 
 clean:
 
@@ -525,8 +648,10 @@ int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
 
 	if (*ioWantReconnect) {
 
-		WorkerDataRecv->RequestDequeue(&RequestReconnect);
-		assert(RequestReconnect->isReconnectRequest() && ! RequestReconnect->isReconnectRequestWithId());
+		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
+			GS_GOTO_CLEAN();
+
+		assert(RequestReconnect->isReconnectRequestRegularWithId());
 
 	}
 
@@ -865,8 +990,10 @@ int aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
 
 	if (*ioWantReconnect) {
 
-		WorkerDataRecv->RequestDequeue(&RequestReconnect);
-		assert(RequestReconnect->isReconnectRequest() && RequestReconnect->isReconnectRequestWithId());
+		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
+			GS_GOTO_CLEAN();
+
+		assert(RequestReconnect->isReconnectRequestRegularWithId());
 
 	}
 
@@ -2139,7 +2266,7 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
 
-		if (!!(r = aux_worker_enqueue_reconnect_no_id(WorkerDataRecv)))
+		if (!!(r = aux_worker_enqueue_reconnect_double_notify_no_id(WorkerDataRecv)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -2320,7 +2447,7 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_not
 		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
 
-		if (!!(r = aux_worker_enqueue_reconnect_with_id(WorkerDataRecv, Id)))
+		if (!!(r = aux_worker_enqueue_reconnect_double_notify_with_id(WorkerDataRecv, Id)))
 			GS_GOTO_CLEAN();
 	}
 

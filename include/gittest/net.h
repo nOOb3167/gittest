@@ -127,15 +127,23 @@ struct PacketUniqueWithOffset {
 
 class ServWorkerRequestData {
 public:
-	ServWorkerRequestData(gs_packet_unique_t *ioPacket, uint32_t IsWithId, gs_connection_surrogate_id_t Id);
+	ServWorkerRequestData(
+		gs_packet_unique_t *ioPacket,
+		uint32_t IsPrepare,
+		uint32_t IsWithId,
+		gs_connection_surrogate_id_t Id);
 
 	bool isReconnectRequest();
-	bool isReconnectRequestWithId();
+	bool isReconnectRequestPrepare();
+	bool isReconnectRequestRegular();
+	bool isReconnectRequestRegularWithId();
+	bool isReconnectRequestRegularNoId();
 
 public:
 	gs_packet_unique_t mPacket;
 
 private:
+	uint32_t mIsPrepare;
 	uint32_t mIsWithId;
 	gs_connection_surrogate_id_t mId;
 
@@ -275,9 +283,11 @@ int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_
 int aux_make_packet_unique_with_offset(gs_packet_unique_t *ioPacket, uint32_t OffsetSize, uint32_t OffsetObject, PacketUniqueWithOffset *oPacketWithOffset);
 
 int aux_make_serv_worker_request_data(gs_connection_surrogate_id_t Id, gs_packet_unique_t *ioPacket, sp<ServWorkerRequestData> *oRequestWorker);
-int aux_make_serv_worker_request_data_reconnect_no_id(
+int aux_make_serv_worker_request_data_reconnect_prepare(
 	sp<ServWorkerRequestData> *oRequestWorker);
-int aux_make_serv_worker_request_data_reconnect_with_id(
+int aux_make_serv_worker_request_data_reconnect_regular_no_id(
+	sp<ServWorkerRequestData> *oRequestWorker);
+int aux_make_serv_worker_request_data_reconnect_regular_with_id(
 	gs_connection_surrogate_id_t Id,
 	sp<ServWorkerRequestData> *oRequestWorker);
 int aux_make_serv_worker_request_data_for_response(
@@ -287,11 +297,21 @@ void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, gs_conn
 int aux_serv_worker_thread_service_request_blobs(
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
 	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse);
-int aux_worker_enqueue_reconnect_no_id(
+int aux_worker_enqueue_reconnect_prepare(
 	ServWorkerData *WorkerDataRecv);
-int aux_worker_enqueue_reconnect_with_id(
+int aux_worker_enqueue_reconnect_regular_no_id(
+	ServWorkerData *WorkerDataRecv);
+int aux_worker_enqueue_reconnect_regular_with_id(
 	ServWorkerData *WorkerDataRecv,
 	gs_connection_surrogate_id_t Id);
+int aux_worker_enqueue_reconnect_double_notify_no_id(
+	ServWorkerData *WorkerDataRecv);
+int aux_worker_enqueue_reconnect_double_notify_with_id(
+	ServWorkerData *WorkerDataRecv,
+	gs_connection_surrogate_id_t Id);
+int aux_worker_dequeue_handling_double_notify(
+	ServWorkerData *WorkerDataRecv,
+	sp<ServWorkerRequestData> *oRequest);
 int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
 	ServWorkerData *WorkerDataRecv,
 	ClntStateReconnect *ioStateReconnect,
