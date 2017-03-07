@@ -140,6 +140,39 @@ void ServWorkerData::RequestDequeueAllOpt(std::deque<sp<ServWorkerRequestData> >
 	}
 }
 
+ServAuxRequestData::ServAuxRequestData() {
+	mIsReconnect = false;
+	mIsPrepare = false;
+	mAddress = {};
+}
+
+ServAuxRequestData::ServAuxRequestData(
+	uint32_t IsReconnect,
+	uint32_t IsPrepare,
+	ENetAddress *AddressIfReconnectOpt)
+{
+	ENetAddress EmptyAddress = {};
+
+	assert(! AddressIfReconnectOpt || (IsReconnect && ! IsPrepare));
+
+	mIsReconnect = IsReconnect;
+	mIsPrepare = IsPrepare;
+	mAddress = AddressIfReconnectOpt ? *AddressIfReconnectOpt : EmptyAddress;
+
+}
+
+bool ServAuxRequestData::IsReconnectRequest() {
+	return !!mIsReconnect;
+}
+
+bool ServAuxRequestData::isReconnectRequestPrepare() {
+	return mIsReconnect && mIsPrepare;
+}
+
+bool ServAuxRequestData::isReconnectRequestRegular() {
+	return mIsReconnect && ! mIsPrepare;
+}
+
 ServAuxData::ServAuxData()
 	: mAuxQueue(new std::deque<ServAuxRequestData>),
 	mAuxDataMutex(new std::mutex),
@@ -149,7 +182,7 @@ ServAuxData::ServAuxData()
 void ServAuxData::InterruptRequestedEnqueue() {
 	{
 		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
-		mAuxQueue->push_back(ServAuxRequestData(NULL));
+		mAuxQueue->push_back(ServAuxRequestData(false, false, NULL));
 	}
 	mAuxDataCond->notify_one();
 }
@@ -160,6 +193,15 @@ void ServAuxData::InterruptRequestedEnqueueData(ServAuxRequestData RequestData) 
 		mAuxQueue->push_back(RequestData);
 	}
 	mAuxDataCond->notify_one();
+}
+
+void ServAuxData::InterruptRequestedDequeue(ServAuxRequestData *oRequestData) {
+	{
+		std::unique_lock<std::mutex> lock(*mAuxDataMutex);
+		mAuxDataCond->wait(lock, [&]() { return !mAuxQueue->empty(); });
+		if (oRequestData)
+			*oRequestData = InterruptRequestedDequeueMT_();
+	}
 }
 
 bool ServAuxData::InterruptRequestedDequeueTimeout(
@@ -651,7 +693,7 @@ int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
 		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
 			GS_GOTO_CLEAN();
 
-		assert(RequestReconnect->isReconnectRequestRegularWithId());
+		assert(RequestReconnect->isReconnectRequestRegularNoId());
 
 	}
 
@@ -1724,6 +1766,7 @@ clean:
 	return r;
 }
 
+/* FIXME: unused code afaik */
 int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress) {
 	int r = 0;
 
@@ -1736,11 +1779,11 @@ int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress) {
 				std::chrono::milliseconds(GS_SERV_AUX_ARBITRARY_TIMEOUT_MS),
 				&RequestData))
 			&&
-			(! RequestData.mIsReconnectRequest)
+			(! RequestData.IsReconnectRequest())
 		))
 	{ /* dummy */ }
 
-	assert(HaveRequestData && RequestData.mIsReconnectRequest);
+	assert(HaveRequestData && RequestData.IsReconnectRequest());
 
 	if (oAddress)
 		*oAddress = RequestData.mAddress;
@@ -1755,13 +1798,19 @@ int aux_serv_aux_wait_reconnect_and_connect(ServAuxData *AuxData, sp<GsConnectio
 
 	sp<GsConnectionSurrogate> ConnectionSurrogate;
 
+	ServAuxRequestData RequestReconnect;
+
 	ENetAddress address = {};
 
 	ENetHost *host = NULL;
 	ENetPeer *peer = NULL;
 
-	if (!!(r = aux_serv_aux_wait_reconnect(AuxData, &address)))
+	if (!!(r = aux_serv_aux_dequeue_handling_double_notify(AuxData, &RequestReconnect)))
 		GS_GOTO_CLEAN();
+
+	assert(RequestReconnect.isReconnectRequestRegular());
+
+	address = RequestReconnect.mAddress;
 
 	if (!!(r = aux_host_connect(&address, GS_CONNECT_NUMRETRY, GS_CONNECT_TIMEOUT_MS, &host, &peer)))
 		GS_GOTO_CLEAN();
@@ -1891,9 +1940,34 @@ clean:
 	return r;
 }
 
-int aux_serv_aux_enqueue_reconnect(ServAuxData *AuxData, ENetAddress *address) {
-	AuxData->InterruptRequestedEnqueueData(ServAuxRequestData(address));
+int aux_serv_aux_enqueue_reconnect_double_notify(ServAuxData *AuxData, ENetAddress *address) {
+	AuxData->InterruptRequestedEnqueueData(ServAuxRequestData(true, true, NULL));
+	AuxData->InterruptRequestedEnqueueData(ServAuxRequestData(true, false, address));
 	return 0;
+}
+
+int aux_serv_aux_dequeue_handling_double_notify(
+	ServAuxData *AuxData,
+	ServAuxRequestData *oRequest)
+{
+	int r = 0;
+
+	ServAuxRequestData Request;
+
+	AuxData->InterruptRequestedDequeue(&Request);
+
+	if (Request.isReconnectRequestPrepare())
+		AuxData->InterruptRequestedDequeue(&Request);
+
+	if (!Request.isReconnectRequestRegular())
+		GS_ERR_CLEAN_L(1, E, S, "suspected invalid double notify sequence");
+
+	if (oRequest)
+		*oRequest = Request;
+
+clean:
+
+	return r;
 }
 
 int aux_serv_aux_interrupt_perform(
@@ -1994,12 +2068,14 @@ int aux_serv_aux_host_service(
 		if (!HaveRequestData)
 			continue;
 
-		if (RequestData.mIsReconnectRequest)
+		// FIXME: GS_ERRCODE_RECONNECT here, right?
+		if (RequestData.IsReconnectRequest())
 			GS_ERR_CLEAN(1);
 
-		if (RequestData.mIsInterruptRequest)
-			if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
-				GS_GOTO_CLEAN();
+		assert(! RequestData.IsReconnectRequest());
+
+		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
+			GS_GOTO_CLEAN();
 	}
 
 clean:
@@ -2263,7 +2339,7 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 			GS_GOTO_CLEAN();
 		}
 
-		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
+		if (!!(r = aux_serv_aux_enqueue_reconnect_double_notify(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
 
 		if (!!(r = aux_worker_enqueue_reconnect_double_notify_no_id(WorkerDataRecv)))
@@ -2444,7 +2520,7 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_not
 		if (!!(r = gs_connection_surrogate_map_insert(ioConnectionSurrogateMap, *ioConnectionSurrogate, &Id)))
 			GS_GOTO_CLEAN();
 
-		if (!!(r = aux_serv_aux_enqueue_reconnect(AuxData, &AuxDataNotificationAddress)))
+		if (!!(r = aux_serv_aux_enqueue_reconnect_double_notify(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
 
 		if (!!(r = aux_worker_enqueue_reconnect_double_notify_with_id(WorkerDataRecv, Id)))

@@ -169,30 +169,22 @@ private:
 
 class ServAuxRequestData {
 public:
-	ServAuxRequestData() :
-		mIsReconnectRequest(false),
-		mIsInterruptRequest(false)
-	{
-		ENetAddress EmptyAddress = {};
-		mAddress = EmptyAddress;
-	}
+	ServAuxRequestData();
+	ServAuxRequestData(
+		uint32_t IsReconnect,
+		uint32_t IsPrepare,
+		ENetAddress *AddressIfReconnectOpt);
 
-	ServAuxRequestData(ENetAddress *AddressIfReconnecting)
-		: mIsReconnectRequest(AddressIfReconnecting != NULL),
-		mIsInterruptRequest(true)
-	{
-		ENetAddress EmptyAddress = {};
-
-		if (AddressIfReconnecting != NULL)
-			mAddress = *AddressIfReconnecting;
-		else
-			mAddress = EmptyAddress;
-	}
+	bool IsReconnectRequest();
+	bool isReconnectRequestPrepare();
+	bool isReconnectRequestRegular();
 
 public:
-	bool mIsReconnectRequest;
-	bool mIsInterruptRequest;
 	ENetAddress mAddress;
+
+private:
+	uint32_t mIsReconnect;
+	uint32_t mIsPrepare;
 
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
@@ -203,6 +195,7 @@ public:
 
 	void InterruptRequestedEnqueue();
 	void InterruptRequestedEnqueueData(ServAuxRequestData RequestData);
+	void InterruptRequestedDequeue(ServAuxRequestData *oRequestData);
 	bool InterruptRequestedDequeueTimeout(
 		const std::chrono::milliseconds &WaitForMillis,
 		ServAuxRequestData *oRequestData);
@@ -405,7 +398,10 @@ int aux_serv_aux_reconnect_expend_cond_interrupt_perform(
 	uint32_t *ioWantReconnect);
 int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData);
 int aux_serv_aux_make_premade_frame_interrupt_requested(std::string *oBufferFrameInterruptRequested);
-int aux_serv_aux_enqueue_reconnect(ServAuxData *AuxData, ENetAddress *address);
+int aux_serv_aux_enqueue_reconnect_double_notify(ServAuxData *AuxData, ENetAddress *address);
+int aux_serv_aux_dequeue_handling_double_notify(
+	ServAuxData *AuxData,
+	ServAuxRequestData *oRequest);
 int aux_serv_aux_interrupt_perform(
 	GsConnectionSurrogate *ConnectionSurrogate);
 int aux_serv_aux_host_service_sub(ENetHost *client);

@@ -54,6 +54,8 @@ struct GsAuxConfigCommonVars {
 	char *RepoMainPathBuf; size_t LenRepoMainPath;
 	char *RepoSelfUpdatePathBuf; size_t LenRepoSelfUpdatePath;
 	char *RepoMasterUpdatePathBuf; size_t LenRepoMasterUpdatePath;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
 
 int aux_config_read_interpret_relative_current_executable(
