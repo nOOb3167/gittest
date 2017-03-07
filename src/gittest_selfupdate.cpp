@@ -82,6 +82,9 @@ int aux_config_get_common_vars(
 	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoSelfUpdatePath);
 	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdatePath);
 
+	if (oCommonVars)
+		*oCommonVars = CommonVars;
+
 clean:
 
 	return r;

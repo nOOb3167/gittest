@@ -95,7 +95,7 @@ clean:
 }
 
 void gs_debug_break() {
-	assert(0);
+	//assert(0);
 	DebugBreak();
 }
 
