@@ -103,6 +103,8 @@ int gs_log_crash_handler_setup();
 
 #ifdef __cplusplus
 
+void gs_log_crash_handler_printall_cpp();
+
 /* global log list: can initialize the g_gs_log_list_global */
 GsLogList *gs_log_list_global_create_cpp();
 

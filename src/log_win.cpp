@@ -13,6 +13,7 @@
 #include <gittest/log.h>
 
 #define GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_DATA 0x429d83ff
+#define GS_TRIPWIRE_LOG_CRASH_HANDLER_PRINTF_DATA 0x429d8400
 
 #define GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES 10 * 1024 * 1024 /* 10MB */
 
@@ -27,6 +28,9 @@ int gs_log_win_open_dump_file(
 
 struct GsLogCrashHandlerDumpData { uint32_t Tripwire; HANDLE hLogFile; size_t MaxWritePos; size_t CurrentWritePos; };
 int gs_log_crash_handler_dump_cb(void *ctx, const char *d, int64_t l);
+
+struct GsLogCrashHandlerPrintfData { uint32_t Tripwire; };
+int gs_log_crash_handler_printf_cb(void *ctx, const char *d, int64_t l);
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo);
 
@@ -105,6 +109,18 @@ int gs_log_crash_handler_dump_cb(void *ctx, const char *d, int64_t l) {
 	return 0;
 }
 
+int gs_log_crash_handler_printf_cb(void *ctx, const char *d, int64_t l) {
+	GsLogCrashHandlerPrintfData *Data = (GsLogCrashHandlerPrintfData *) ctx;
+
+	if (Data->Tripwire != GS_TRIPWIRE_LOG_CRASH_HANDLER_PRINTF_DATA)
+		return 1;
+
+	printf("%.*s", (int)l, d);
+
+	return 0;
+}
+
+
 int gs_log_crash_handler_dump_global_log_list() {
 	int r = 0;
 
@@ -156,6 +172,14 @@ clean:
 		CloseHandle(hLogFile);
 
 	return r;
+}
+
+void gs_log_crash_handler_printall_cpp() {
+	GsLogCrashHandlerPrintfData Data = {};
+	Data.Tripwire = GS_TRIPWIRE_LOG_CRASH_HANDLER_PRINTF_DATA;
+
+	if (gs_log_list_dump_all_lowlevel(GS_LOG_LIST_GLOBAL_NAME, &Data, gs_log_crash_handler_printf_cb))
+		{ /* dummy */ }
 }
 
 LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo) {
