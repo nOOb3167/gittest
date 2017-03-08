@@ -61,7 +61,7 @@ int aux_config_key_ex_interpret_relative_current_executable(
 	}
 
 	if (oVal)
-		oVal->swap(std::string(PathBuf, LenPath));
+		*oVal = std::string(PathBuf, LenPath);
 
 	return 0;
 }

@@ -87,8 +87,8 @@ public:
 	void IsPrincipalClientConnection();
 
 private:
-	std::atomic_uint32_t mIsValid;
-	std::atomic_uint32_t mIsPrincipalClientConnection;
+	std::atomic<uint32_t> mIsValid;
+	std::atomic<uint32_t> mIsPrincipalClientConnection;
 
 public:
 	ENetHost *mHost;
@@ -96,8 +96,10 @@ public:
 };
 
 struct GsConnectionSurrogateMap {
-	std::atomic_uint64_t mAtomicCount;
+	std::atomic<uint64_t> mAtomicCount;
 	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
+
+	GsConnectionSurrogateMap();
 };
 
 struct PacketWithOffset {

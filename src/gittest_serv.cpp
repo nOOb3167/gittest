@@ -1,9 +1,12 @@
 #include <cstdlib>
 #include <cassert>
 
+#include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/net.h>
 #include <gittest/gittest_selfupdate.h>
+
+GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
 int startserv() {
 	int r = 0;
@@ -19,6 +22,8 @@ int startserv() {
 	std::string ConfRepoSelfUpdateOpenPath;
 
 	sp<FullConnectionClient> FcsServ;
+
+	log_guard_t log(GS_LOG_GET("serv"));
 
 	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
 		GS_GOTO_CLEAN();
@@ -45,6 +50,25 @@ clean:
 	return r;
 }
 
+int setuplogging() {
+	int r = 0;
+
+	if (!!(r = gs_log_crash_handler_setup()))
+		GS_GOTO_CLEAN();
+
+	GS_LOG_ADD(gs_log_create_ret("serv"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_worker"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_aux"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_serv"));
+	GS_LOG_ADD(gs_log_create_ret("serv_worker"));
+	GS_LOG_ADD(gs_log_create_ret("serv_aux"));
+	GS_LOG_ADD(gs_log_create_ret("serv_serv"));
+
+clean:
+
+	return r;
+}
+
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -52,6 +76,9 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = enet_initialize()))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = setuplogging()))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = startserv()))

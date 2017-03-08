@@ -22,7 +22,7 @@
 #define GS_AUX_CONFIG_COMMON_VAR_UINT32_NONUCF(KEYVAL, COMVARS, NAME)                  \
 	{                                                                                  \
 		uint32_t Conf ## NAME = 0;                                                     \
-		if (!!(r = aux_config_key_uint32((KEYVAL), "Conf" ## # NAME, & Conf ## NAME))) \
+		if (!!(r = aux_config_key_uint32((KEYVAL), "Conf" # NAME, & Conf ## NAME))) \
 			goto clean;                                                                \
 		(COMVARS).NAME = Conf ## NAME;                                                 \
 	}
@@ -30,7 +30,7 @@
 #define GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KEYVAL, COMVARS, NAME)                                         \
 		{                                                                                                     \
 		std::string Conf ## NAME;                                                                             \
-		if (!!(r = aux_config_key_ex((KEYVAL), "Conf" ## # NAME, & Conf ## NAME)))                            \
+		if (!!(r = aux_config_key_ex((KEYVAL), "Conf" # NAME, & Conf ## NAME)))                            \
 			goto clean;                                                                                       \
 		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME))) \
 			goto clean;                                                                                       \
@@ -39,7 +39,7 @@
 #define GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KEYVAL, COMVARS, NAME)                                                    \
 	{                                                                                                                    \
 		std::string Conf ## NAME;                                                                                        \
-		if (!!(r = aux_config_key_ex_interpret_relative_current_executable((KEYVAL), "Conf" ## # NAME, & Conf ## NAME))) \
+		if (!!(r = aux_config_key_ex_interpret_relative_current_executable((KEYVAL), "Conf" # NAME, & Conf ## NAME))) \
 			goto clean;                                                                                                  \
 		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME)))            \
 			goto clean;                                                                                                  \

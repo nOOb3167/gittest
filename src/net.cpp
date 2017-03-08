@@ -266,8 +266,8 @@ int gs_connection_surrogate_map_insert_id(
 {
 	int r = 0;
 
-	if (ioConnectionSurrogateMap->mConnectionSurrogateMap->insert(
-		gs_connection_surrogate_map_t::value_type(ConnectionSurrogateId, ConnectionSurrogate)).second)
+	if (! ioConnectionSurrogateMap->mConnectionSurrogateMap->insert(
+			gs_connection_surrogate_map_t::value_type(ConnectionSurrogateId, ConnectionSurrogate)).second)
 	{
 		GS_ERR_CLEAN_L(1, E, S, "insertion prevented (is a stale element present, and why?)");
 	}
@@ -382,6 +382,11 @@ int aux_host_peer_pair_reset(sp<gs_host_peer_pair_t> *ioConnection) {
 
 	return 0;
 }
+
+GsConnectionSurrogateMap::GsConnectionSurrogateMap()
+	: mAtomicCount(0),
+	mConnectionSurrogateMap(new gs_connection_surrogate_map_t)
+{}
 
 int aux_make_packet_with_offset(gs_packet_t Packet, uint32_t OffsetSize, uint32_t OffsetObject, PacketWithOffset *oPacketWithOffset) {
 	PacketWithOffset ret;
@@ -3336,6 +3341,7 @@ void serv_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("serv_worker"));
 	if (!!(r = serv_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
@@ -3352,6 +3358,7 @@ void serv_worker_thread_func_f(
 
 void serv_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("serv_aux"));
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
 		assert(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
@@ -3364,6 +3371,7 @@ void serv_thread_func_f(
 	uint32_t ServPort)
 {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("serv_serv"));
 	if (!!(r = serv_serv_thread_func_reconnecter(WorkerDataRecv, WorkerDataSend, AuxData, ServPort)))
 		assert(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
@@ -3377,6 +3385,7 @@ void clnt_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("clnt_worker"));
 	if (!!(r = clnt_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RepoMainOpenPathBuf, LenRepoMainOpenPath,
@@ -3391,6 +3400,7 @@ void clnt_worker_thread_func_f(
 
 void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("clnt_aux"));
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
 		assert(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
@@ -3404,6 +3414,7 @@ void clnt_thread_func_f(
 	const char *ServHostNameBuf, size_t LenServHostName)
 {
 	int r = 0;
+	log_guard_t log(GS_LOG_GET("clnt_serv"));
 	if (!!(r = clnt_serv_thread_func_reconnecter(
 		WorkerDataRecv,
 		WorkerDataSend,
