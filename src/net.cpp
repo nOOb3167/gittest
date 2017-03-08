@@ -124,7 +124,7 @@ void ServWorkerData::RequestDequeue(sp<ServWorkerRequestData> *oRequestData) {
 	{
 		std::unique_lock<std::mutex> lock(*mWorkerDataMutex);
 		mWorkerDataCond->wait(lock, [&]() { return !mWorkerQueue->empty(); });
-		assert(! mWorkerQueue->empty());
+		GS_ASSERT(! mWorkerQueue->empty());
 		RequestData = mWorkerQueue->front();
 		mWorkerQueue->pop_front();
 	}
@@ -153,7 +153,7 @@ ServAuxRequestData::ServAuxRequestData(
 {
 	ENetAddress EmptyAddress = {};
 
-	assert(! AddressIfReconnectOpt || (IsReconnect && ! IsPrepare));
+	GS_ASSERT(! AddressIfReconnectOpt || (IsReconnect && ! IsPrepare));
 
 	mIsReconnect = IsReconnect;
 	mIsPrepare = IsPrepare;
@@ -500,7 +500,7 @@ int aux_make_serv_worker_request_data_for_response(
 {
 	int r = 0;
 
-	assert(RequestBeingResponded->mIsWithId);
+	GS_ASSERT(RequestBeingResponded->mIsWithId);
 
 	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
 		ioPacket,
@@ -698,7 +698,7 @@ int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
 		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
 			GS_GOTO_CLEAN();
 
-		assert(RequestReconnect->isReconnectRequestRegularNoId());
+		GS_ASSERT(RequestReconnect->isReconnectRequestRegularNoId());
 
 	}
 
@@ -1040,7 +1040,7 @@ int aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
 		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
 			GS_GOTO_CLEAN();
 
-		assert(RequestReconnect->isReconnectRequestRegularWithId());
+		GS_ASSERT(RequestReconnect->isReconnectRequestRegularWithId());
 
 	}
 
@@ -1370,7 +1370,7 @@ int aux_packet_bare_send(ENetHost *host, ENetPeer *peer, const char *Data, uint3
 	ENetPacket *packet = NULL;
 
 	/* only flag expected to be useful with this function is ENET_PACKET_FLAG_RELIABLE, really */
-	assert((EnetPacketFlags & ~(ENET_PACKET_FLAG_RELIABLE)) == 0);
+	GS_ASSERT((EnetPacketFlags & ~(ENET_PACKET_FLAG_RELIABLE)) == 0);
 
 	if (!(packet = enet_packet_create(Data, DataSize, EnetPacketFlags)))
 		GS_ERR_CLEAN(1);
@@ -1529,7 +1529,7 @@ int aux_host_connect_ensure_timeout(ENetHost *client, uint32_t TimeoutMs, uint32
 	if ((retcode = enet_host_service(client, &event, TimeoutMs)) < 0)
 		GS_ERR_CLEAN(1);
 
-	assert(retcode >= 0);
+	GS_ASSERT(retcode >= 0);
 
 	if (retcode > 0 && event.type != ENET_EVENT_TYPE_CONNECT)
 		GS_ERR_CLEAN(2);
@@ -1788,7 +1788,7 @@ int aux_serv_aux_wait_reconnect(ServAuxData *AuxData, ENetAddress *oAddress) {
 		))
 	{ /* dummy */ }
 
-	assert(HaveRequestData && RequestData.IsReconnectRequest());
+	GS_ASSERT(HaveRequestData && RequestData.IsReconnectRequest());
 
 	if (oAddress)
 		*oAddress = RequestData.mAddress;
@@ -1813,7 +1813,7 @@ int aux_serv_aux_wait_reconnect_and_connect(ServAuxData *AuxData, sp<GsConnectio
 	if (!!(r = aux_serv_aux_dequeue_handling_double_notify(AuxData, &RequestReconnect)))
 		GS_GOTO_CLEAN();
 
-	assert(RequestReconnect.isReconnectRequestRegular());
+	GS_ASSERT(RequestReconnect.isReconnectRequestRegular());
 
 	address = RequestReconnect.mAddress;
 
@@ -2032,7 +2032,7 @@ int aux_serv_aux_host_service_sub(ENetHost *client) {
 			GS_ERR_CLEAN_L(1, E, S, "unexpected (?) disconnection from serv_aux");
 			break;
 		case ENET_EVENT_TYPE_RECEIVE:
-			assert(0);
+			GS_ASSERT(0);
 			enet_packet_destroy(Events[i].packet);
 			break;
 		}
@@ -2077,7 +2077,7 @@ int aux_serv_aux_host_service(
 		if (RequestData.IsReconnectRequest())
 			GS_ERR_CLEAN(1);
 
-		assert(! RequestData.IsReconnectRequest());
+		GS_ASSERT(! RequestData.IsReconnectRequest());
 
 		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
 			GS_GOTO_CLEAN();
@@ -2230,7 +2230,7 @@ int aux_serv_host_service(
 					ENetPacket *Packet = *RequestedSends[i]->mPacket.release();
 
 					/* did not remove a surrogate ID soon enough? */
-					assert(ConnectionSurrogateSend->mHost == server);
+					GS_ASSERT(ConnectionSurrogateSend->mHost == server);
 
 					if (enet_peer_send(ConnectionSurrogateSend->mPeer, 0, Packet) < 0)
 						GS_GOTO_CLEAN();
@@ -2843,13 +2843,13 @@ int clnt_state_crank(
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{
-		assert(0);
+		GS_ASSERT(0);
 	}
 	break;
 
 	default:
 	{
-		assert(0);
+		GS_ASSERT(0);
 	}
 	break;
 	}
@@ -2865,7 +2865,7 @@ int clnt_state_crank_reconnecter(
 	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
 	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend)
 {
-	assert(0);
+	GS_ASSERT(0);
 	return 1;
 	//	int r = 0;
 	//
@@ -3351,7 +3351,7 @@ void serv_worker_thread_func_f(
 		WorkerDataRecv,
 		WorkerDataSend)))
 	{
-		assert(0);
+		GS_ASSERT(0);
 	}
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
@@ -3360,7 +3360,7 @@ void serv_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
 	log_guard_t log(GS_LOG_GET("serv_aux"));
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
-		assert(0);
+		GS_ASSERT(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
@@ -3373,7 +3373,7 @@ void serv_thread_func_f(
 	int r = 0;
 	log_guard_t log(GS_LOG_GET("serv_serv"));
 	if (!!(r = serv_serv_thread_func_reconnecter(WorkerDataRecv, WorkerDataSend, AuxData, ServPort)))
-		assert(0);
+		GS_ASSERT(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
@@ -3393,7 +3393,7 @@ void clnt_worker_thread_func_f(
 		WorkerDataRecv,
 		WorkerDataSend)))
 	{
-		assert(0);
+		GS_ASSERT(0);
 	}
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
@@ -3402,7 +3402,7 @@ void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
 	log_guard_t log(GS_LOG_GET("clnt_aux"));
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
-		assert(0);
+		GS_ASSERT(0);
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }
 
@@ -3422,7 +3422,7 @@ void clnt_thread_func_f(
 		ServPort,
 		ServHostNameBuf, LenServHostName)))
 	{
-		assert(0);
+		GS_ASSERT(0);
 	}
 	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
 }

@@ -10,6 +10,10 @@
 #include <gittest/config_defs.h>
 #include <gittest/log_defs.h>
 
+#ifdef GS_CONFIG_DEFS_MISC_GS_DEBUG_BREAK
+#include <gittest/misc_win.h>
+#endif /* GS_CONFIG_DEFS_MISC_GS_DEBUG_BREAK */
+
 /*
 * = Visual Studio debugger function call expression evaluation (variable watch) =
 *   for whatever reason, it seems function calls (ex call function with side effects from a variable watch expression)
@@ -25,7 +29,10 @@
 #define GS_THREAD_LOCAL_DESIGNATOR __thread
 #endif
 
-#define GS_DEBUG_BREAK gs_debug_break()
+#define GS_DEBUG_BREAK() gs_debug_break()
+
+#define GS_ASSERT(x) \
+	do { bool the_x = (x); if (! the_x) { GS_DEBUG_BREAK(); assert(0); } } while (0)
 
 #define GS_DBG_CLEAN() GS_CONFIG_DEFS_MISC_GS_GOTO_CLEAN_HANDLING
 
@@ -69,5 +76,7 @@ int gs_build_modified_filename(
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);
+
+void gs_debug_break();
 
 #endif /* _GITTEST_MISC_H_ */

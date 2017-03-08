@@ -35,7 +35,7 @@ int gs_build_modified_filename(
 	memcpy(ioModifiedFileNameBuf + OffsetStartOfChange + LenExtraSuffix, ExtraExtension, LenExtraExtension);
 	memset(ioModifiedFileNameBuf + OffsetStartOfChange + LenExtraSuffix + LenExtraExtension, '\0', 1);
 
-	assert(ioModifiedFileNameBuf[LenModifiedFileName] == '\0');
+	GS_ASSERT(ioModifiedFileNameBuf[LenModifiedFileName] == '\0');
 
 	if (oLenModifiedFileName)
 		*oLenModifiedFileName = LenModifiedFileName;

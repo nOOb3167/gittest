@@ -40,14 +40,14 @@
 void gs_close_handle(HANDLE handle) {
 	if (handle)
 		if (!CloseHandle(handle))
-			assert(0);
+			GS_ASSERT(0);
 }
 
 int gs_serialize_windows_process_handle(HANDLE handle, char *ioBuf, size_t BufSize) {
 	/* serialize a HANDLE value into a hexadecimal number string */
 	int r = 0;
 
-	assert(sizeof(long long) >= sizeof(HANDLE));
+	GS_ASSERT(sizeof(long long) >= sizeof(HANDLE));
 
 	unsigned long long lluHandle = (unsigned long long) handle;
 
@@ -68,7 +68,7 @@ int gs_deserialize_windows_process_handle(HANDLE *oHandle, const char *BufZeroTe
 
 	HANDLE Handle = NULL;
 
-	assert(sizeof(long long) >= sizeof(HANDLE));
+	GS_ASSERT(sizeof(long long) >= sizeof(HANDLE));
 
 	if (! memchr(BufZeroTerm, '\0', BufSize))
 		GS_ERR_CLEAN(1);
@@ -92,11 +92,6 @@ int gs_deserialize_windows_process_handle(HANDLE *oHandle, const char *BufZeroTe
 clean:
 
 	return r;
-}
-
-void gs_debug_break() {
-	//assert(0);
-	DebugBreak();
 }
 
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
@@ -176,7 +171,7 @@ int gs_build_current_executable_relative_filename_(
 	const char *RelativeBuf, size_t LenRelativeBuf,
 	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf)
 {
-	assert(0);
+	GS_ASSERT(0);
 	return 1;
 //	int r = 0;
 //
@@ -203,7 +198,7 @@ int gs_build_current_executable_relative_filename_(
 //	if (!!(r = gs_buf_ensure_haszero(CurrentExecutableDirBuf, sizeof CurrentExecutableDirBuf)))
 //		GS_GOTO_CLEAN();
 //
-//	assert(sizeof CurrentExecutableDirBuf != sizeof AppendedBuf);
+//	GS_ASSERT(sizeof CurrentExecutableDirBuf != sizeof AppendedBuf);
 //
 //	memcpy(AppendedBuf, CurrentExecutableDirBuf, sizeof AppendedBuf);
 //
@@ -454,7 +449,7 @@ int aux_selfupdate_create_child(
 
 	BOOL Ok = 0;
 
-	assert(sizeof TempFileNameBuf >= MAX_PATH);
+	GS_ASSERT(sizeof TempFileNameBuf >= MAX_PATH);
 
 	if (!!(r = gs_write_temp_file(BufferUpdateData, BufferUpdateSize, TempFileNameBuf, sizeof TempFileNameBuf)))
 		GS_GOTO_CLEAN();

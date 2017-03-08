@@ -28,7 +28,7 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHar
 	int InitFlags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR | GIT_REPOSITORY_INIT_BARE;
 	git_repository_init_options InitOptions = GIT_REPOSITORY_INIT_OPTIONS_INIT;
 	
-	assert(InitOptions.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
+	GS_ASSERT(InitOptions.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
 
 	GS_LOG(I, PF, "Repository initializing [%.*s]", LenRepoPath, RepoPathBuf);
 
@@ -43,7 +43,7 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHar
 		GS_ERR_CLEAN_L(1, E, PF, "Repository open error [%.*s]", (int)LenRepoPath, RepoPathBuf);
 	if (errR == 0)
 		GS_ERR_NO_CLEAN_L(0, I, PF, "Repository already exists [%.*s]", (int)LenRepoPath, RepoPathBuf);
-	assert(errR == GIT_ENOTFOUND);
+	GS_ASSERT(errR == GIT_ENOTFOUND);
 
 	/* MKPATH for whole path creation (MKDIR only the last component) */
 	InitOptions.flags = InitFlags;
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
 
 clean:
 	if (!!(r = gs_log_crash_handler_dump_global_log_list()))
-		assert(0);
+		GS_ASSERT(0);
 
 	if (!!r)
 		return EXIT_FAILURE;

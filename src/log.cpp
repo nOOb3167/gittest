@@ -94,7 +94,7 @@ GsLogTls *gs_log_global_get() {
 GsLogBase *gs_log_base_cast_(void *Log) {
 	GsLogBase *a = (GsLogBase *)Log;
 	if (a->mTripwire != GS_TRIPWIRE_LOG_BASE)
-		assert(0);
+		GS_ASSERT(0);
 	return a;
 }
 
@@ -130,7 +130,7 @@ void gs_log_base_enter(GsLogBase *Klass) {
 	GsLogTls *lg = gs_log_global_get();
 	/* no recursive entry */
 	if (Klass->mPreviousLog)
-		assert(0);
+		GS_ASSERT(0);
 	Klass->mPreviousLog = Klass;
 	std::swap(Klass->mPreviousLog, lg->mpCurrentLog);
 }
@@ -143,10 +143,10 @@ void gs_log_base_exit(GsLogBase *Klass) {
 	// FIXME: toplevel mpCurrentLog is NULL
 	//   enable this check if toplevel dummy log design is used
 	//if (!mPreviousLog)
-	//	assert(0);
+	//	GS_ASSERT(0);
 	std::swap(Klass->mPreviousLog, lg->mpCurrentLog);
 	if (Klass->mPreviousLog != Klass)
-		assert(0);
+		GS_ASSERT(0);
 	Klass->mPreviousLog = NULL;
 }
 
@@ -154,7 +154,7 @@ GsLog *gs_log_cast_(void *Log) {
 	GsLog *a = (GsLog *)Log;
 	// FIXME: should lock mutex checking the tripwire?
 	if (a->mTripwire != GS_TRIPWIRE_LOG)
-		assert(0);
+		GS_ASSERT(0);
 	return a;
 }
 
@@ -230,7 +230,7 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 
 	// FIXME: what to do on error here?
 	if (!!cbuf_push_back_discarding_trunc(Klass->mMsg.get(), ssstr.data(), ssstr.size()))
-		assert(0);
+		GS_ASSERT(0);
 }
 
 int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump) {
@@ -290,7 +290,7 @@ void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char 
 void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf){
 	const size_t sanity_arbitrary_max = 2048;
 	size_t MsgSize = strnlen(MsgBuf, sanity_arbitrary_max);
-	assert(MsgSize < sanity_arbitrary_max);
+	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
 	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog)
@@ -307,14 +307,14 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	va_start(argp, Format);
 
 	if ((numwrite = vsnprintf(buf, sizeof buf, Format, argp)) == -1)
-		assert(0);
+		GS_ASSERT(0);
 	if (numwrite >= sizeof buf)
-		assert(0);
+		GS_ASSERT(0);
 
 	va_end(argp);
 
 	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
-	assert(MsgSize < sanity_arbitrary_max);
+	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
 	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog)
@@ -356,7 +356,7 @@ void gs_log_dump_reset(GsLogDump *ioDump) {
 void gs_log_dump_reset_to_noalloc(GsLogDump *ioDump, char *Buf, size_t BufSize, size_t LenBuf) {
 	gs_log_dump_reset(ioDump);
 
-	assert(Buf || (!Buf && !BufSize && !LenBuf));
+	GS_ASSERT(Buf || (!Buf && !BufSize && !LenBuf));
 
 	ioDump->mBuf = Buf;
 	ioDump->mBufSize = BufSize;
@@ -364,7 +364,7 @@ void gs_log_dump_reset_to_noalloc(GsLogDump *ioDump, char *Buf, size_t BufSize, 
 }
 
 void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, size_t LenBuf) {
-	assert(Buf || (!Buf && !BufSize && !LenBuf));
+	GS_ASSERT(Buf || (!Buf && !BufSize && !LenBuf));
 
 	char *NewBuf = new char[BufSize];
 
@@ -403,7 +403,7 @@ GsLogList *gs_log_list_global_create_cpp() {
 
 	if (!!(r = gs_log_list_create(&LogList))) {
 		/* NOTE: c++ API (exception throwing) */
-		assert(0);
+		GS_ASSERT(0);
 		throw std::runtime_error("[ERROR] exception from gs_log_list_global_create_cpp");
 	}
 
@@ -566,6 +566,24 @@ int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump) {
 
 		gs_log_dump_reset_to(oRetDump, RetCStr, RetCStrSize, LenRetCStr);
 	}
+
+clean:
+
+	return r;
+}
+
+int gs_log_create_common_logs() {
+	int r = 0;
+
+	GS_LOG_ADD(gs_log_create_ret("selfup"));
+
+	GS_LOG_ADD(gs_log_create_ret("serv"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_worker"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_aux"));
+	GS_LOG_ADD(gs_log_create_ret("clnt_serv"));
+	GS_LOG_ADD(gs_log_create_ret("serv_worker"));
+	GS_LOG_ADD(gs_log_create_ret("serv_aux"));
+	GS_LOG_ADD(gs_log_create_ret("serv_serv"));
 
 clean:
 

@@ -188,7 +188,7 @@ int aux_config_key_ex(const confmap_t &KeyVal, const char *Key, std::string *oVa
 }
 
 int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oVal) {
-	assert(sizeof(uint32_t) <= sizeof(long long));
+	GS_ASSERT(sizeof(uint32_t) <= sizeof(long long));
 	const confmap_t::const_iterator &it = KeyVal.find(Key);
 	if (it == KeyVal.end())
 		return 1;
@@ -208,7 +208,7 @@ int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oV
 }
 
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize) {
-	assert(sizeof(uint32_t) == 4 && bufsize == 4);
+	GS_ASSERT(sizeof(uint32_t) == 4 && bufsize == 4);
 	oBuf[0] = (a >> 0) & 0xFF;
 	oBuf[1] = (a >> 8) & 0xFF;
 	oBuf[2] = (a >> 16) & 0xFF;
@@ -216,7 +216,7 @@ void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize) {
 }
 
 void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize) {
-	assert(sizeof(uint32_t) == 4 && bufsize == 4);
+	GS_ASSERT(sizeof(uint32_t) == 4 && bufsize == 4);
 	uint32_t w = 0;
 	w |= (buf[0] & 0xFF) << 0;
 	w |= (buf[1] & 0xFF) << 8;
@@ -317,14 +317,14 @@ int clnt_latest_commit_tree_oid(git_repository *RepositoryT, const char *RefName
 	git_oid TreeHeadOid = {};
 
 	git_oid OidZero = {};
-	assert(git_oid_iszero(&OidZero));
+	GS_ASSERT(git_oid_iszero(&OidZero));
 
 	int errX = aux_oid_latest_commit_tree(RepositoryT, RefName, &CommitHeadOid, &TreeHeadOid);
 	if (!!errX && errX != GIT_ENOTFOUND)
 	{
 		r = errX; goto clean;
 	}
-	assert(errX == 0 || errX == GIT_ENOTFOUND);
+	GS_ASSERT(errX == 0 || errX == GIT_ENOTFOUND);
 	if (errX == GIT_ENOTFOUND) {
 		git_oid_cpy(&CommitHeadOid, &OidZero);
 		git_oid_cpy(&TreeHeadOid, &OidZero);
@@ -403,7 +403,7 @@ int aux_serialize_objects(
 		ObjectCumulativeSize += ObjectSize[i];
 	}
 
-	assert(sizeof(uint32_t) == 4);
+	GS_ASSERT(sizeof(uint32_t) == 4);
 	SizeBuffer.reserve(Object.size() * sizeof(uint32_t));
 	ObjectBuffer.reserve(ObjectCumulativeSize);
 	for (uint32_t i = 0; i < Object.size(); i++) {
@@ -446,7 +446,7 @@ int aux_deserialize_sizebuffer(uint8_t *DataStart, uint32_t DataLength, uint32_t
 	std::vector<uint32_t> SizeVector;
 	size_t CumulativeSize = 0;
 
-	assert(DataStart + OffsetSizeBuffer + SizeVecLen * sizeof(uint32_t) <= DataStart + DataLength);
+	GS_ASSERT(DataStart + OffsetSizeBuffer + SizeVecLen * sizeof(uint32_t) <= DataStart + DataLength);
 
 	SizeVector.resize(SizeVecLen);
 	for (uint32_t i = 0; i < SizeVecLen; i++) {
@@ -479,7 +479,7 @@ int aux_deserialize_objects_odb(
 	if (!!(r = aux_deserialize_sizebuffer(DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer, PairedVecLen, &SizeVector, &CumulativeSize)))
 		goto clean;
 
-	assert(DataStartObjectBuffer + OffsetObjectBuffer + CumulativeSize <= DataStartObjectBuffer + DataLengthObjectBuffer);
+	GS_ASSERT(DataStartObjectBuffer + OffsetObjectBuffer + CumulativeSize <= DataStartObjectBuffer + DataLengthObjectBuffer);
 
 	WrittenObjectOid.resize(SizeVector.size());
 	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
@@ -585,7 +585,7 @@ int clnt_missing_trees(git_repository *RepositoryT, std::vector<git_oid> *Treeli
 			{ r = 1; goto clean; }
 		if (errTree == 0)
 			continue;
-		assert(errTree == GIT_ENOTFOUND);
+		GS_ASSERT(errTree == GIT_ENOTFOUND);
 		MissingTree.push_back((*Treelist)[i]);
 	}
 
@@ -661,7 +661,7 @@ int aux_clnt_dual_lookup_expect_missing(
 		{ r = 1; goto clean; }
 	if (errT != GIT_ENOTFOUND)  // must be non-present (missing tree)
 		{ r = 1; goto clean; }
-	assert(errM == 0 && errT == GIT_ENOTFOUND);
+	GS_ASSERT(errM == 0 && errT == GIT_ENOTFOUND);
 
 	if (oTreeMem)
 		*oTreeMem = TreeMem;
@@ -697,7 +697,7 @@ int clnt_missing_blobs_bare(
 	git_odb *RepositoryTOdb = NULL;
 
 	git_oid OidZero = {};
-	assert(git_oid_iszero(&OidZero));
+	GS_ASSERT(git_oid_iszero(&OidZero));
 
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		goto clean;
@@ -731,7 +731,7 @@ int clnt_missing_blobs_bare(
 			const git_otype EntryMemoryType = git_tree_entry_type(EntryMemory);
 			if (EntryMemoryType == GIT_OBJ_TREE)
 				continue;
-			assert(EntryMemoryType == GIT_OBJ_BLOB);
+			GS_ASSERT(EntryMemoryType == GIT_OBJ_BLOB);
 			if (git_odb_exists(RepositoryTOdb, EntryMemoryOid))
 				continue;
 			MissingBloblist.push_back(OidZero);
@@ -886,7 +886,7 @@ int clnt_commit_setref(git_repository *RepositoryT, const char *RefName, git_oid
 	int errC = git_reference_create(&Reference, RepositoryT, RefName, CommitOid, true, DummyLogMessage);
 	if (!!errC && errC != GIT_EEXISTS)
 		{ r = errC; goto clean; }
-	assert(errC == 0 || errC == GIT_EEXISTS);
+	GS_ASSERT(errC == 0 || errC == GIT_EEXISTS);
 	/* if we are forcing creation (force=true), existing reference is fine and will be overwritten */
 
 clean:
@@ -1024,7 +1024,7 @@ int stuff(
 		goto clean;
 	}
 
-	assert(!Treelist.empty());
+	GS_ASSERT(!Treelist.empty());
 	git_oid_cpy(&LastReverseToposortAkaFirstToposort, &Treelist[Treelist.size() - 1]);
 	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, &LastReverseToposortAkaFirstToposort, &CreatedCommitOid)))
 		goto clean;
@@ -1074,7 +1074,7 @@ int gittest_main(int argc, char **argv) {
 
 clean:
 	if (!!r)
-		assert(!r);
+		GS_ASSERT(!r);
 
 	return EXIT_SUCCESS;
 }

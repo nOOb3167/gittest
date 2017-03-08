@@ -47,7 +47,7 @@ GsFrameType aux_frametype_make(const char *TypeName, uint32_t TypeNum) {
 	size_t LenTypeName = 0;
 
 	if ((LenTypeName = strnlen(TypeName, sizeof(FrameType.mTypeName))) == sizeof(FrameType.mTypeName))
-		assert(0);
+		GS_ASSERT(0);
 
 	memcpy(FrameType.mTypeName, TypeName, LenTypeName);
 	FrameType.mTypeNum = TypeNum;
@@ -56,12 +56,12 @@ GsFrameType aux_frametype_make(const char *TypeName, uint32_t TypeNum) {
 }
 
 bool aux_frametype_equals(const GsFrameType &a, const GsFrameType &b) {
-	assert(sizeof a.mTypeName == GS_FRAME_HEADER_STR_LEN);
+	GS_ASSERT(sizeof a.mTypeName == GS_FRAME_HEADER_STR_LEN);
 	bool eqstr = memcmp(a.mTypeName, b.mTypeName, GS_FRAME_HEADER_STR_LEN) == 0;
 	bool eqnum = a.mTypeNum == b.mTypeNum;
 	/* XOR basically */
 	if ((eqstr || eqnum) && (!eqstr || !eqnum))
-		assert(0);
+		GS_ASSERT(0);
 	return eqstr && eqnum;
 }
 
@@ -134,7 +134,7 @@ int aux_frame_read_size(
 	if (oDataLengthLimit) {
 		// FIXME: not implemented / senseless for read size, specialize into a read limit
 		//*oDataLengthLimit = Offset + SizeOfSize + Size;
-		assert(0);
+		GS_ASSERT(0);
 		GS_ERR_CLEAN(1);
 	}
 
@@ -152,7 +152,7 @@ int aux_frame_write_size(
 {
 	int r = 0;
 
-	assert(SizeOfSize == sizeof(uint32_t));
+	GS_ASSERT(SizeOfSize == sizeof(uint32_t));
 
 	if (!!(r = aux_frame_enough_space(DataLength, Offset, SizeOfSize)))
 		GS_GOTO_CLEAN();
@@ -296,7 +296,7 @@ int aux_frame_read_oid(
 {
 	int r = 0;
 
-	assert(OidSize == GIT_OID_RAWSZ && GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+	GS_ASSERT(OidSize == GIT_OID_RAWSZ && GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
 
 	if (!!(r = aux_frame_read_buf(
 		DataStart, DataLength, Offset, &Offset,
@@ -319,7 +319,7 @@ int aux_frame_write_oid(
 {
 	int r = 0;
 
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	GS_ASSERT(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	if (!!(r = aux_frame_write_buf(DataStart, DataLength, Offset, &Offset, Oid, OidSize)))
 		GS_GOTO_CLEAN();
@@ -405,7 +405,7 @@ int aux_frame_write_oid_vec(
 	if (!!(r = aux_frame_write_size(DataStart, DataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, OidVec.mEltNum)))
 		GS_GOTO_CLEAN();
 
-	assert(OidVec.mEltSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	GS_ASSERT(OidVec.mEltSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	for (uint32_t i = 0; i < OidVec.mEltNum; i++) {
 		if (!!(r = aux_frame_write_oid(DataStart, DataLength, Offset, &Offset, GS_STRIDED_PIDX(OidVec, i), OidVec.mEltSize)))
@@ -455,7 +455,7 @@ int aux_frame_full_aux_write_oid(
 	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
 	uint8_t *BufferData = NULL;
 
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	GS_ASSERT(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();
@@ -463,7 +463,7 @@ int aux_frame_full_aux_write_oid(
 	if (!!(r = aux_frame_write_frametype(BufferData, BufferSize, Offset, &Offset, FrameType)))
 		GS_GOTO_CLEAN();
 
-	assert(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	GS_ASSERT(OidSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	if (!!(r = aux_frame_write_size(BufferData, BufferSize, Offset, &Offset, GS_FRAME_SIZE_LEN, PayloadSize)))
 		GS_GOTO_CLEAN();
@@ -487,7 +487,7 @@ int aux_frame_full_aux_write_oid_vec(
 	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
 	uint8_t *BufferData = NULL;
 
-	assert(OidVec.mEltSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
+	GS_ASSERT(OidVec.mEltSize == GIT_OID_RAWSZ && GIT_OID_RAWSZ == GS_PAYLOAD_OID_LEN);
 
 	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();
@@ -570,7 +570,7 @@ int aux_frame_full_aux_write_paired_vec(
 	uint32_t BufferSize = GS_FRAME_HEADER_LEN + GS_FRAME_SIZE_LEN + PayloadSize;
 	uint8_t *BufferData = NULL;
 
-	assert(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
+	GS_ASSERT(GS_PAYLOAD_OID_LEN == GIT_OID_RAWSZ);
 
 	if (!!(r = cb(ctx, BufferSize, &BufferData)))
 		GS_GOTO_CLEAN();

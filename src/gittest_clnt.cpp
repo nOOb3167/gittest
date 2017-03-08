@@ -85,7 +85,8 @@ int setuplogging() {
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	GS_LOG_ADD(gs_log_create_ret("selfup"));
+	if (!!(r = gs_log_create_common_logs()))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -134,12 +135,15 @@ int main(int argc, char **argv) {
 	if (!!(r = testlog()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = startselfupdate(argc, argv)))
+	//if (!!(r = startselfupdate(argc, argv)))
+	//	GS_GOTO_CLEAN();
+
+	if (!!(r = startclnt()))
 		GS_GOTO_CLEAN();
 
 clean:
 	if (!!r) {
-		assert(0);
+		GS_ASSERT(0);
 	}
 
 	return EXIT_SUCCESS;

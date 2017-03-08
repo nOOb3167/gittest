@@ -56,13 +56,8 @@ int setuplogging() {
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	GS_LOG_ADD(gs_log_create_ret("serv"));
-	GS_LOG_ADD(gs_log_create_ret("clnt_worker"));
-	GS_LOG_ADD(gs_log_create_ret("clnt_aux"));
-	GS_LOG_ADD(gs_log_create_ret("clnt_serv"));
-	GS_LOG_ADD(gs_log_create_ret("serv_worker"));
-	GS_LOG_ADD(gs_log_create_ret("serv_aux"));
-	GS_LOG_ADD(gs_log_create_ret("serv_serv"));
+	if (!!(r = gs_log_create_common_logs()))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -86,7 +81,7 @@ int main(int argc, char **argv) {
 
 clean:
 	if (!!r) {
-		assert(0);
+		GS_ASSERT(0);
 	}
 
 	return EXIT_SUCCESS;
