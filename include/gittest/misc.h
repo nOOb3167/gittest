@@ -10,6 +10,15 @@
 #include <gittest/config_defs.h>
 #include <gittest/log_defs.h>
 
+/*
+* = Visual Studio debugger function call expression evaluation (variable watch) =
+*   for whatever reason, it seems function calls (ex call function with side effects from a variable watch expression)
+*   fail / stall out if the currently selected thread (ex shown current in threads window) is inside certain callstacks.
+*   in particular std::this_thread::sleep_for.
+*   the workaround enabling function evaluation is to first step out of such calls (back into app source code),
+*   and only then attempt to trigger reevaluation.
+*/
+
 #if defined (_MSC_VER)
 #define GS_THREAD_LOCAL_DESIGNATOR __declspec( thread )
 #else
