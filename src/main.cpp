@@ -317,7 +317,7 @@ int clnt_latest_commit_tree_oid(git_repository *RepositoryT, const char *RefName
 	git_oid TreeHeadOid = {};
 
 	git_oid OidZero = {};
-	GS_ASSERT(git_oid_iszero(&OidZero));
+	GS_ASSERT(!!git_oid_iszero(&OidZero));
 
 	int errX = aux_oid_latest_commit_tree(RepositoryT, RefName, &CommitHeadOid, &TreeHeadOid);
 	if (!!errX && errX != GIT_ENOTFOUND)
@@ -697,7 +697,7 @@ int clnt_missing_blobs_bare(
 	git_odb *RepositoryTOdb = NULL;
 
 	git_oid OidZero = {};
-	GS_ASSERT(git_oid_iszero(&OidZero));
+	GS_ASSERT(!!git_oid_iszero(&OidZero));
 
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		goto clean;

@@ -52,7 +52,8 @@
 		GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE),       \
 		GS_FRAME_TYPE_DECL(REQUEST_LATEST_SELFUPDATE_BLOB),  \
 		GS_FRAME_TYPE_DECL(RESPONSE_LATEST_SELFUPDATE_BLOB), \
-	};
+	};                                                       \
+	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
 
 #define GS_STRIDED_PIDX(S, IDX) ((S).mDataStart + (S).mDataOffset + (S).mEltStride * (IDX))
 

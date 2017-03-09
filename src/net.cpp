@@ -695,11 +695,16 @@ int aux_serv_worker_reconnect_expend_reconnect_discard_request_for_send(
 
 	if (*ioWantReconnect) {
 
+		GS_LOG(I, S, "reconnection wanted");
+
+		GS_LOG(I, S, "receiving notification");
+
 		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
 			GS_GOTO_CLEAN();
 
 		GS_ASSERT(RequestReconnect->isReconnectRequestRegularNoId());
 
+		GS_LOG(I, S, "received notification");
 	}
 
 	if (ioWantReconnect)
@@ -724,6 +729,8 @@ int serv_worker_thread_func_reconnecter(
 	ClntStateReconnect StateReconnect = {};
 
 	uint32_t WantReconnect = true;
+
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
@@ -790,6 +797,8 @@ int serv_state_crank(
 	while (true) {
 		sp<ServWorkerRequestData> Request;
 
+		GS_LOG(I, S, "waiting for request");
+
 		if (!!(r = aux_packet_request_dequeue(WorkerDataRecv.get(), &Request)))
 			GS_GOTO_CLEAN();
 
@@ -803,7 +812,7 @@ int serv_state_crank(
 		if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, OffsetStart, &OffsetSize, &FoundFrameType)))
 			GS_GOTO_CLEAN();
 
-		GS_LOG(I, PF, "[worker] packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+		GS_LOG(I, PF, "servicing request [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
 
 		switch (FoundFrameType.mTypeNum)
 		{
@@ -813,6 +822,7 @@ int serv_state_crank(
 			uint32_t Offset = OffsetSize;
 			git_oid CommitHeadOid = {};
 			git_oid TreeHeadOid = {};
+			GS_OID_STR_VAR(TreeHeadOid);
 
 			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
 			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
@@ -822,6 +832,9 @@ int serv_state_crank(
 
 			if (!!(r = serv_latest_commit_tree_oid(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
+
+			GS_OID_STR_MAKE(TreeHeadOid);
+			GS_LOG(I, PF, "latest commit tree [%s]", TreeHeadOidStr);
 
 			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
@@ -857,6 +870,8 @@ int serv_state_crank(
 			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
 				GS_GOTO_CLEAN();
 
+			GS_LOG(I, PF, "listing trees [num=%d]", (int)Treelist.size());
+
 			if (!!(r = aux_frame_full_write_response_treelist(TreelistStrided, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
@@ -891,6 +906,8 @@ int serv_state_crank(
 
 			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
 				GS_GOTO_CLEAN();
+
+			GS_LOG(I, PF, "serializing trees [num=%d]", (int)TreelistRequested.size());
 
 			if (!!(r = aux_frame_full_write_response_trees(
 				TreelistRequested.size(),
@@ -1485,7 +1502,7 @@ int aux_data_aux_request_dequeue_regular_timeout(
 	if (HaveRequestData && RequestData.IsReconnectRequest())
 		GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
 
-	GS_ASSERT(!HaveRequestData || RequestData.IsReconnectRequest());
+	GS_ASSERT(!HaveRequestData || !RequestData.IsReconnectRequest());
 
 noclean:
 	if (oRequest)
@@ -1883,8 +1900,12 @@ int aux_serv_aux_reconnect_expend_cond_interrupt_perform(
 
 	if (*ioWantReconnect) {
 
+		GS_LOG(I, S, "reconnection wanted - performing");
+
 		if (!!(r = aux_serv_aux_wait_reconnect_and_connect(AuxData, ioConnectionSurrogate)))
 			GS_GOTO_CLEAN();
+
+		GS_LOG(I, S, "performing extra interrupt-request");
 
 		/* NOTE: serv_aux/serv may have swallowed some interrupt requests due to reconnection:
 		* sequence:
@@ -1920,6 +1941,8 @@ int aux_serv_aux_thread_func_reconnecter(sp<ServAuxData> ServAuxData) {
 	ClntStateReconnect StateReconnect = {};
 
 	uint32_t WantReconnect = true;
+
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
@@ -2114,6 +2137,8 @@ int aux_serv_aux_host_service(
 
 		GS_ASSERT(! RequestData.IsReconnectRequest());
 
+		GS_LOG(I, S, "performing interrupt-request");
+
 		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
 			GS_GOTO_CLEAN();
 	}
@@ -2295,6 +2320,8 @@ int aux_serv_host_service(
 
 			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, peer->data);
 
+			GS_LOG(I, PF, "%d disconnected", (int)ctxstruct->m0Id);
+
 			if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, ctxstruct->m0Id)))
 				GS_GOTO_CLEAN();
 
@@ -2303,8 +2330,6 @@ int aux_serv_host_service(
 			// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
 			delete peer->data;
 			peer->data = NULL;
-
-			GS_LOG(I, PF, "[serv] %d disconnected", (int)ctxstruct->m0Id);
 		}
 		break;
 

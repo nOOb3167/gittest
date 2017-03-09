@@ -13,6 +13,11 @@
 
 #include <gittest/misc.h>
 
+#define GS_OID_STR_VAR(VARNAME) \
+	char VARNAME ## Str [GIT_OID_HEXSZ + 1] = {};
+#define GS_OID_STR_MAKE(VARNAME) \
+	git_oid_nfmt((VARNAME ## Str), GIT_OID_HEXSZ + 1, (& VARNAME));
+
 struct oid_comparator_t {
 	bool operator()(const git_oid * const &a, const git_oid * const &b) {
 		return git_oid_cmp(a, b) < 0;
