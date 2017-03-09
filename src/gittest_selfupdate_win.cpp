@@ -492,7 +492,7 @@ int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNam
 	if (INVALID_FILE_ATTRIBUTES == (Dw = GetFileAttributes(FileNameChildBuf)))
 		GS_ERR_CLEAN(1);
 
-	printf("Child Process [%s]\n", FileNameChildBuf);
+	GS_LOG(I, PF, "Child Process [%.*s]", (int)LenFileNameChild, FileNameChildBuf);
 
 	hCurrentProcessPseudo = GetCurrentProcess();
 

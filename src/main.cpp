@@ -229,7 +229,7 @@ void aux_topolist_print(const topolist_t &NodeListTopo) {
 	for (topolist_t::const_iterator it = NodeListTopo.begin(); it != NodeListTopo.end(); it++) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, git_tree_id(*it));
-		printf("tree [%.*s]\n", sizeof buf, buf);
+		GS_LOG(I, PF, "tree [%.*s]", sizeof buf, buf);
 	}
 }
 
@@ -989,7 +989,7 @@ int stuff(
 	if (git_oid_cmp(&TreeHeadOidT, &TreeHeadOid) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &CommitHeadOid);
-		printf("Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+		GS_LOG(I, PF, "Have latest [%.*s]", (int)GIT_OID_HEXSZ, buf);
 	}
 
 	if (!!(r = serv_oid_treelist(Repository, &TreeHeadOid, &Treelist)))

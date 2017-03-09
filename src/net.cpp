@@ -803,7 +803,7 @@ int serv_state_crank(
 		if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, OffsetStart, &OffsetSize, &FoundFrameType)))
 			GS_GOTO_CLEAN();
 
-		printf("[worker] packet received [%.*s]\n", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+		GS_LOG(I, PF, "[worker] packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
 
 		switch (FoundFrameType.mTypeNum)
 		{
@@ -964,7 +964,7 @@ int serv_state_crank(
 
 		default:
 		{
-			printf("[worker] unknown frametype received [%.*s]\n", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+			GS_LOG(E, PF, "[worker] unknown frametype received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
 			if (1)
 				GS_ERR_CLEAN(1);
 		}
@@ -2204,7 +2204,7 @@ int aux_serv_host_service(
 			// FIXME: sigh raw allocation, delete at ENET_EVENT_TYPE_DISCONNECT
 			peer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
 
-			printf("[serv] %d connected [from %x:%u]\n", (int)AssignedId, peer->address.host, peer->address.port);
+			GS_LOG(I, PF, "[serv] %d connected [from %x:%u]", (int)AssignedId, peer->address.host, peer->address.port);
 		}
 		break;
 
@@ -2229,7 +2229,7 @@ int aux_serv_host_service(
 
 			if (! aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested)) {
 
-				printf("[serv] packet received\n");
+				GS_LOG(I, S, "[serv] packet received");
 
 				gs_packet_unique_t Packet = aux_gs_make_packet_unique(Events[i].packet);
 
@@ -2298,7 +2298,7 @@ int aux_serv_host_service(
 			delete peer->data;
 			peer->data = NULL;
 
-			printf("[serv] %d disconnected.\n", (int)ctxstruct->m0Id);
+			GS_LOG(I, PF, "[serv] %d disconnected", (int)ctxstruct->m0Id);
 		}
 		break;
 
@@ -2897,30 +2897,6 @@ clean:
 	return r;
 }
 
-/* FIXME: presumably unused - refactor */
-int clnt_state_crank_reconnecter(
-	const sp<ClntState> &State, ClntStateReconnect *ioStateReconnect,
-	const confmap_t &ClntKeyVal, const sp<ServAuxData> &ServAuxData,
-	ServWorkerData *WorkerDataRecv, ServWorkerData *WorkerDataSend)
-{
-	GS_ASSERT(0);
-	return 1;
-	//	int r = 0;
-	//
-	//	if (!!(r = clnt_state_crank(State, ClntKeyVal, ServAuxData, WorkerDataRecv, WorkerDataSend))) {
-	//		printf("reco+\n");
-	//		if (ioStateReconnect->NumReconnectionsLeft-- == 0)
-	//			GS_GOTO_CLEAN();
-	//		if (!!(r = clnt_state_connection_remake(ClntKeyVal, &State->mConnection)))
-	//			GS_GOTO_CLEAN();
-	//		printf("reco-\n");
-	//	}
-	//
-	//clean:
-	//
-	//	return r;
-}
-
 int clnt_state_need_repository_noown(
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	git_repository **oRepositoryT)
@@ -2986,7 +2962,7 @@ int clnt_state_need_tree_head_noown(
 	if (git_oid_cmp(&TreeHeadOidT, oTreeHeadOid) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &CommitHeadOidT);
-		printf("[clnt] Have latest [%.*s]\n", GIT_OID_HEXSZ, buf);
+		GS_LOG(I, PF, "[clnt] Have latest [%.*s]\n", (int)GIT_OID_HEXSZ, buf);
 	}
 
 clean:
