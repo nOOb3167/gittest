@@ -38,6 +38,25 @@
 	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
 	    GS_ERR_CLEAN(9998); }
 
+#define GS_CLNT_STATE_CODE_DECL2(name) GS_CLNT_STATE_CODE_ ## name
+#define GS_CLNT_STATE_CODE_DECL(name) { # name , GS_CLNT_STATE_CODE_DECL2(name) }
+
+#define GS_CLNT_STATE_CODE_DEFINE_ARRAY(VARNAME)             \
+	GsClntStateCodeEntry VARNAME[] = {                       \
+		GS_CLNT_STATE_CODE_DECL(NEED_REPOSITORY),            \
+		GS_CLNT_STATE_CODE_DECL(NEED_TREE_HEAD),             \
+		GS_CLNT_STATE_CODE_DECL(NEED_TREELIST),              \
+		GS_CLNT_STATE_CODE_DECL(NEED_BLOBLIST),              \
+		GS_CLNT_STATE_CODE_DECL(NEED_WRITTEN_BLOB_AND_TREE), \
+		GS_CLNT_STATE_CODE_DECL(NEED_NOTHING),               \
+	    };                                                       \
+	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
+
+#define GS_CLNT_STATE_CODE_CHECK_ARRAY_NONUCF(VARNAME) \
+	for (size_t i = 0; i < Len ## VARNAME; i++) \
+		if ((VARNAME)[i].mCodeNum != i) \
+			GS_ERR_CLEAN_L(1, E, S, "state code array non-contiguous");
+
 enum gs_clnt_state_code_t {
 	GS_CLNT_STATE_CODE_NEED_REPOSITORY = 0,
 	GS_CLNT_STATE_CODE_NEED_TREE_HEAD = 1,
@@ -46,6 +65,11 @@ enum gs_clnt_state_code_t {
 	GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE = 4,
 	GS_CLNT_STATE_CODE_NEED_NOTHING = 5,
 	GS_CLNT_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
+};
+
+struct GsClntStateCodeEntry {
+	const char *mCodeName;
+	uint32_t    mCodeNum;
 };
 
 /* GsBypartCbDataOidVector */
@@ -481,6 +505,8 @@ int clnt_serv_thread_func(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate,
 	uint32_t *oWantReconnect);
+
+const char * gs_clnt_state_code_to_name(uint32_t Code);
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect);
 bool clnt_state_reconnect_have_remaining(ClntStateReconnect *StateReconnect);

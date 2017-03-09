@@ -1054,11 +1054,16 @@ int aux_clnt_worker_reconnect_expend_reconnect_receive_request_for_send(
 
 	if (*ioWantReconnect) {
 
+		GS_LOG(I, S, "reconnection wanted");
+
+		GS_LOG(I, S, "receiving notification");
+
 		if (!!(r = aux_worker_dequeue_handling_double_notify(WorkerDataRecv, &RequestReconnect)))
 			GS_GOTO_CLEAN();
 
 		GS_ASSERT(RequestReconnect->isReconnectRequestRegularWithId());
 
+		GS_LOG(I, S, "received notification");
 	}
 
 	// FIXME: rebuild ServWorkerRequestData instead of using RequestReconnect directly
@@ -1089,6 +1094,8 @@ int clnt_worker_thread_func_reconnecter(
 	sp<ServWorkerRequestData> RequestForSend;
 
 	uint32_t WantReconnect = true;
+
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
@@ -2583,6 +2590,8 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_not
 		ENetAddress AuxDataNotificationAddress = {};
 		gs_connection_surrogate_id_t Id = 0;
 
+		GS_LOG(I, S, "reconnection wanted - performing");
+
 		if (!!(r = aux_clnt_serv_connect_immediately(
 			ServPort,
 			ServHostNameBuf, LenServHostName,
@@ -2592,6 +2601,8 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_not
 			GS_GOTO_CLEAN();
 		}
 
+		GS_LOG(I, PF, "assigned [id=%llu]", (unsigned long long)Id);
+
 		// FIXME: create an atomic clear + insert to ensure principalclientconnection always available (no races)
 		// FIXME: clear connection map after reconnect? probably
 		if (!!(r = gs_connection_surrogate_map_clear(ioConnectionSurrogateMap)))
@@ -2599,6 +2610,8 @@ int aux_clnt_serv_reconnect_expend_reconnect_cond_insert_map_notify_serv_aux_not
 
 		if (!!(r = gs_connection_surrogate_map_insert(ioConnectionSurrogateMap, *ioConnectionSurrogate, &Id)))
 			GS_GOTO_CLEAN();
+
+		GS_LOG(I, S, "notifying aux, worker");
 
 		if (!!(r = aux_serv_aux_enqueue_reconnect_double_notify(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
@@ -2631,6 +2644,8 @@ int clnt_serv_thread_func_reconnecter(
 	sp<GsConnectionSurrogate> ConnectionSurrogate;
 
 	uint32_t WantReconnect = true;
+
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
@@ -2705,6 +2720,23 @@ noclean:
 clean:
 
 	return r;
+}
+
+const char * gs_clnt_state_code_to_name(uint32_t Code) {
+	/* NOTE: special error-handling */
+	int r = 0;
+
+	GS_CLNT_STATE_CODE_DEFINE_ARRAY(ClntStateCodeArray);
+	GS_CLNT_STATE_CODE_CHECK_ARRAY_NONUCF(ClntStateCodeArray);
+
+	if (! (Code < LenClntStateCodeArray))
+		GS_ERR_CLEAN(1);
+
+clean:
+	if (!!r)
+		GS_ASSERT(0);
+
+	return ClntStateCodeArray[Code].mCodeName;
 }
 
 int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
@@ -2857,6 +2889,8 @@ int clnt_state_crank(
 
 	if (!!(r = clnt_state_code(State.get(), &Code)))
 		GS_GOTO_CLEAN();
+
+	GS_LOG(I, PF, "servicing [code=[%s]]", gs_clnt_state_code_to_name(Code));
 
 	switch (Code) {
 	case GS_CLNT_STATE_CODE_NEED_REPOSITORY:
