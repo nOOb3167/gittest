@@ -500,7 +500,7 @@ int aux_make_serv_worker_request_data_for_response(
 {
 	int r = 0;
 
-	GS_ASSERT(RequestBeingResponded->mIsWithId);
+	GS_ASSERT(!!RequestBeingResponded->mIsWithId);
 
 	sp<ServWorkerRequestData> RequestWorker(new ServWorkerRequestData(
 		ioPacket,
@@ -3177,7 +3177,7 @@ int clnt_state_need_repository_setup(
 		GS_GOTO_CLEAN();
 	}
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 2, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_TREE_HEAD, a,
 		{ a.mRepositoryT = RepositoryT; });
 
 clean:
@@ -3222,7 +3222,7 @@ int clnt_state_need_tree_head_setup(
 		GS_GOTO_CLEAN();
 	}
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 3, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_TREELIST, a,
 		{ a.mTreeHeadOid = TreeHeadOid; });
 
 clean:
@@ -3249,7 +3249,7 @@ int clnt_state_need_treelist_setup(const sp<ClntState> &State,
 		GS_GOTO_CLEAN();
 	}
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 4, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_BLOBLIST, a,
 		{ a.mTreelist = Treelist;
 		  a.mMissingTreelist = MissingTreelist; });
 
@@ -3287,7 +3287,7 @@ int clnt_state_need_bloblist_setup(const sp<ClntState> &State,
 	if (!!(r = aux_make_packet_unique_with_offset(&PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, TmpTreePacketWithOffset.get())))
 		GS_GOTO_CLEAN();
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 5, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE, a,
 		{ a.mMissingBloblist = MissingBloblist;
 		  a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
 
@@ -3322,7 +3322,7 @@ int clnt_state_need_written_blob_and_tree_setup(const sp<ClntState> &State,
 		GS_GOTO_CLEAN();
 	}
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), 6, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_NOTHING, a,
 		{ a.mWrittenBlob = WrittenBlob;
 		  a.mWrittenTree = WrittenTree; });
 
