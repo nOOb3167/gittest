@@ -27,7 +27,7 @@ static EXCEPTION_DISPOSITION NTAPI ignore_handler(
 	return ExceptionContinueExecution;
 }
 
-void gs_set_current_thread_name(
+void gs_current_thread_name_set(
 	const char *NameBuf,
 	size_t LenName)
 {

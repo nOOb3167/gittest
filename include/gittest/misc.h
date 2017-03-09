@@ -77,7 +77,10 @@ int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);
 
-void gs_set_current_thread_name(
+void gs_current_thread_name_set_cstr(
+	const char *NameCStr);
+
+void gs_current_thread_name_set(
 	const char *NameBuf,
 	size_t LenName);
 

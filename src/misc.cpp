@@ -75,3 +75,14 @@ clean:
 
 	return r;
 }
+
+void gs_current_thread_name_set_cstr(
+	const char *NameCStr)
+{
+	size_t arbitrary_length_limit = 2048;
+
+	if (gs_buf_ensure_haszero(NameCStr, arbitrary_length_limit))
+		GS_ASSERT(0);
+
+	gs_current_thread_name_set(NameCStr, strlen(NameCStr));
+}

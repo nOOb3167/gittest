@@ -3341,7 +3341,11 @@ void serv_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("serv_worker");
+
 	log_guard_t log(GS_LOG_GET("serv_worker"));
+
 	if (!!(r = serv_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
@@ -3353,15 +3357,23 @@ void serv_worker_thread_func_f(
 	{
 		GS_ASSERT(0);
 	}
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void serv_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("serv_aux");
+
 	log_guard_t log(GS_LOG_GET("serv_aux"));
+
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
 		GS_ASSERT(0);
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void serv_thread_func_f(
@@ -3371,10 +3383,16 @@ void serv_thread_func_f(
 	uint32_t ServPort)
 {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("serv_serv");
+
 	log_guard_t log(GS_LOG_GET("serv_serv"));
+
 	if (!!(r = serv_serv_thread_func_reconnecter(WorkerDataRecv, WorkerDataSend, AuxData, ServPort)))
 		GS_ASSERT(0);
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void clnt_worker_thread_func_f(
@@ -3385,7 +3403,11 @@ void clnt_worker_thread_func_f(
 	sp<ServWorkerData> WorkerDataSend)
 {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("clnt_worker");
+
 	log_guard_t log(GS_LOG_GET("clnt_worker"));
+
 	if (!!(r = clnt_worker_thread_func_reconnecter(
 		RefNameMainBuf, LenRefNameMain,
 		RepoMainOpenPathBuf, LenRepoMainOpenPath,
@@ -3395,15 +3417,23 @@ void clnt_worker_thread_func_f(
 	{
 		GS_ASSERT(0);
 	}
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void clnt_serv_aux_thread_func_f(sp<ServAuxData> ServAuxData) {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("clnt_aux");
+
 	log_guard_t log(GS_LOG_GET("clnt_aux"));
+
 	if (!!(r = aux_serv_aux_thread_func_reconnecter(ServAuxData)))
 		GS_ASSERT(0);
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void clnt_thread_func_f(
@@ -3414,7 +3444,11 @@ void clnt_thread_func_f(
 	const char *ServHostNameBuf, size_t LenServHostName)
 {
 	int r = 0;
+
+	gs_current_thread_name_set_cstr("clnt_serv");
+
 	log_guard_t log(GS_LOG_GET("clnt_serv"));
+
 	if (!!(r = clnt_serv_thread_func_reconnecter(
 		WorkerDataRecv,
 		WorkerDataSend,
@@ -3424,7 +3458,9 @@ void clnt_thread_func_f(
 	{
 		GS_ASSERT(0);
 	}
-	for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 int aux_full_create_connection_server(
