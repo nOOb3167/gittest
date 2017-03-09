@@ -380,6 +380,10 @@ int aux_packet_full_send(ENetHost *host, ENetPeer *peer, ServAuxData *ServAuxDat
 int aux_packet_response_queue_interrupt_request_reliable(ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request, const char *Data, uint32_t DataSize);
 int aux_packet_request_dequeue(ServWorkerData *WorkerDataRecv, sp<ServWorkerRequestData> *oRequestForRecv);
 int aux_packet_request_dequeue_packet(ServWorkerData *WorkerDataRecv, gs_packet_unique_t *oPacket);
+int aux_data_aux_request_dequeue_regular_timeout(
+	ServAuxData *DataAux,
+	ServAuxRequestData *oRequest,
+	uint32_t *oHaveRequestData);
 
 int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_packet_t *oPacket);
 int aux_host_service(ENetHost *host, uint32_t TimeoutMs, std::vector<ENetEvent> *oEvents);
@@ -408,7 +412,7 @@ int aux_serv_aux_interrupt_perform(
 	GsConnectionSurrogate *ConnectionSurrogate);
 int aux_serv_aux_host_service_sub(ENetHost *client);
 int aux_serv_aux_host_service(
-	sp<ServAuxData> ServAuxData,
+	sp<ServAuxData> DataAux,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate);
 int aux_serv_aux_thread_func(
 	sp<ServAuxData> ServAuxData,

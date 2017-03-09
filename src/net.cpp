@@ -1466,6 +1466,42 @@ clean:
 	return r;
 }
 
+/* @err: GS_ERRCODE_RECONNECT if reconnect request dequeued */
+int aux_data_aux_request_dequeue_regular_timeout(
+	ServAuxData *DataAux,
+	ServAuxRequestData *oRequest,
+	uint32_t *oHaveRequestData)
+{
+	int r = 0;
+
+	ServAuxRequestData RequestData = {};
+
+	bool HaveRequestData = false;
+
+	HaveRequestData = DataAux->InterruptRequestedDequeueTimeout(
+		std::chrono::milliseconds(GS_SERV_AUX_ARBITRARY_TIMEOUT_MS),
+		&RequestData);
+
+	if (!HaveRequestData)
+		GS_ERR_NO_CLEAN(1);
+
+	if (RequestData.IsReconnectRequest())
+		GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
+
+	GS_ASSERT(RequestData.isReconnectRequestRegular());
+
+noclean:
+	if (oRequest)
+		*oRequest = RequestData;
+
+	if (oHaveRequestData)
+		*oHaveRequestData = HaveRequestData;
+
+clean:
+
+	return r;
+}
+
 int aux_host_service_one_type_receive(ENetHost *host, uint32_t TimeoutMs, gs_packet_t *oPacket) {
 	/* NOTE: special errorhandling */
 
@@ -2044,7 +2080,7 @@ clean:
 }
 
 int aux_serv_aux_host_service(
-	sp<ServAuxData> ServAuxData,
+	sp<ServAuxData> DataAux,
 	sp<GsConnectionSurrogate> *ioConnectionSurrogate)
 {
 	/* NOTE: errors in this function should also reset the ConnectionSurrogate as part of the API */
@@ -2056,7 +2092,9 @@ int aux_serv_aux_host_service(
 
 	while (true) {
 
-		ServAuxRequestData RequestData;
+		ServAuxRequestData RequestData = {};
+
+		uint32_t HaveRequestData = false;
 
 		/* NOTE: waiting for ServAuxRequestData with mIsReconnectRequest is enough.
 		*    receiving an ENET_EVENT_TYPE_DISCONNECT indicates we should reconnect but
@@ -2066,18 +2104,18 @@ int aux_serv_aux_host_service(
 
 		/* set a timeout to ensure serv_aux_host_service cranks the enet event loop regularly */
 
-		bool HaveRequestData = ServAuxData->InterruptRequestedDequeueTimeout(
-			std::chrono::milliseconds(GS_SERV_AUX_ARBITRARY_TIMEOUT_MS),
-			&RequestData);
+		if (!!(r = aux_data_aux_request_dequeue_regular_timeout(
+			DataAux.get(),
+			&RequestData,
+			&HaveRequestData)))
+		{
+			GS_GOTO_CLEAN();
+		}
 
 		if (!HaveRequestData)
 			continue;
 
-		// FIXME: GS_ERRCODE_RECONNECT here, right?
-		if (RequestData.IsReconnectRequest())
-			GS_ERR_CLEAN(1);
-
-		GS_ASSERT(! RequestData.IsReconnectRequest());
+		GS_ASSERT(RequestData.isReconnectRequestRegular());
 
 		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
 			GS_GOTO_CLEAN();
@@ -2101,7 +2139,7 @@ int serv_aux_thread_func(
 		GS_ERR_NO_CLEAN(1);
 
 noclean:
-	if (!!r) {
+	if (!!r && r == GS_ERRCODE_RECONNECT) {
 		WantReconnect = true;
 	}
 
