@@ -1482,13 +1482,10 @@ int aux_data_aux_request_dequeue_regular_timeout(
 		std::chrono::milliseconds(GS_SERV_AUX_ARBITRARY_TIMEOUT_MS),
 		&RequestData);
 
-	if (!HaveRequestData)
-		GS_ERR_NO_CLEAN(1);
-
-	if (RequestData.IsReconnectRequest())
+	if (HaveRequestData && RequestData.IsReconnectRequest())
 		GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
 
-	GS_ASSERT(RequestData.isReconnectRequestRegular());
+	GS_ASSERT(!HaveRequestData || RequestData.IsReconnectRequest());
 
 noclean:
 	if (oRequest)
@@ -2115,7 +2112,7 @@ int aux_serv_aux_host_service(
 		if (!HaveRequestData)
 			continue;
 
-		GS_ASSERT(RequestData.isReconnectRequestRegular());
+		GS_ASSERT(! RequestData.IsReconnectRequest());
 
 		if (!!(r = aux_serv_aux_interrupt_perform(ioConnectionSurrogate->get())))
 			GS_GOTO_CLEAN();
@@ -2190,6 +2187,8 @@ int aux_serv_host_service(
 		{
 			ENetPeer *peer = Events[i].peer;
 
+			GS_LOG(I, S, "ENET_EVENT_TYPE_CONNECT");
+
 			GS_BYPART_DATA_VAR(GsConnectionSurrogateId, ctxstruct);
 
 			gs_connection_surrogate_id_t AssignedId = 0;
@@ -2204,13 +2203,15 @@ int aux_serv_host_service(
 			// FIXME: sigh raw allocation, delete at ENET_EVENT_TYPE_DISCONNECT
 			peer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
 
-			GS_LOG(I, PF, "[serv] %d connected [from %x:%u]", (int)AssignedId, peer->address.host, peer->address.port);
+			GS_LOG(I, PF, "%d connected [from %x:%u]", (int)AssignedId, peer->address.host, peer->address.port);
 		}
 		break;
 
 		case ENET_EVENT_TYPE_RECEIVE:
 		{
 			ENetPeer *peer = Events[i].peer;
+
+			GS_LOG(I, S, "ENET_EVENT_TYPE_RECEIVE");
 
 			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, peer->data);
 
@@ -2227,9 +2228,12 @@ int aux_serv_host_service(
 
 			/* filter out interrupt requested frames and only dispatch other */
 
+			if (aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested))
+				GS_LOG(I, S, "interrupt-request received")
+
 			if (! aux_frametype_equals(FoundFrameType, FrameTypeInterruptRequested)) {
 
-				GS_LOG(I, S, "[serv] packet received");
+				GS_LOG(I, S, "packet received");
 
 				gs_packet_unique_t Packet = aux_gs_make_packet_unique(Events[i].packet);
 
@@ -2286,6 +2290,8 @@ int aux_serv_host_service(
 		case ENET_EVENT_TYPE_DISCONNECT:
 		{
 			ENetPeer *peer = Events[i].peer;
+
+			GS_LOG(I, S, "ENET_EVENT_TYPE_DISCONNECT");
 
 			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, peer->data);
 
@@ -2374,6 +2380,8 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 
 		ENetAddress AuxDataNotificationAddress = {};
 
+		GS_LOG(I, S, "reconnection wanted - performing");
+
 		if (!!(r = aux_serv_serv_connect_immediately(
 			ServPort,
 			ioHostSurrogate,
@@ -2381,6 +2389,8 @@ int aux_serv_serv_reconnect_expend_reconnect_cond_notify_serv_aux_notify_worker(
 		{
 			GS_GOTO_CLEAN();
 		}
+
+		GS_LOG(I, S, "notifying aux, worker");
 
 		if (!!(r = aux_serv_aux_enqueue_reconnect_double_notify(AuxData, &AuxDataNotificationAddress)))
 			GS_GOTO_CLEAN();
@@ -2414,6 +2424,8 @@ int serv_serv_thread_func_reconnecter(
 	sp<GsHostSurrogate> HostSurrogate;
 
 	uint32_t WantReconnect = true;
+
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
@@ -3488,6 +3500,8 @@ int aux_full_create_connection_server(
 	int r = 0;
 
 	sp<FullConnectionClient> ConnectionClient;
+
+	GS_LOG(I, S, "starting server");
 
 	{
 		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
