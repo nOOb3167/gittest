@@ -205,30 +205,40 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 	GS_LOG(I, S, "start");
 
 	if (argc < 2)
-		GS_ERR_NO_CLEAN_L(0, I, PF, "no update done ([argc=%d])", argc);
+		GS_ERR_NO_CLEAN_L(1, I, PF, "no update done ([argc=%d])", argc);
 
 	if (strcmp(argv[1], GS_SELFUPDATE_ARG_UPDATEMODE) != 0)
-		GS_ERR_NO_CLEAN_L(0, I, PF, "no update done ([arg=%s])", argv[1]);
+		GS_ERR_NO_CLEAN_L(1, I, PF, "no update done ([arg=%s])", argv[1]);
 
 	if (argc < 3)
 		GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
 
-	if (strcmp(argv[2], GS_SELFUPDATE_ARG_PARENT) == 0) {
+	if (strcmp(argv[2], GS_SELFUPDATE_ARG_PARENT) == 0)
+	{
 		GS_LOG(I, S, "parent start");
+
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
+
 		if (!!(r = aux_selfupdate_main_mode_parent(&HaveUpdateShouldQuit)))
 			GS_GOTO_CLEAN();
+
 		GS_LOG(I, PF, "parent end [HaveUpdateShouldQuit = %d]", (int)HaveUpdateShouldQuit);
+
 		if (HaveUpdateShouldQuit)
 			GS_ERR_NO_CLEAN(0);
-	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_CHILD) == 0) {
+	}
+	else if (strcmp(argv[2], GS_SELFUPDATE_ARG_CHILD) == 0)
+	{
 		GS_LOG(I, S, "chld start");
+
 		if (argc != 6)
 			GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
+
 		const size_t ArgvHandleSerializedSize = strlen(argv[3]) + 1;
 		const size_t ArgvParentFileNameSize = strlen(argv[4]) + 1;
 		const size_t ArgvChildFileNameSize = strlen(argv[5]) + 1;
+
 		if (!!(r = aux_selfupdate_main_mode_child(
 			argv[3], ArgvHandleSerializedSize,
 			argv[4], ArgvParentFileNameSize,
@@ -236,20 +246,34 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 		{
 			GS_GOTO_CLEAN();
 		}
+
 		GS_LOG(I, S, "chld end");
-	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0) {
+	}
+	else if (strcmp(argv[2], GS_SELFUPDATE_ARG_MAIN) == 0)
+	{
 		GS_LOG(I, S, "main start");
+
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
+
 		if (!!(r = aux_selfupdate_main_mode_main()))
 			GS_GOTO_CLEAN();
-	} else if (strcmp(argv[2], GS_SELFUPDATE_ARG_VERSUB) == 0) {
+
+		GS_LOG(I, S, "main end");
+	}
+	else if (strcmp(argv[2], GS_SELFUPDATE_ARG_VERSUB) == 0)
+	{
 		GS_LOG(I, S, "versub start");
+
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
+
 		printf("%s\n", DefVerSub);
-	} else {
+	}
+	else
+	{
 		GS_LOG(I, PF, "unrecognized argument [%.s]", argv[2]);
+
 		GS_ERR_CLEAN(1);
 	}
 
@@ -258,6 +282,10 @@ noclean:
 		*oHaveUpdateShouldQuit = HaveUpdateShouldQuit;
 
 clean:
+	if (!!r) {
+		/* always dump logs. not much to do about errors here though */
+		gs_log_crash_handler_dump_global_log_list();
+	}
 
 	return r;
 }

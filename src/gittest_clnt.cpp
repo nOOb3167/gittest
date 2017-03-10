@@ -135,8 +135,8 @@ int main(int argc, char **argv) {
 	//if (!!(r = testlog()))
 	//	GS_GOTO_CLEAN();
 
-	//if (!!(r = startselfupdate(argc, argv)))
-	//	GS_GOTO_CLEAN();
+	if (!!(r = startselfupdate(argc, argv)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = startclnt()))
 		GS_GOTO_CLEAN();
