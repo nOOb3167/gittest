@@ -167,12 +167,6 @@ int aux_selfupdate_main_mode_main() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	std::string ConfServHostName;
-	uint32_t ConfServPort = 0;
-	std::string ConfRefNameSelfUpdate;
-	std::string ConfRefNameMain;
-	std::string ConfRepoMainOpenPath;
-
 	sp<FullConnectionClient> FcsClnt;
 
 	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))

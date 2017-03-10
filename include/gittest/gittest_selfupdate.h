@@ -19,6 +19,8 @@
 /* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
 #define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
 
+#define GS_MAGIC_CRASH_EXPR() { int *X = NULL; *X = 1234; }
+
 #define GS_AUX_CONFIG_COMMON_VAR_UINT32_NONUCF(KEYVAL, COMVARS, NAME)                  \
 	{                                                                                  \
 		uint32_t Conf ## NAME = 0;                                                     \

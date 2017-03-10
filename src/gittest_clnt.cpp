@@ -16,41 +16,6 @@
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-int startclnt() {
-	int r = 0;
-
-	confmap_t KeyVal;
-
-	GsAuxConfigCommonVars CommonVars = {};
-
-	sp<FullConnectionClient> FcsServ;
-	sp<FullConnectionClient> FcsClnt;
-
-	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = aux_full_create_connection_client(
-		CommonVars.ServPort,
-		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
-		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
-		/* MasterUpdate is the Main repository for client */
-		CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
-		&FcsClnt)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	for (;;)
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-clean:
-
-	return r;
-}
-
 int startselfupdate(int argc, char **argv) {
 	int r = 0;
 
@@ -68,9 +33,6 @@ int startselfupdate(int argc, char **argv) {
 
 	if (HaveUpdateShouldQuit)
 		GS_ERR_NO_CLEAN(0);
-
-	//if (!!(r = startclnt()))
-	//	GS_GOTO_CLEAN();
 
 noclean:
 
@@ -113,8 +75,6 @@ int testlog() {
 		GS_LOG(I, PF, "hello [%s]", "world");
 	}
 
-	//int *X = NULL; *X = 1234;
-
 clean:
 
 	return r;
@@ -136,9 +96,6 @@ int main(int argc, char **argv) {
 	//	GS_GOTO_CLEAN();
 
 	if (!!(r = startselfupdate(argc, argv)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = startclnt()))
 		GS_GOTO_CLEAN();
 
 clean:
