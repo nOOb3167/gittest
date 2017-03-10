@@ -62,7 +62,10 @@ clean:
 	return r;
 }
 
-int gs_deserialize_windows_process_handle(HANDLE *oHandle, const char *BufZeroTerm, size_t BufSize) {
+int gs_deserialize_windows_process_handle(
+	HANDLE *oHandle,
+	const char *BufZeroTermBuf, size_t LenBufZeroTerm)
+{
 	/* deserialize a hexadecimal number string into a HANDLE value */
 	int r = 0;
 
@@ -70,17 +73,18 @@ int gs_deserialize_windows_process_handle(HANDLE *oHandle, const char *BufZeroTe
 
 	GS_ASSERT(sizeof(long long) >= sizeof(HANDLE));
 
-	if (! memchr(BufZeroTerm, '\0', BufSize))
-		GS_ERR_CLEAN(1);
+	if (! gs_buf_ensure_haszero(BufZeroTermBuf, LenBufZeroTerm + 1))
 
 	{
-		const char *startPtr = BufZeroTerm;
+		const char *startPtr = BufZeroTermBuf;
 		char *endPtr = 0;
 		errno = 0;
 		long long lluVal = strtoull(startPtr, &endPtr, 16);
-		if (errno = ERANGE && (lluVal == LONG_MIN || lluVal == LONG_MAX))
+		if (errno == ERANGE && (lluVal == ULLONG_MAX))
 			GS_ERR_CLEAN(1);
-		if (endPtr >= BufZeroTerm + BufSize)
+		if (errno == EINVAL)
+			GS_ERR_CLEAN(1);
+		if (endPtr >= BufZeroTermBuf + LenBufZeroTerm + 1)
 			GS_ERR_CLEAN(1);
 
 		Handle = (HANDLE) lluVal;
@@ -272,26 +276,68 @@ clean:
 	return r;
 }
 
+int gs_build_parent_command_line_mode_main(
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	char *oParentCommandLine, size_t ParentCommandLineSize, size_t *oLenParentCommandLine)
+{
+	int r = 0;
+
+	size_t LenParentCommandLine =
+		(1 /*quote*/ + LenParentFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                       + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_MAIN)                             + 1 /*zero*/);
+
+	if (LenParentCommandLine >= ParentCommandLineSize)
+		GS_ERR_CLEAN(1);
+
+	{
+		char * const PtrArg0 = oParentCommandLine;
+		char * const PtrArg1 = PtrArg0 + 1 + LenParentFileName + 1 + 1;
+		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
+		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN) + 1;
+
+		GS_ASSERT(PtrArg3 - PtrArg0 == LenParentCommandLine);
+
+		memset(PtrArg0, '"', 1);
+		memcpy(PtrArg0 + 1, ParentFileNameBuf, LenParentFileName);
+		memset(PtrArg0 + 1 + LenParentFileName, '"', 1);
+		memset(PtrArg0 + 1 + LenParentFileName + 1, ' ', 1);
+
+		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
+		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
+
+		memcpy(PtrArg2, GS_SELFUPDATE_ARG_MAIN, strlen(GS_SELFUPDATE_ARG_MAIN));
+		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN), '\0', 1);
+	}
+
+	if (oLenParentCommandLine)
+		*oLenParentCommandLine = LenParentCommandLine;
+
+clean:
+
+	return r;
+}
+
 int gs_build_child_command_line(
 	const char *ChildFileNameBuf, size_t LenChildFileName,
 	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
 	const char *ParentFileNameBuf, size_t LenParentFileName,
-	char *oChildCommandLine, size_t LenChildCommandLine)
+	char *oChildCommandLine, size_t ChildCommandLineSize, size_t *oLenChildCommandLine)
 {
 	int r = 0;
 
 	/* NOTE: ChildFileNameBuf is both pathstr and pathstrchild */
 
-	if (1 /*quote*/ + LenChildFileName /*pathstr*/ + 1 /*quote*/          + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                            + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_CHILD)                                 + 1 /*space*/ +
-		LenHandleCurrentProcessSerialized /*handlestr*/                 + 1 /*space*/ +
+	size_t LenChildCommandLine =
+		(1 /*quote*/ + LenChildFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_CHILD) + 1 /*space*/ +
+		LenHandleCurrentProcessSerialized /*handlestr*/ + 1 /*space*/ +
 		1 /*quote*/ + LenParentFileName /*pathstrparent*/ + 1 /*quote*/ + 1 /*space*/ +
-		1 /*quote*/ + LenChildFileName /*pathstrchild*/     + 1 /*quote*/ + 1 /*zero*/
-		>= LenChildCommandLine)
-	{
+		1 /*quote*/ + LenChildFileName /*pathstrchild*/ + 1 /*quote*/ + 1 /*zero*/);
+
+	if (LenChildCommandLine >= ChildCommandLineSize)
 		GS_ERR_CLEAN(1);
-	}
 
 	{
 		char * const PtrArg0 = oChildCommandLine;
@@ -301,6 +347,9 @@ int gs_build_child_command_line(
 		char * const PtrArg4 = PtrArg3 + LenHandleCurrentProcessSerialized + 1;
 		char * const PtrArg5 = PtrArg4 + 1 + LenParentFileName + 1 + 1;
 		char * const PtrArg6 = PtrArg5 + 1 + LenChildFileName + 1 + 1;
+
+		GS_ASSERT(PtrArg6 - PtrArg0 == LenChildCommandLine);
+
 		memset(PtrArg0, '"', 1);
 		memcpy(PtrArg0 + 1, ChildFileNameBuf, LenChildFileName);
 		memset(PtrArg0 + 1 + LenChildFileName, '"', 1);
@@ -325,6 +374,9 @@ int gs_build_child_command_line(
 		memset(PtrArg5 + 1 + LenChildFileName, '"', 1);
 		memset(PtrArg5 + 1 + LenChildFileName + 1, '\0', 1);
 	}
+
+	if (oLenChildCommandLine)
+		*oLenChildCommandLine = LenChildCommandLine;
 
 clean:
 
@@ -462,64 +514,42 @@ clean:
 	return r;
 }
 
-int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNameChild) {
+int gs_process_start(
+	const char *FileNameParentBuf, size_t LenFileNameParent,
+	const char *ParentCommandLineBuf, size_t LenParentCommandLine)
+{
+	/* create a process and discard all the handles (process and thread handles) */
 	int r = 0;
-
-	size_t LenParentFileName = 0;
-	char ParentFileName[512] = {};
-
-	HANDLE hCurrentProcessPseudo = NULL;
-	HANDLE hCurrentProcess = NULL;
-
-	char HandleCurrentProcessSerialized[512] = {};
-	size_t LenHandleCurrentProcessSerialized = 0;
-
-	char ChildCommandLine[1024];
 
 	STARTUPINFO si = {};
 	PROCESS_INFORMATION pi = {};
 	HANDLE hChildProcess = NULL;
 	HANDLE hChildThread = NULL;
 
-	DWORD Dw = 0;
-	BOOL  Ok = 0;
+	/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms682425(v=vs.85).aspx
+	*    32768 actually */
+	const size_t MagicCommandLineLenghtLimit = 32767;
+	const size_t ReasonableCommandLineLengthLimit = 1024;
+	char CommandLineCopyBuf[ReasonableCommandLineLengthLimit];
 
-	if (!!(r = gs_get_current_executable_filename(ParentFileName, sizeof ParentFileName, &LenParentFileName)))
+	BOOL Ok = 0;
+
+	if (LenParentCommandLine >= MagicCommandLineLenghtLimit)
+		GS_ERR_CLEAN(1);
+
+	memcpy(CommandLineCopyBuf, ParentCommandLineBuf, LenParentCommandLine);
+	memset(CommandLineCopyBuf + LenParentCommandLine, '\0', 1);
+
+	if (!!(r = gs_file_exist_ensure(FileNameParentBuf, LenFileNameParent)))
 		GS_GOTO_CLEAN();
-
-	/* https://blogs.msdn.microsoft.com/oldnewthing/20071023-00/?p=24713/ */
-	/* INVALID_FILE_ATTRIBUTES if file does not exist, apparently */
-	if (INVALID_FILE_ATTRIBUTES == (Dw = GetFileAttributes(FileNameChildBuf)))
-		GS_ERR_CLEAN(1);
-
-	GS_LOG(I, PF, "Child Process [%.*s]", (int)LenFileNameChild, FileNameChildBuf);
-
-	hCurrentProcessPseudo = GetCurrentProcess();
-
-	if (!(Ok = DuplicateHandle(hCurrentProcessPseudo, hCurrentProcessPseudo, hCurrentProcessPseudo, &hCurrentProcess, 0, TRUE, DUPLICATE_SAME_ACCESS)))
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_serialize_windows_process_handle(hCurrentProcess, HandleCurrentProcessSerialized, sizeof HandleCurrentProcessSerialized)))
-		GS_GOTO_CLEAN();
-
-	LenHandleCurrentProcessSerialized = strlen(HandleCurrentProcessSerialized);
-
-	if (!!(r = gs_build_child_command_line(
-		FileNameChildBuf, LenFileNameChild,
-		HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized,
-		ParentFileName, LenParentFileName,
-		ChildCommandLine, sizeof ChildCommandLine)))
-	{
-		GS_ERR_CLEAN(1);
-	}
 
 	ZeroMemory(&si, sizeof si);
 	si.cb = sizeof si;
 	ZeroMemory(&pi, sizeof pi);
 
 	if (!(Ok = CreateProcess(
-		FileNameChildBuf,
-		ChildCommandLine,
+		FileNameParentBuf,
+		CommandLineCopyBuf,
 		NULL,
 		NULL,
 		TRUE,
@@ -539,6 +569,89 @@ clean:
 
 	gs_close_handle(hChildProcess);
 
+	return r;
+}
+
+int aux_selfupdate_fork_parent_mode_main_and_quit(
+	const char *FileNameParentBuf, size_t LenFileNameParent)
+{
+	int r = 0;
+
+	size_t LenParentCommandLine = 0;
+	char ParentCommandLineBuf[1024];
+
+	GS_LOG(I, PF, "(re-)starting parent process [name=[%.*s]]", (int)LenFileNameParent, FileNameParentBuf);
+
+	if (!!(r = gs_build_parent_command_line_mode_main(
+		FileNameParentBuf, LenFileNameParent,
+		ParentCommandLineBuf, sizeof ParentCommandLineBuf, &LenParentCommandLine)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	if (!!(r = gs_process_start(
+		FileNameParentBuf, LenFileNameParent,
+		ParentCommandLineBuf, LenParentCommandLine)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+clean:
+
+	return r;
+}
+
+int aux_selfupdate_fork_child_and_quit(
+	const char *FileNameChildBuf, size_t LenFileNameChild)
+{
+	int r = 0;
+
+	size_t LenParentFileName = 0;
+	char ParentFileName[512] = {};
+
+	HANDLE hCurrentProcessPseudo = NULL;
+	HANDLE hCurrentProcess = NULL;
+
+	size_t LenHandleCurrentProcessSerialized = 0;
+	char HandleCurrentProcessSerialized[512] = {};
+
+	size_t LenChildCommandLine = 0;
+	char ChildCommandLine[1024];
+
+	BOOL  Ok = 0;
+
+	GS_LOG(I, PF, "Child Process [%.*s]", (int)LenFileNameChild, FileNameChildBuf);
+
+	if (!!(r = gs_get_current_executable_filename(ParentFileName, sizeof ParentFileName, &LenParentFileName)))
+		GS_GOTO_CLEAN();
+
+	hCurrentProcessPseudo = GetCurrentProcess();
+
+	if (!(Ok = DuplicateHandle(hCurrentProcessPseudo, hCurrentProcessPseudo, hCurrentProcessPseudo, &hCurrentProcess, 0, TRUE, DUPLICATE_SAME_ACCESS)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_serialize_windows_process_handle(hCurrentProcess, HandleCurrentProcessSerialized, sizeof HandleCurrentProcessSerialized)))
+		GS_GOTO_CLEAN();
+
+	LenHandleCurrentProcessSerialized = strlen(HandleCurrentProcessSerialized);
+
+	if (!!(r = gs_build_child_command_line(
+		FileNameChildBuf, LenFileNameChild,
+		HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized,
+		ParentFileName, LenParentFileName,
+		ChildCommandLine, sizeof ChildCommandLine, &LenChildCommandLine)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	if (!!(r = gs_process_start(
+		FileNameChildBuf, LenFileNameChild,
+		ChildCommandLine, LenChildCommandLine)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+clean:
 	gs_close_handle(hCurrentProcess);
 	
 	// NOTE: no closing the pseudo handle
@@ -548,9 +661,9 @@ clean:
 }
 
 int aux_selfupdate_overwrite_parent(
-	const char *ArgvHandleSerialized, size_t ArgvHandleSerializedSize,
-	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
-	const char *ArgvChildFileName, size_t ArgvChildFileNameSize)
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName)
 {
 	int r = 0;
 
@@ -567,12 +680,18 @@ int aux_selfupdate_overwrite_parent(
 	if (strcmp(ChildFileName, ArgvChildFileName) != 0)
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = gs_deserialize_windows_process_handle(&hProcessParent, ArgvHandleSerialized, ArgvHandleSerializedSize)))
+	if (!!(r = gs_deserialize_windows_process_handle(&hProcessParent, ArgvHandleSerialized, LenArgvHandleSerialized)))
 		GS_GOTO_CLEAN();
+
+	GS_LOG(I, PF, "waiting on deserialized process handle [h=[%llX]]", (long long)hProcessParent);
 
 	// could also be WAIT_TIMEOUT. other values are failure modes.
 	if (WAIT_OBJECT_0 != (Ret = WaitForSingleObject(hProcessParent, GS_CHILD_PARENT_TIMEOUT_MS)))
 		GS_ERR_CLEAN(1);
+
+	GS_LOG(I, PF, "moving [src=[%.*s], dst=[%.*s]]",
+		LenArgvChildFileName, ArgvChildFileName,
+		LenArgvParentFileName, ArgvParentFileName);
 
 	if (!(Ok = MoveFileEx(ArgvChildFileName, ArgvParentFileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)))
 		GS_ERR_CLEAN(1);

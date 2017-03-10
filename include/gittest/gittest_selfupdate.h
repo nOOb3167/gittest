@@ -97,18 +97,22 @@ int aux_selfupdate_create_child(
 	const char *FileNameChildBuf, size_t LenFileNameChild,
 	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize);
 
-int aux_selfupdate_fork_and_quit(const char *FileNameChildBuf, size_t LenFileNameChild);
+int aux_selfupdate_fork_parent_mode_main_and_quit(
+	const char *FileNameParentBuf, size_t LenFileNameParent);
+
+int aux_selfupdate_fork_child_and_quit(
+	const char *FileNameChildBuf, size_t LenFileNameChild);
 
 int aux_selfupdate_overwrite_parent(
-	const char *ArgvHandleSerialized, size_t ArgvHandleSerializedSize,
-	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
-	const char *ArgvChildFileName, size_t ArgvChildFileNameSize);
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName);
 
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
 int aux_selfupdate_main_mode_child(
-	const char *ArgvHandleSerialized, size_t ArgvHandleSerializedSize,
-	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
-	const char *ArgvChildFileName, size_t ArgvChildFileNameSize);
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName);
 int aux_selfupdate_main_mode_main();
 
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);

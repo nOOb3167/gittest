@@ -128,7 +128,7 @@ int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 		if (!!(r = aux_selfupdate_create_child(FileNameChildBuf, LenFileNameChild, (uint8_t *)BufferUpdate.data(), BufferUpdate.size())))
 			GS_GOTO_CLEAN();
 
-		if (!!(r = aux_selfupdate_fork_and_quit(FileNameChildBuf, LenFileNameChild)))
+		if (!!(r = aux_selfupdate_fork_child_and_quit(FileNameChildBuf, LenFileNameChild)))
 			GS_GOTO_CLEAN();
 	}
 
@@ -141,19 +141,24 @@ clean:
 }
 
 int aux_selfupdate_main_mode_child(
-	const char *ArgvHandleSerialized, size_t ArgvHandleSerializedSize,
-	const char *ArgvParentFileName, size_t ArgvParentFileNameSize,
-	const char *ArgvChildFileName, size_t ArgvChildFileNameSize)
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName)
 {
 	int r = 0;
 
+	// FIXME: are overwriting the parent and forking it free of race conditions?
+
 	if (!!(r = aux_selfupdate_overwrite_parent(
-		ArgvHandleSerialized, ArgvHandleSerializedSize,
-		ArgvParentFileName, ArgvParentFileNameSize,
-		ArgvChildFileName, ArgvChildFileNameSize)))
+		ArgvHandleSerialized, LenArgvHandleSerialized,
+		ArgvParentFileName, LenArgvParentFileName,
+		ArgvChildFileName, LenArgvChildFileName)))
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	if (!!(r = aux_selfupdate_fork_parent_mode_main_and_quit(ArgvParentFileName, LenArgvParentFileName)))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -229,14 +234,14 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 		if (argc != 6)
 			GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
 
-		const size_t ArgvHandleSerializedSize = strlen(argv[3]) + 1;
-		const size_t ArgvParentFileNameSize = strlen(argv[4]) + 1;
-		const size_t ArgvChildFileNameSize = strlen(argv[5]) + 1;
+		const size_t LenArgvHandleSerialized = strlen(argv[3]);
+		const size_t LenArgvParentFileName = strlen(argv[4]);
+		const size_t LenArgvChildFileName = strlen(argv[5]);
 
 		if (!!(r = aux_selfupdate_main_mode_child(
-			argv[3], ArgvHandleSerializedSize,
-			argv[4], ArgvParentFileNameSize,
-			argv[5], ArgvChildFileNameSize)))
+			argv[3], LenArgvHandleSerialized,
+			argv[4], LenArgvParentFileName,
+			argv[5], LenArgvChildFileName)))
 		{
 			GS_GOTO_CLEAN();
 		}
