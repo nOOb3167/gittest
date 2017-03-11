@@ -2048,6 +2048,10 @@ int aux_serv_aux_interrupt_perform(
 
 	std::string BufferFrameInterruptRequested;
 
+	/* NOTE: be careful not to free packet if it was allocated with ENET_PACKET_FLAG_NO_ALLOCATE.
+	*    also remember ownership is lost after enet_peer_send anyway. */
+	ENetPacket *packet = NULL;
+
 	// FIXME: performance note: remaking the frame every time - this frame is reusable, right?
 	if (!!(r = aux_serv_aux_make_premade_frame_interrupt_requested(&BufferFrameInterruptRequested)))
 		GS_GOTO_CLEAN();
@@ -2055,7 +2059,7 @@ int aux_serv_aux_interrupt_perform(
 	/* NOTE: searching enet source for uses of ENET_PACKET_FLAG_NO_ALLOCATE turns out a fun easter egg:
 	*   enet_packet_resize essentially chokes and sets new size without validation so never call that */
 
-	ENetPacket *packet = enet_packet_create(
+	packet = enet_packet_create(
 		BufferFrameInterruptRequested.data(), BufferFrameInterruptRequested.size(), ENET_PACKET_FLAG_NO_ALLOCATE);
 
 	/* NOTE: enet tutorial claims that enet_packet_destroy need not be called after packet handoff via enet_peer_send.
@@ -2235,7 +2239,7 @@ int aux_serv_host_service(
 			// FIXME: sigh raw allocation, delete at ENET_EVENT_TYPE_DISCONNECT
 			peer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
 
-			GS_LOG(I, PF, "%d connected [from %x:%u]", (int)AssignedId, peer->address.host, peer->address.port);
+			GS_LOG(I, PF, "%llu connected [from %x:%u]", (unsigned long long)AssignedId, peer->address.host, peer->address.port);
 		}
 		break;
 
@@ -2323,20 +2327,22 @@ int aux_serv_host_service(
 		{
 			ENetPeer *peer = Events[i].peer;
 
+			gs_connection_surrogate_id_t Id = 0;
+
 			GS_LOG(I, S, "ENET_EVENT_TYPE_DISCONNECT");
 
-			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, peer->data);
+			/* get the id, then just dispose of the structure */
+			{
+				GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, peer->data);
+				Id = ctxstruct->m0Id;
+				// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
+				delete ctxstruct;
+			}
 
-			GS_LOG(I, PF, "%d disconnected", (int)ctxstruct->m0Id);
+			GS_LOG(I, PF, "%llu disconnected", (unsigned long long)Id);
 
-			if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, ctxstruct->m0Id)))
+			if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, Id)))
 				GS_GOTO_CLEAN();
-
-			/* recheck tripwire just to be sure */
-			GS_BYPART_DATA_VAR_AUX_TRIPWIRE_CHECK_NONUCF(GsConnectionSurrogateId, ctxstruct);
-			// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
-			delete peer->data;
-			peer->data = NULL;
 		}
 		break;
 

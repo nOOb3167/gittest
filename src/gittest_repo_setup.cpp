@@ -3,8 +3,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include <filesystem>  // FIXME: NONSTANDARD
-
 #include <git2.h>
 #include <git2/sys/memes.h>
 

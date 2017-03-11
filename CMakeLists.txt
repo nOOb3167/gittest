@@ -19,9 +19,9 @@ ENDIF ()
 FIND_PACKAGE(ENet REQUIRED)
 
 IF (WIN32)
-  FIND_LIBRARY(SHLWAPI Shlwapi.lib)
+  FIND_LIBRARY(SHLWAPI Shlwapi)
   if (SHLWAPI STREQUAL "SHLWAPI-NOTFOUND")
-    MESSAGE(FATAL_ERROR "cannot find Shlwapi.lib ?")
+    MESSAGE(FATAL_ERROR "cannot find Shlwapi ?")
   ENDIF ()
 ENDIF ()
 
@@ -152,10 +152,10 @@ ADD_DEFINITIONS(
 TARGET_COMPILE_DEFINITIONS(gittest_clnt PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt")
 TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt_clone")
 
-TARGET_LINK_LIBRARIES(gittest_serv gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
-TARGET_LINK_LIBRARIES(gittest_clnt gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
-TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
-TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_lib gittest_net gittest_selfupdate ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_serv gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_clnt gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
+TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
 
 INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup
   LIBRARY DESTINATION "lib"
