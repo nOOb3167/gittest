@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstddef>  // offsetof
 
 #include <gittest/gittest.h>
 #include <gittest/net.h>
