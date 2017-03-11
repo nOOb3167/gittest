@@ -45,6 +45,29 @@ clean:
 	return r;
 }
 
+int gs_buf_copy_zero_terminate(
+	const char *SrcBuf, size_t LenSrc,
+	char *ioDstBuf, size_t DstBufSize, size_t *oLenDst)
+{
+	int r = 0;
+
+	if (!!(r = gs_buf_strnlen(SrcBuf, LenSrc + 1, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (LenSrc >= DstBufSize)
+		GS_ERR_CLEAN(1);
+
+	memcpy(ioDstBuf, SrcBuf, LenSrc);
+	memset(ioDstBuf + LenSrc, '\0', 1);
+
+	if (oLenDst)
+		*oLenDst = LenSrc;
+
+clean:
+
+	return r;
+}
+
 int gs_buf_strnlen(const char *Buf, size_t BufSize, size_t *oLenBufOpt) {
 	size_t LenBuf = strnlen(Buf, BufSize);
 	if (oLenBufOpt)

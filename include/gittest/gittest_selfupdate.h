@@ -78,7 +78,7 @@ int gs_get_current_executable_directory(
 	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
 
 int gs_build_current_executable_relative_filename(
-	const char *RelativeBuf, size_t LenRelativeBuf,
+	const char *RelativeBuf, size_t LenRelative,
 	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
 
 int gs_build_path_interpret_relative_current_executable(

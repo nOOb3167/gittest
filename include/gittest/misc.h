@@ -73,6 +73,10 @@ int gs_build_modified_filename(
 	const char *ExtraExtension, size_t LenExtraExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
 
+int gs_buf_copy_zero_terminate(
+	const char *SrcBuf, size_t LenSrc,
+	char *ioDstBuf, size_t DstBufSize, size_t *oLenDst);
+
 int gs_buf_strnlen(const char *Buf, size_t BufSize, size_t *oLenBuf);
 
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);

@@ -96,6 +96,120 @@ clean:
 	return r;
 }
 
+int gs_win_path_append_abs_rel(
+	const char *AbsoluteBuf, size_t LenAbsolute,
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	size_t LenOutputPathTmp = 0;
+
+	/** maximum length for PathIsRelative and PathAppend **/
+	if (LenAbsolute > MAX_PATH || LenRelative > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	if (PathIsRelative(AbsoluteBuf))
+		GS_GOTO_CLEAN();
+
+	if (! PathIsRelative(RelativeBuf))
+		GS_GOTO_CLEAN();
+
+	/* prep output buffer with absolute path */
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		AbsoluteBuf, LenAbsolute,
+		ioOutputPathBuf, OutputPathBufSize, &LenOutputPathTmp)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	/* append */
+
+	if (! PathAppend(ioOutputPathBuf, RelativeBuf))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_win_path_canonicalize(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	/** required length for PathCanonicalize **/
+	if (OutputPathBufSize < MAX_PATH || LenInputPath > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	/** this does fucking nothing (ex retains mixed slash backslash) **/
+	if (! PathCanonicalize(ioOutputPathBuf, InputPathBuf))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_win_path_directory(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	char Drive[_MAX_DRIVE] = {};
+	char Dir[_MAX_DIR] = {};
+	char FName[_MAX_FNAME] = {};
+	char Ext[_MAX_EXT] = {};
+
+	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
+	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
+	_splitpath(InputPathBuf, Drive, Dir, FName, Ext);
+
+	if (!!(r = _makepath_s(ioOutputPathBuf, OutputPathBufSize, Drive, Dir, NULL, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_win_path_isabsolute(
+	const char *InputPathBuf, size_t LenInputPath,
+	size_t *oIsAbsolute)
+{
+	int r = 0;
+
+	size_t IsAbsolute = false;
+
+	if (!!(r = gs_buf_strnlen(InputPathBuf, LenInputPath + 1, NULL)))
+		GS_GOTO_CLEAN();
+
+	/* maximum length for PathIsRelative */
+	if (LenInputPath > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	IsAbsolute = ! PathIsRelative(InputPathBuf);
+
+	if (oIsAbsolute)
+		*oIsAbsolute = IsAbsolute;
+
+clean:
+
+	return r;
+}
+
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
 	int r = 0;
 
@@ -137,31 +251,18 @@ int gs_get_current_executable_directory(
 	size_t LenCurrentExecutable = 0;
 	char CurrentExecutableBuf[512] = {};
 
-	char Drive[_MAX_DRIVE] = {};
-	char Dir[_MAX_DIR] = {};
-	char FName[_MAX_FNAME] = {};
-	char Ext[_MAX_EXT] = {};
-
-	size_t LenCurrentExecutableDir = 0;
-
 	if (!!(r = gs_get_current_executable_filename(
 		CurrentExecutableBuf, sizeof CurrentExecutableBuf, &LenCurrentExecutable)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
-	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
-	_splitpath(CurrentExecutableBuf, Drive, Dir, FName, Ext);
-
-	if (!!(r = _makepath_s(ioCurrentExecutableDirBuf, CurrentExecutableDirSize, Drive, Dir, NULL, NULL)))
+	if (!!(r = gs_win_path_directory(
+		CurrentExecutableBuf, LenCurrentExecutable,
+		ioCurrentExecutableDirBuf, CurrentExecutableDirSize, oLenCurrentExecutableDir)))
+	{
 		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_buf_strnlen(ioCurrentExecutableDirBuf, CurrentExecutableDirSize, &LenCurrentExecutableDir)))
-		GS_GOTO_CLEAN();
-
-	if (oLenCurrentExecutableDir)
-		*oLenCurrentExecutableDir = LenCurrentExecutableDir;
+	}
 
 clean:
 
@@ -169,56 +270,41 @@ clean:
 }
 
 int gs_build_current_executable_relative_filename(
-	const char *RelativeBuf, size_t LenRelativeBuf,
+	const char *RelativeBuf, size_t LenRelative,
 	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined)
 {
 	int r = 0;
 
+	size_t LenPathCurrentExecutableDir = 0;
+	char PathCurrentExecutableDirBuf[512] = {};
 	size_t LenPathModification = 0;
 	char PathModificationBuf[512] = {};
 
-	size_t LenCombined = 0;
-
 	/* get directory */
 	if (!!(r = gs_get_current_executable_directory(
-		PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))
+		PathCurrentExecutableDirBuf, sizeof PathCurrentExecutableDirBuf, &LenPathCurrentExecutableDir)))
 	{
 		GS_ERR_CLEAN(1);
 	}
 
 	/* ensure relative and append */
 
-	if (!!(r = gs_buf_strnlen(RelativeBuf, LenRelativeBuf + 1, NULL)))
+	if (!!(r = gs_win_path_append_abs_rel(
+		PathCurrentExecutableDirBuf, LenPathCurrentExecutableDir,
+		RelativeBuf, LenRelative,
+		PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))
+	{
 		GS_GOTO_CLEAN();
-
-	/** maximum length for PathIsRelative and PathAppend **/
-	if (LenRelativeBuf > MAX_PATH)
-		GS_ERR_CLEAN(1);
-
-	if (! PathIsRelative(RelativeBuf))
-		GS_GOTO_CLEAN();
-
-	if (! PathAppend(PathModificationBuf, RelativeBuf))
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_buf_strnlen(PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))
-		GS_GOTO_CLEAN();
+	}
 
 	/* canonicalize into output */
 
-	/** required length for PathCanonicalize **/
-	if (CombinedBufSize < MAX_PATH)
-		GS_ERR_CLEAN(1);
-
-	/** this does fucking nothing (ex retains mixes slash backslash) **/
-	if (! PathCanonicalize(ioCombinedBuf, PathModificationBuf))
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_buf_strnlen(ioCombinedBuf, CombinedBufSize, &LenCombined)))
+	if (!!(r = gs_win_path_canonicalize(
+		PathModificationBuf, LenPathModification,
+		ioCombinedBuf, CombinedBufSize, oLenCombined)))
+	{
 		GS_GOTO_CLEAN();
-
-	if (oLenCombined)
-		*oLenCombined = LenCombined;
+	}
 
 clean:
 
@@ -231,27 +317,23 @@ int gs_build_path_interpret_relative_current_executable(
 {
 	int r = 0;
 
-	bool PossiblyRelativePathIsAbsolute = false;
+	size_t PossiblyRelativePathIsAbsolute = 0;
 
-	if (!!(r = gs_buf_ensure_haszero(PossiblyRelativePathBuf, LenPossiblyRelativePath + 1)))
+	if (!!(r = gs_win_path_isabsolute(
+		PossiblyRelativePathBuf, LenPossiblyRelativePath,
+		&PossiblyRelativePathIsAbsolute)))
+	{
 		GS_GOTO_CLEAN();
-
-	/* maximum length for PathIsRelative */
-	if (LenPossiblyRelativePath > MAX_PATH)
-		GS_ERR_CLEAN(1);
-
-	PossiblyRelativePathIsAbsolute = ! PathIsRelative(PossiblyRelativePathBuf);
+	}
 
 	if (PossiblyRelativePathIsAbsolute) {
 
-		if (LenPossiblyRelativePath >= PathBufSize)
-			GS_ERR_CLEAN(1);
-
-		memcpy(ioPathBuf + 0, PossiblyRelativePathBuf, LenPossiblyRelativePath);
-		memset(ioPathBuf + LenPossiblyRelativePath, '\0', 1);
-
-		if (oLenPathBuf)
-			*oLenPathBuf = LenPossiblyRelativePath;
+		if (!!(r = gs_buf_copy_zero_terminate(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
 
 	} else {
 
