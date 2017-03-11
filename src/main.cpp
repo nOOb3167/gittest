@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <climits>  // ULLONG_MAX
 
 #include <algorithm>
 #include <vector>
@@ -348,8 +349,10 @@ int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oV
 		const char *startPtr = it->second.c_str();
 		char *endPtr = 0;
 		errno = 0;
-		long long valLL = strtoll(startPtr, &endPtr, 10);
-		if (errno = ERANGE && (valLL == LONG_MIN || valLL == LONG_MAX))
+		unsigned long long valLL = strtoull(startPtr, &endPtr, 10);
+		if (errno == ERANGE && (valLL == ULLONG_MAX))
+			return 2;
+		if (errno == EINVAL)
 			return 2;
 		if (endPtr != startPtr + it->second.size())
 			return 2;

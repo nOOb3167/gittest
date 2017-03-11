@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cerrno>
 #include <cstring>
+#include <climits>  // ULLONG_MAX
 
 #include <windows.h>
 #include <shlwapi.h> // PathAppend etc
@@ -77,7 +78,7 @@ int gs_deserialize_windows_process_handle(
 		const char *startPtr = BufZeroTermBuf;
 		char *endPtr = 0;
 		errno = 0;
-		long long lluVal = strtoull(startPtr, &endPtr, 16);
+		unsigned long long lluVal = strtoull(startPtr, &endPtr, 16);
 		if (errno == ERANGE && (lluVal == ULLONG_MAX))
 			GS_ERR_CLEAN(1);
 		if (errno == EINVAL)
