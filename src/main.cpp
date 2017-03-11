@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include <algorithm>
 #include <vector>
 #include <map>
 #include <set>
@@ -95,6 +96,181 @@ int aux_gittest_init() {
 	return 0;
 }
 
+size_t aux_config_decode_hex_char_(const char *pHexChar, size_t *oIsError) {
+
+	if (oIsError)
+		*oIsError = 0;
+
+	/* '0' to '9' guaranteed contiguous */
+
+	if (*pHexChar >= '0' && *pHexChar <= '9')
+		return *pHexChar - '0';
+	
+	/* the letters are contiguous in ASCII but no standard */
+
+	switch (*pHexChar) {
+	case 'a':
+	case 'A':
+		return 10;
+	case 'b':
+	case 'B':
+		return 11;
+	case 'c':
+	case 'C':
+		return 12;
+	case 'd':
+	case 'D':
+		return 13;
+	case 'e':
+	case 'E':
+		return 14;
+	case 'f':
+	case 'F':
+		return 15;
+	}
+
+	if (oIsError)
+		*oIsError = 1;
+
+	return 0;
+}
+
+int aux_config_decode_hex_pairwise_swapped(const std::string &BufferSwapped, std::string *oDecoded) {
+	/* originally designed to decode string, as obtained by CMAKE's FILE(READ ... HEX) command.
+	*  because CMAKE is designed by web developers (ex same as have brought us Base64 encoding),
+	*  it will of course encode, say, 'G' (ASCII hex 0x47) as "47" instead of "74".
+	*  such that : DECODEDBYTE = (BITPATTERN(HEX[0]) << 8) + (BITPATTERN(HEX[1]) << 0)
+	*  instead of: DECODEDBYTE = (BITPATTERN(HEX[0]) << 0) + (BITPATTERN(HEX[1]) << 8)
+	*  praise to the web industry for bringing us quality engineering once again. */
+
+	int r = 0;
+
+	std::string Decoded(BufferSwapped.size() / 2, '\0');
+
+	std::string Buffer(BufferSwapped);
+
+	size_t IsError = 0;
+
+	/* one full byte is a hex pair of characters - better be divisible by two */
+
+	if (Buffer.size() % 2 != 0)
+		{ r = 1; goto clean; }
+
+	/* swap characters in individual hex pairs */
+
+	for (size_t i = 0; i < Buffer.size(); i += 2)
+		std::swap(Buffer[i + 1], Buffer[i]);
+
+	/* decode */
+
+	for (size_t i = 0; i < Buffer.size(); i += 2)
+		Decoded[i / 2] =
+			(aux_config_decode_hex_char_(&Buffer[i],     &IsError) & 0xF) << 0 |
+			(aux_config_decode_hex_char_(&Buffer[i + 1], &IsError) & 0xF) << 4;
+
+	if (IsError)
+		{ r = 1; goto clean; }
+
+	if (oDecoded)
+		oDecoded->swap(Decoded);
+
+clean:
+
+	return r;
+}
+
+int aux_config_parse_find_next_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+{
+	/* effectively can not fail. end of the buffer is an implicit newline */
+	const char newlineR = '\r';
+	const char newlineN = '\n';
+	const char *firstR = (const char *)memchr(DataStart + Offset, newlineR, DataLength - Offset);
+	const char *firstN = (const char *)memchr(DataStart + Offset, newlineN, DataLength - Offset);
+	const char *firstNewlineChar = (firstR && firstN) ? GS_MIN(firstR, firstN) : GS_MAX(firstR, firstN);
+	if (! firstNewlineChar)
+		*OffsetNew = DataLength;
+	else
+		*OffsetNew = (uint32_t)(firstNewlineChar - DataStart);
+	return 0;
+}
+
+int aux_config_parse_skip_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew)
+{
+	/* do nothing if not at a newline char.
+	*  end of buffer counts as being not at a newline char. */
+	const char newlineR = '\r';
+	const char newlineN = '\n';
+	while (Offset < DataLength && (DataStart[Offset] == newlineR || DataStart[Offset] == newlineN))
+		Offset += 1;
+	*OffsetNew = Offset;
+	return 0;
+}
+
+int aux_config_parse(const std::string &Buffer, std::map<std::string, std::string> *oKeyVal)
+{
+	int r = 0;
+
+	std::map<std::string, std::string> KeyVal;
+
+	uint32_t Offset = 0;
+	uint32_t OldOffset = 0;
+	const char *DataStart = Buffer.data();
+	uint32_t DataLength = Buffer.size();
+
+	const char equals = '=';
+	const char hdr_nulterm_expected[] = "GITTEST_CONF";
+	const size_t hdr_raw_size = sizeof(hdr_nulterm_expected) - 1;
+
+	OldOffset = Offset;
+	if (!!(r = aux_config_parse_find_next_newline(DataStart, DataLength, Offset, &Offset)))
+		goto clean;
+	/* hdr_raw_size of ASCII letters and 1 of NEWLINE */
+	if (hdr_raw_size < Offset - OldOffset)
+		{ r = 1; goto clean; }
+	// FIXME: relying on string data() contiguity
+	if (memcmp(hdr_nulterm_expected, DataStart + OldOffset, hdr_raw_size) != 0)
+		{ r = 1; goto clean; }
+	if (!!(r = aux_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
+		goto clean;
+
+	while (Offset < DataLength) {
+
+		/* find where the current line ends */
+
+		OldOffset = Offset;
+		if (!!(r = aux_config_parse_find_next_newline(DataStart, DataLength, Offset, &Offset)))
+			goto clean;
+
+		/* extract current line - line should be of format 'KKK=VVV' */
+
+		std::string line(DataStart + OldOffset, DataStart + Offset);
+
+		/* split extracted line into KKK and VVV parts by equal sign */
+
+		size_t equalspos = line.npos;
+		if ((equalspos = line.find_first_of(equals, 0)) == line.npos)
+			{ r = 1; goto clean; }
+		std::string key(line.data() + 0, line.data() + equalspos);
+		std::string val(line.data() + equalspos + 1, line.data() + line.size());
+
+		/* record the gotten key value pair */
+
+		KeyVal[key] = val;
+
+		/* skip to the next line (or end of buffer) */
+
+		if (!!(r = aux_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
+			goto clean;
+	}
+
+	if (oKeyVal)
+		oKeyVal->swap(KeyVal);
+
+clean:
+
+	return r;
+}
+
 int aux_config_read(
 	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
 {
@@ -129,32 +305,8 @@ int aux_config_read(
 	if (ferror(f) || !feof(f))
 		{ r = 1; goto clean; }
 
-	/* hdr_raw_size of ASCII letters and 1 of NEWLINE */
-	if (retbuffer.size() < hdr_raw_size + 1)
-		{ r = 2; goto clean; }
-	// FIXME: relying on string data() contiguity
-	if (memcmp(hdr_nulterm_expected, retbuffer.data(), hdr_raw_size) != 0)
-		{ r = 2; goto clean; }
-	if (retbuffer.at(hdr_raw_size) != newline)
-		{ r = 2; goto clean; }
-
-	idx = hdr_raw_size + 1;
-	while (idx < retbuffer.size()) {
-		size_t newlinepos = retbuffer.npos;
-		if ((newlinepos = retbuffer.find_first_of(newline, idx)) == retbuffer.npos)
-			{ r = 3; goto clean; }
-		
-		std::string line(retbuffer.data() + idx, retbuffer.data() + newlinepos);
-		size_t equalspos = line.npos;
-		if ((equalspos = line.find_first_of(equals, 0)) == line.npos)
-			{ r = 3; goto clean; }
-		std::string key(line.data() + 0, line.data() + equalspos);
-		std::string val(line.data() + equalspos + 1, line.data() + line.size());
-
-		KeyVal[key] = val;
-
-		idx = newlinepos + 1;
-	}
+	if (!!(r = aux_config_parse(retbuffer, &KeyVal)))
+		goto clean;
 
 	if (oKeyVal)
 		oKeyVal->swap(KeyVal);

@@ -31,6 +31,11 @@ int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist
 int tree_toposort(git_repository *Repository, git_tree *Tree, topolist_t *oNodeList);
 
 int aux_gittest_init();
+size_t aux_config_decode_hex_char_(const char *pHexChar, size_t *oIsError);
+int aux_config_decode_hex_pairwise_swapped(const std::string &BufferSwapped, std::string *oDecoded);
+int aux_config_parse_find_next_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew);
+int aux_config_parse_skip_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew);
+int aux_config_parse(const std::string &Buffer, std::map<std::string, std::string> *oKeyVal);
 int aux_config_read(
 	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
 const char * aux_config_key(const confmap_t &KeyVal, const char *Key);
