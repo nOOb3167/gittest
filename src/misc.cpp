@@ -45,6 +45,13 @@ clean:
 	return r;
 }
 
+int gs_buf_strnlen(const char *Buf, size_t BufSize, size_t *oLenBufOpt) {
+	size_t LenBuf = strnlen(Buf, BufSize);
+	if (oLenBufOpt)
+		*oLenBufOpt = LenBuf;
+	return LenBuf == BufSize;
+}
+
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize) {
 	return !memchr(Buf, '\0', BufSize);
 }

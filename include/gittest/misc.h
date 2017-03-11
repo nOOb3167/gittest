@@ -73,6 +73,8 @@ int gs_build_modified_filename(
 	const char *ExtraExtension, size_t LenExtraExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
 
+int gs_buf_strnlen(const char *Buf, size_t BufSize, size_t *oLenBuf);
+
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);

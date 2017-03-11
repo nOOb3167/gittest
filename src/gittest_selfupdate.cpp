@@ -26,11 +26,12 @@ int aux_config_read_interpret_relative_current_executable(
 	size_t LenPath = 0;
 	char PathBuf[512];
 
-	if ((LenExpectedLocation = strnlen(ExpectedLocation, 2048)) == string_len_arbitrary_max)
+	if (!!(gs_buf_strnlen(ExpectedLocation, string_len_arbitrary_max, &LenExpectedLocation)))
 		return 1;
 
 	if (!!(gs_build_path_interpret_relative_current_executable(
-		ExpectedLocation, LenExpectedLocation, PathBuf, sizeof PathBuf, &LenPath)))
+		ExpectedLocation, LenExpectedLocation,
+		PathBuf, sizeof PathBuf, &LenPath)))
 	{
 		return 1;
 	}
