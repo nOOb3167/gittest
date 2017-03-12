@@ -7,6 +7,7 @@ PROJECT (gittest)
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 INCLUDE("GittestCommon")
+INCLUDE("GittestDeps")
 INCLUDE("GittestAuxSources")
 INCLUDE("GittestSources")
 
