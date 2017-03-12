@@ -10,10 +10,6 @@
 #include <gittest/config_defs.h>
 #include <gittest/log_defs.h>
 
-#ifdef GS_CONFIG_DEFS_MISC_GS_DEBUG_BREAK
-#include <gittest/misc_win.h>
-#endif /* GS_CONFIG_DEFS_MISC_GS_DEBUG_BREAK */
-
 /*
 * = Visual Studio debugger function call expression evaluation (variable watch) =
 *   for whatever reason, it seems function calls (ex call function with side effects from a variable watch expression)

@@ -260,9 +260,6 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/log.h
     include/gittest/misc.h
   )
-  SET(GITTEST_LIB_HEADERS_WIN
-    include/gittest/misc_win.h
-  )
 
   SET(GITTEST_LIB_SOURCES
     src/cbuf.cpp
