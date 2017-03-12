@@ -1,29 +1,37 @@
-FUNCTION (GITTEST_AUX_SOURCES_ADD_PLATFORM lump plat)
+FUNCTION (GITTEST_AUX_SOURCES_APPEND_PLATFORM lump plat)
   # for lump=LIB , plat=WIN
   # append GITTEST_LIB_HEADERS_WIN (or SOURCES_WIN)
   # to     GITTEST_LIB_HEADERS     (or SOURCES)
   
   # helpers
   
-  SET(HEADERSVAR GITTEST_${lump}_HEADERS)
-  SET(SOURCESVAR GITTEST_${lump}_SOURCES)
-  SET(HEADERSPLATVAR GITTEST_${lump}_HEADERS_${plat})
-  SET(SOURCESPLATVAR GITTEST_${lump}_SOURCES_${plat})
+  SET(varname_headers GITTEST_${lump}_HEADERS)
+  SET(varname_sources GITTEST_${lump}_SOURCES)
   
   # append
+
+  GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM(${lump} ${plat}
+    ${varname_headers} ${varname_sources})
+
+  # output
   
-  IF (DEFINED ${HEADERSVAR})
-    LIST(APPEND ${HEADERSVAR} ${${HEADERSPLATVAR}})
-  ENDIF ()
-  
-  IF (DEFINED SOURCESVAR)
-    LIST(APPEND ${SOURCESVAR} ${${SOURCESPLATVAR}})
-  ENDIF ()
+  SET("${varname_headers}" "${${varname_headers}}" PARENT_SCOPE)
+  SET("${varname_sources}" "${${varname_sources}}" PARENT_SCOPE)
+ENDFUNCTION ()
+
+
+FUNCTION (GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM lump plat
+  output_varname_headers output_varname_sources
+)
+  # append
+
+  LIST(APPEND ${output_varname_headers} ${GITTEST_${lump}_HEADERS_${plat}})
+  LIST(APPEND ${output_varname_sources} ${GITTEST_${lump}_SOURCES_${plat}})
   
   # output
   
-  SET("${HEADERSVAR}" "${${HEADERSVAR}}" PARENT_SCOPE)
-  SET("${SOURCESVAR}" "${${SOURCESVAR}}" PARENT_SCOPE)
+  SET(${output_varname_headers} "${${output_varname_headers}}" PARENT_SCOPE)
+  SET(${output_varname_sources} "${${output_varname_sources}}" PARENT_SCOPE)  
 ENDFUNCTION ()
 
 
