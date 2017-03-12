@@ -8,6 +8,9 @@ void gs_current_thread_name_set(
 {
 	int r = 0;
 
+	if (LenName >= 16)
+		GS_ERR_CLEAN(1);
+
 	if (!!(r = prctl(PR_SET_NAME, NameBuf, 0, 0, 0)))
 		GS_GOTO_CLEAN();
 
