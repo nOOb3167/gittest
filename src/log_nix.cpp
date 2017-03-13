@@ -11,6 +11,17 @@
 
 #define GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES 10 * 1024 * 1024 /* 10MB */
 
+/**
+**
+** FIXME: WARNING: global variable. really kind of not want this one.
+**   https://www.gnu.org/software/libc/manual/html_node/Termination-in-Handler.html
+**   if used, it should be used to implement the recursive delivery check as in above link.
+**   also signals are global state to begin with so maybe a global variable is fine.
+**   the current solution is to block delivery of all other signals (sigfillset sa_mask)
+**   during our crash handling signal handlers - thus hoping to obsolete the variable.
+**/
+//volatile sig_atomic_t g_gs_log_nix_fatal_error_in_progress = 0;
+
 struct GsLogCrashHandlerDumpData { uint32_t Tripwire; int fdLogFile; size_t MaxWritePos; size_t CurrentWritePos; };
 int gs_log_nix_crash_handler_dump_cb(void *ctx, const char *d, int64_t l);
 
@@ -20,7 +31,9 @@ int gs_log_nix_open_dump_file(
 	int *oFdLogFile);
 
 void gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_(int signo, siginfo_t *info, void *context);
+int gs_log_nix_crash_handler_unhijack_signal_revert_default(int signum);
 int gs_log_nix_crash_handler_hijack_signal(int signum);
+int gs_log_nix_crash_handler_unhijack_signals_revert_default();
 int gs_log_nix_crash_handler_hijack_signals();
 
 int gs_log_nix_crash_handler_dump_cb(void *ctx, const char *d, int64_t l) {
@@ -83,11 +96,61 @@ void gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_(int signo, siginfo_t 
 	/* NOTE: this is a signal handler ie special restricted code path */
 
 	/* not much to do about errors here presumably */
+
+	/* https://www.gnu.org/software/libc/manual/html_node/Termination-in-Handler.html
+	*  FIXME: above recommends a global variable protocol related to
+	*    recursive signal delivery.
+	*  the current design instead is to block all other signals (sa_mask sigfillset)
+	*  during crash handling signal handler execution. */
+	//if (g_gs_log_nix_fatal_error_in_progress)
+	//	raise(signo);
+	//g_gs_log_nix_fatal_error_in_progress = 1;
+
+	/* importantly, revert all hijacked signals to SIG_DFL action */
+	if (!!gs_log_nix_crash_handler_unhijack_signals_revert_default())
+		{ /* dummy */ }
+
 	if (!!gs_log_crash_handler_dump_global_log_list()) {
 		const char err[] = "[ERROR] inside crash handler gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_\n";
 		if (!!gs_nix_write_stdout_wrapper(err, (sizeof err) - 1))
 			{ /* dummy */ }
 	}
+
+	/* signal action should already be SIG_DFL when calling this.
+	*  but accidental recursion here would be pretty bad, so make doubly sure. */
+	gs_log_nix_crash_handler_unhijack_signal_revert_default(signo);
+
+	raise(signo);
+}
+
+int gs_log_nix_crash_handler_unhijack_signal_revert_default(int signum) {
+	int r = 0;
+
+	/* https://github.com/plausiblelabs/plcrashreporter/blob/master/Source/PLCrashReporter.m 
+	*    search for the signal_handler_callback function */
+
+	struct sigaction act = {};
+
+	/* act.sa_mask initialized later */
+	act.sa_handler = SIG_DFL;
+	act.sa_flags = 0;
+
+	/* sigemptyset aka we request to not block any signals during execution of signal signum.
+	*  https://www.gnu.org/software/libc/manual/html_node/Signals-in-Handler.html#Signals-in-Handler
+	*    """sigaction to explicitly specify which signals should be blocked"""
+	*    """These signals are in addition to the signal for which the handler was invoked"""
+	*  even with empty set, delivery of signal signum during execution of handler for
+	*  signal signum, will still be blocked. */
+
+	if (!!(r = sigemptyset(&act.sa_mask)))
+		goto clean;
+
+	if (!!(r = sigaction(signum, &act, NULL)))
+		goto clean;
+
+clean:
+
+	return r;
 }
 
 int gs_log_nix_crash_handler_hijack_signal(int signum) {
@@ -99,7 +162,7 @@ int gs_log_nix_crash_handler_hijack_signal(int signum) {
 	act.sa_sigaction = gs_log_nix_crash_handler_sa_sigaction;
 	act.sa_flags = SA_SIGINFO;
 
-	/* sigfillset aka we request to block all signals during execution of this signal */
+	/* sigfillset aka we request to block all signals during execution signal signum */
 
 	/* https://www.gnu.org/software/libc/manual/html_node/Program-Error-Signals.html
      *   on blocking stop signals
@@ -121,8 +184,40 @@ clean:
 	return r;
 }
 
+int gs_log_nix_crash_handler_unhijack_signals_revert_default() {
+	int r = 0;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGFPE)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGILL)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGSEGV)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGBUS)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGABRT)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGTERM)))
+		goto clean;
+
+	if (!!(r = gs_log_nix_crash_handler_unhijack_signal_revert_default(SIGQUIT)))
+		goto clean;
+
+clean:
+
+	return r;
+}
+
 int gs_log_nix_crash_handler_hijack_signals() {
 	int r = 0;
+
+	/* https://github.com/plausiblelabs/plcrashreporter/blob/master/Source/PLCrashReporter.m
+	*    see the monitored_signals array for an example of which signals to catch */
 
 	/* https://www.gnu.org/software/libc/manual/html_node/Program-Error-Signals.html */
 
