@@ -1,12 +1,10 @@
 #include <stddef.h>
 
 #include <signal.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 #include <gittest/gittest_selfupdate.h>
 #include <gittest/misc.h>
-
+#include <gittest/misc_nix.h>
 #include <gittest/log.h>
 
 #define GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_DATA 0x429d83ff
@@ -20,12 +18,6 @@ int gs_log_nix_open_dump_file(
 	const char *LogFileNameBuf, size_t LenLogFileName,
 	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
 	int *oFdLogFile);
-
-int gs_nix_open_wrapper(
-	const char *LogFileNameBuf, size_t LenLogFileName,
-	int *oFdLogFile);
-int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf);
-int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf);
 
 void gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_(int signo, siginfo_t *info, void *context);
 int gs_log_nix_crash_handler_hijack_signal(int signum);
@@ -85,102 +77,6 @@ int gs_log_nix_open_dump_file(
 clean:
 
 	return r;
-}
-
-int gs_nix_open_wrapper(
-	const char *LogFileNameBuf, size_t LenLogFileName,
-	int *oFdLogFile)
-{
-	int r = 0;
-
-	int fdLogFile = -1;
-
-	int OpenFlags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC;
-	mode_t OpenMode = S_IRUSR | S_IWUSR; /* user read and write, add other access flags? */
-
-	while (true) {
-		errno = 0;
-
-		/* http://man7.org/linux/man-pages/man2/open.2.html
-		*    O_CREAT flag mandates use of the third (mode) argument to open */
-		fdLogFile = open(LogFileNameBuf, OpenFlags, OpenMode);
-
-		if (fdLogFile == -1 && (errno == EINTR))
-			continue;
-		else if (fdLogFile == -1)
-			{ r = 1; goto clean; }
-		else
-			break;
-	}
-
-	if (oFdLogFile)
-		*oFdLogFile = fdLogFile;
-
-clean:
-	if (!!r) {
-		if (fdLogFile != -1)
-			close(fdLogFile);
-	}
-
-	return r;
-}
-
-int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf) {
-	/* non-reentrant (ex use of errno)
-	*  http://stackoverflow.com/questions/1694164/is-errno-thread-safe/1694170#1694170 
-	*    even if thread local errno makes the function (sans side-effects) thread-safe
-	*    receiving signal within signal on same thread would require it to also be reentrant
-	*  http://man7.org/linux/man-pages/man7/signal.7.html
-	*    async-signal-safe functions: write and fsync are listed */
-
-	int r = 0;
-
-	size_t count_total = 0;
-
-	while (count_total < LenBuf) {
-		ssize_t count = 0;
-
-		errno = 0;
-
-		count = write(fd, Buf + count_total, LenBuf - count_total);
-
-		if (count == -1 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
-			continue;
-		else if (count == -1)
-			{ r = 1; goto clean; }
-
-		/* count >= 0 */
-
-		count_total += count;
-
-	}
-
-	/* http://stackoverflow.com/questions/26257171/flush-kernel-buffers-for-stdout/26258312#26258312
-	*    probably do not need to fsync the console
-	*    but we may or may not be writing to the console */
-
-	do {
-		int ok = 0;
-
-		errno = 0;
-
-		ok = fsync(fd);
-
-		/* EROFS / EINVAL expected for a console directed write - just continue */
-		if (!!ok && (errno == EROFS || errno == EINVAL))
-			break;
-		else if (!!ok)
-			{ r = 1; goto clean; }
-
-	} while (0);
-
-clean:
-
-	return r;
-}
-
-int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf) {
-	return gs_nix_write_wrapper(STDOUT_FILENO, Buf, LenBuf);
 }
 
 void gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_(int signo, siginfo_t *info, void *context) {
@@ -320,6 +216,9 @@ int gs_log_crash_handler_dump_global_log_list() {
 
 
 clean:
+	/* not much to do about a close error here */
+	if (!!(r = gs_nix_close_wrapper(fdLogFile)))
+		{ /* dummy */ };
 
 	return r;
 }
