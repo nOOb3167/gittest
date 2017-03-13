@@ -60,18 +60,17 @@ ENDFUNCTION ()
 
 
 FUNCTION (GITTEST_AUX_SOURCES_ENSURE_MAGIC_TARGET_LIST_HAVE)  # varargs
-  # imagine building an additional executable is wanted.
-  # it would have to be specified / referenced in multiple places,
-  # which is error prone.
-  # the idea is that somewhere early on GITTEST_SOURCES_MAGIC_TARGET_LIST
-  # is initialized to the list of all wanted executables to build.
-  # places that perform some work for every built executable,
-  # (work such as target definitions using ADD_EXECUTABLE,
-  #  TARGET_INCLUDE_DIRECTORIES compile definitions and similar)
-  # call this function, passing every executable they currently
-  # perform work on.
-  # when a new wanted executable is added to GITTEST_SOURCES_MAGIC_TARGET_LIST,
-  # but callsites of this function have not been edited, an error will be thrown.
+  # imagine this setup:
+  # around the top of main CMakeLists:
+  #   SET(GITTEST_SOURCES_MAGIC_TARGET_LIST a b c)
+  # some utility function:
+  #   GITTEST_AUX_SOURCES_ENSURE_MAGIC_TARGET_LIST_HAVE(a b c)
+  #   then performing target-specific work (ex TARGET_INCLUDE_DIRECTORIES).
+  # if 'd' is added to the magic target list
+  # but the utility function was not updated
+  # an error will be thrown.
+  # this define + check makes it easier to not forget
+  # updating utility functions to account for newly added targets.
 
   # early exit on missing required (global) definition
   
