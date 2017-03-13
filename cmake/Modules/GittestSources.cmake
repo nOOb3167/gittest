@@ -272,6 +272,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/misc_win.cpp
   )
   SET(GITTEST_LIB_SOURCES_NIX
+    src/log_nix.cpp
     src/misc_nix.cpp
   )
   
@@ -298,6 +299,9 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   )
   SET(GITTEST_SELFUPDATE_SOURCES_WIN
     src/gittest_selfupdate_win.cpp
+  )
+  SET(GITTEST_SELFUPDATE_SOURCES_NIX
+    src/gittest_selfupdate_nix.cpp
   )
   
   # gittest_serv

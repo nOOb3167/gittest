@@ -10,6 +10,7 @@ void gs_current_thread_name_set(
 	/* http://stackoverflow.com/questions/778085/how-to-name-a-thread-in-linux/778124#778124 */
 	int r = 0;
 
+	/* the limit is magic, see prctl(2) for PR_SET_NAME */
 	if (LenName >= 16)
 		GS_ERR_CLEAN(1);
 
