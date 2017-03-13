@@ -1,7 +1,9 @@
-#include <gittest/misc.h>
-
 #include <signal.h>
 #include <sys/prctl.h>
+
+#include <gittest/misc.h>
+
+#include <gittest/misc_nix.h>
 
 void gs_current_thread_name_set(
 	const char *NameBuf,
