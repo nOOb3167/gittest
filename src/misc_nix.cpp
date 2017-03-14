@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include <signal.h>
 #include <sys/prctl.h>
 #include <unistd.h>
@@ -7,16 +9,297 @@
 
 #include <gittest/misc_nix.h>
 
-int gs_nix_path_ensure_absolute(const char *PathBuf, size_t LenPath) {
+int gs_nix_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
+	int r = 0;
+
+	size_t IsAbsolute = 0;
+
 	if (LenPath < 1)
-		return 1;
-	return PathBuf[0] != '/';
+		{ r = 1; goto clean; }
+
+	IsAbsolute = PathBuf[0] == '/';
+
+	if (oIsAbsolute)
+		*oIsAbsolute = IsAbsolute;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_ensure_absolute(const char *PathBuf, size_t LenPath) {
+	int r = 0;
+
+	size_t IsAbsolute = 0;
+
+	if (!!(r = gs_nix_path_is_absolute(PathBuf, LenPath, &IsAbsolute)))
+		goto clean;
+
+	if (! IsAbsolute)
+		{ r = 1; goto clean; }
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_eat_trailing_slashes(
+	const char *InputPathBuf, size_t LenInputPath,
+	size_t *oNewLen)
+{
+	int r = 0;
+
+	if (LenInputPath < 1)
+		{ r = 1; goto clean; }
+
+	while ((LenInputPath - 1) && InputPathBuf[(LenInputPath - 1)] == '/')
+		LenInputPath--;
+
+	if (oNewLen)
+		*oNewLen = LenInputPath;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_eat_trailing_nonslashes(
+	const char *InputPathBuf, size_t LenInputPath,
+	size_t *oNewLen)
+{
+	int r = 0;
+
+	if (LenInputPath < 1)
+	{ r = 1; goto clean; }
+
+	while ((LenInputPath - 1) && InputPathBuf[(LenInputPath - 1)] != '/')
+		LenInputPath--;
+
+	if (oNewLen)
+		*oNewLen = LenInputPath;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_ensure_starts_with_lump(
+	const char *InputPathBuf, size_t LenInputPath)
+{
+	int r = 0;
+
+	size_t CurPos = 0;
+	size_t CurPosMarker = 0;
+
+	while (CurPos < LenInputPath && InputPathBuf[CurPos] == '/')
+		CurPos++;
+
+	/* no advance? */
+	if ((CurPos - CurPosMarker) == 0)
+		{ r = 1; goto clean; }
+
+	CurPos = CurPos;
+	CurPosMarker = CurPos;
+
+	while (CurPos < LenInputPath && InputPathBuf[CurPos] != '/')
+		CurPos++;
+
+	/* no advance? */
+	if ((CurPos - CurPosMarker) == 0)
+		{ r = 1; goto clean; }
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_add_trailing_slash_cond_inplace(
+	char *DataStart, size_t DataLength, size_t OffsetOnePastEnd, size_t *OffsetOnePastEndNew)
+{
+	int r = 0;
+
+	size_t Offset = OffsetOnePastEnd - 1;
+
+	/* already ending with slash */
+	if (DataStart[Offset++] == '/')
+		{ r = 0; goto clean; }
+
+	if (DataLength - Offset < 1 + 1)
+		{ r = 1; goto clean; }
+
+	DataStart[Offset++] = '/';  /* 1 */
+	DataStart[Offset++] = '\0'; /* 1 */
+
+	if (OffsetOnePastEndNew)
+		*OffsetOnePastEndNew = Offset;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_append_midslashing_inplace(
+	const char *ToAddBuf, size_t LenToAdd,
+	char *DataStart, size_t DataLength, size_t OffsetOnePastEnd, size_t *OffsetOnePastEndNew)
+{
+	int r = 0;
+
+	size_t Offset = OffsetOnePastEnd;
+
+	if (!!(r = gs_nix_path_add_trailing_slash_cond_inplace(DataStart, DataLength, Offset, &Offset)))
+		goto clean;
+
+	if (DataLength - Offset < LenToAdd + 1)
+		{ r = 1; goto clean; }
+
+	memmove(DataStart + Offset, ToAddBuf, LenToAdd); /* LenToAdd */
+	Offset += LenToAdd;
+	DataStart[Offset++] = '\0'; /* 1 */
+
+	if (OffsetOnePastEndNew)
+		*OffsetOnePastEndNew = Offset;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_path_append_abs_rel(
+	const char *AbsoluteBuf, size_t LenAbsolute,
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	size_t OutputPathEndOffset = 0;
+
+	size_t AbsoluteIsAbsolute = 0;
+	size_t RelativeIsAbsolute = 0;
+
+	if (!!(r = gs_nix_path_is_absolute(AbsoluteBuf, LenAbsolute, &AbsoluteIsAbsolute)))
+		goto clean;
+
+	if (!!(r = gs_nix_path_is_absolute(RelativeBuf, LenRelative, &RelativeIsAbsolute)))
+		goto clean;
+
+	if ((! AbsoluteIsAbsolute) || (RelativeIsAbsolute))
+		{ r = 1; goto clean; }
+
+	/* prep output buffer with absolute path */
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		AbsoluteBuf, LenAbsolute,
+		ioOutputPathBuf, OutputPathBufSize, &OutputPathEndOffset)))
+	{
+		goto clean;
+	}
+
+	/* append */
+
+	if (!!(r = gs_nix_path_append_midslashing_inplace(
+		RelativeBuf, LenRelative,
+		ioOutputPathBuf, OutputPathBufSize, OutputPathEndOffset, &OutputPathEndOffset)))
+	{
+		goto clean;
+	}
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		goto clean;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_absolute_path_directory(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	/* async-signal-safe functions: safe */
+	int r = 0;
+
+	size_t LenOutputPath = 0;
+
+	const char OnlySlash[] = "/";
+
+	const char *ToOutputPtr = NULL;
+	size_t ToOutputLen = 0;
+
+	/* absolute aka starts with a slash */
+	if (!!(r = gs_nix_path_ensure_absolute(InputPathBuf, LenInputPath)))
+		goto clean;
+
+	/* eat trailing slashes */
+
+	if (!!(r = gs_nix_path_eat_trailing_slashes(InputPathBuf, LenInputPath, &LenInputPath)))
+		goto clean;
+
+	if (LenInputPath > 0) {
+		/* because of ensure absolute we know it starts with a slash.
+		*  since eat_trailing_slashes did not eat the whole path,
+		*  what remains must be of the form "/XXX(/XXX)*" (regex).
+		*  there might be redundant slashes. */
+		if (!!(r = gs_nix_path_ensure_starts_with_lump(InputPathBuf, LenInputPath)))
+			goto clean;
+		/* eat an XXX part */
+		if (!!(r = gs_nix_path_eat_trailing_nonslashes(InputPathBuf, LenInputPath, &LenInputPath)))
+			goto clean;
+		/* eat an / part */
+		if (!!(r = gs_nix_path_eat_trailing_slashes(InputPathBuf, LenInputPath, &LenInputPath)))
+			goto clean;
+		/* two possibilities: we were on the last /XXX part or not.
+		*  path is now empty or of the form /XXX */
+	}
+
+	if (LenInputPath == 0) {
+		/* handle the 'path is now empty' possibility: output just /, as per dirname(3) */
+		ToOutputPtr = OnlySlash;
+		ToOutputLen = (sizeof OnlySlash) - 1;
+	} else {
+		/* handle the 'path is now of the form /XXX' possibility: output verbatim */
+		ToOutputPtr = InputPathBuf;
+		ToOutputLen = LenInputPath;
+	}
+
+	if (OutputPathBufSize < ToOutputLen + 1)
+		{ r = 1; goto clean; }
+
+	memmove(ioOutputPathBuf, ToOutputPtr, ToOutputLen);
+	memset(ioOutputPathBuf + ToOutputLen, '\0', 1);
+
+	if (oLenOutputPath)
+		*oLenOutputPath = ToOutputLen;
+
+clean:
+
+	return r;
+}
+
+int gs_nix_access_wrapper(
+	const char *InputPathBuf, size_t LenInpuPath,
+	int mode)
+{
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: access is listed */
+
+	int r = 0;
+
+	if (!!access(InputPathBuf, mode))
+		{ r = 1; goto clean; }
+
+clean:
+
+	return r;
 }
 
 int gs_nix_readlink_wrapper(
-	const char *InputPathBuf, size_t LenInputPathBuf,
+	const char *InputPathBuf, size_t LenInputPath,
 	char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName)
 {
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: readlink is listed
+	*  realpath is readlink's competitor for this task but not listed */
+
 	int r = 0;
 
 	size_t LenFileName = 0;
@@ -51,6 +334,9 @@ int gs_nix_open_wrapper(
 	const char *LogFileNameBuf, size_t LenLogFileName,
 	int *oFdLogFile)
 {
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: open is listed */
+
 	int r = 0;
 
 	int fdLogFile = -1;
@@ -87,6 +373,9 @@ clean:
 }
 
 int gs_nix_close_wrapper(int fd) {
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: close is listed */
+
 	int r = 0;
 
 	if (fd == -1)
@@ -194,4 +483,8 @@ clean:
 void gs_debug_break() {
 	/* NOTE: theoretically can fail with nonzero status */
 	raise(SIGTRAP);
+}
+
+int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
+	return gs_nix_path_is_absolute(PathBuf, LenPath, oIsAbsolute);
 }

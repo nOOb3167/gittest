@@ -1,6 +1,7 @@
 #include <cstddef>
 
 #include <windows.h>
+#include <shlwapi.h> // PathAppend etc
 
 #include <gittest/misc.h>
 
@@ -19,6 +20,35 @@ typedef struct {
 #pragma pack(pop)
 
 static EXCEPTION_DISPOSITION NTAPI ignore_handler(
+	EXCEPTION_RECORD *rec,
+	void *frame,
+	CONTEXT *ctx,
+	void *disp);
+
+
+int gs_win_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
+	int r = 0;
+
+	size_t IsAbsolute = false;
+
+	if (!!(r = gs_buf_strnlen(PathBuf, LenPath + 1, NULL)))
+		GS_GOTO_CLEAN();
+
+	/* maximum length for PathIsRelative */
+	if (LenPath > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	IsAbsolute = ! PathIsRelative(PathBuf);
+
+	if (oIsAbsolute)
+		*oIsAbsolute = IsAbsolute;
+
+clean:
+
+	return r;
+}
+
+EXCEPTION_DISPOSITION NTAPI ignore_handler(
 	EXCEPTION_RECORD *rec,
 	void *frame,
 	CONTEXT *ctx,
@@ -75,4 +105,8 @@ void gs_current_thread_name_set(
 
 void gs_debug_break() {
 	DebugBreak();
+}
+
+int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
+	return gs_win_path_is_absolute(PathBuf, LenPath, oIsAbsolute);
 }

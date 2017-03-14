@@ -186,31 +186,6 @@ clean:
 	return r;
 }
 
-int gs_win_path_isabsolute(
-	const char *InputPathBuf, size_t LenInputPath,
-	size_t *oIsAbsolute)
-{
-	int r = 0;
-
-	size_t IsAbsolute = false;
-
-	if (!!(r = gs_buf_strnlen(InputPathBuf, LenInputPath + 1, NULL)))
-		GS_GOTO_CLEAN();
-
-	/* maximum length for PathIsRelative */
-	if (LenInputPath > MAX_PATH)
-		GS_ERR_CLEAN(1);
-
-	IsAbsolute = ! PathIsRelative(InputPathBuf);
-
-	if (oIsAbsolute)
-		*oIsAbsolute = IsAbsolute;
-
-clean:
-
-	return r;
-}
-
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
 	int r = 0;
 
@@ -305,46 +280,6 @@ int gs_build_current_executable_relative_filename(
 		ioCombinedBuf, CombinedBufSize, oLenCombined)))
 	{
 		GS_GOTO_CLEAN();
-	}
-
-clean:
-
-	return r;
-}
-
-int gs_build_path_interpret_relative_current_executable(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf)
-{
-	int r = 0;
-
-	size_t PossiblyRelativePathIsAbsolute = 0;
-
-	if (!!(r = gs_win_path_isabsolute(
-		PossiblyRelativePathBuf, LenPossiblyRelativePath,
-		&PossiblyRelativePathIsAbsolute)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (PossiblyRelativePathIsAbsolute) {
-
-		if (!!(r = gs_buf_copy_zero_terminate(
-			PossiblyRelativePathBuf, LenPossiblyRelativePath,
-			ioPathBuf, PathBufSize, oLenPathBuf)))
-		{
-			GS_GOTO_CLEAN();
-		}
-
-	} else {
-
-		if (!!(r = gs_build_current_executable_relative_filename(
-			PossiblyRelativePathBuf, LenPossiblyRelativePath,
-			ioPathBuf, PathBufSize, oLenPathBuf)))
-		{
-			GS_GOTO_CLEAN();
-		}
-
 	}
 
 clean:

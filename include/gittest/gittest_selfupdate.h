@@ -68,7 +68,9 @@ int aux_config_get_common_vars(
 	const confmap_t &KeyVal,
 	GsAuxConfigCommonVars *oCommonVars);
 
-void gs_debug_break();
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
 
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
 
@@ -80,10 +82,6 @@ int gs_get_current_executable_directory(
 int gs_build_current_executable_relative_filename(
 	const char *RelativeBuf, size_t LenRelative,
 	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
-
-int gs_build_path_interpret_relative_current_executable(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
 
 #if 0
 int gs_build_current_executable_relative_filename_tr2_(

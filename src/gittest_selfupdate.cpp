@@ -91,6 +91,46 @@ clean:
 	return r;
 }
 
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf)
+{
+	int r = 0;
+
+	size_t PossiblyRelativePathIsAbsolute = 0;
+
+	if (!!(r = gs_path_is_absolute(
+		PossiblyRelativePathBuf, LenPossiblyRelativePath,
+		&PossiblyRelativePathIsAbsolute)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (PossiblyRelativePathIsAbsolute) {
+
+		if (!!(r = gs_buf_copy_zero_terminate(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	} else {
+
+		if (!!(r = gs_build_current_executable_relative_filename(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	}
+
+clean:
+
+	return r;
+}
+
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 

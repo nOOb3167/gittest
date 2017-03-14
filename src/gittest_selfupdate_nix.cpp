@@ -5,6 +5,17 @@
 #include <gittest/misc_nix.h>
 #include <gittest/gittest_selfupdate.h>
 
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
+	int r = 0;
+
+	if (!!(r = gs_nix_access_wrapper(FileNameBuf, LenFileName, F_OK)))
+		goto clean;
+
+clean:
+
+	return r;
+}
+
 int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName) {
 	/* http://man7.org/linux/man-pages/man5/proc.5.html
 	*    /proc/[pid]/exe:
@@ -14,10 +25,6 @@ int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize,
 	// FIXME: does move count as unlinking? (probably so)
 	//   so if the process has moved itself (during selfupdate)
 	//   this call will basically fail (or at least return a weirder name
-
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
-	*    async-signal-safe functions: readlink is listed
-	*  realpath is readlink's competitor for this task but not listed */
 
 	int r = 0;
 
@@ -32,6 +39,76 @@ int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize,
 
 	if (!!(r = gs_nix_path_ensure_absolute(ioFileNameBuf, *oLenFileName)))
 		goto clean;
+
+clean:
+
+	return r;
+}
+
+int gs_get_current_executable_directory(
+	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir)
+{
+	int r = 0;
+
+	size_t LenCurrentExecutable = 0;
+	char CurrentExecutableBuf[512] = {};
+
+	if (!!(r = gs_get_current_executable_filename(
+		CurrentExecutableBuf, sizeof CurrentExecutableBuf, &LenCurrentExecutable)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_nix_absolute_path_directory(
+		CurrentExecutableBuf, LenCurrentExecutable,
+		ioCurrentExecutableDirBuf, CurrentExecutableDirSize, oLenCurrentExecutableDir)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined)
+{
+	int r = 0;
+
+	size_t LenPathCurrentExecutableDir = 0;
+	char PathCurrentExecutableDirBuf[512] = {};
+	size_t LenPathModification = 0;
+	char PathModificationBuf[512] = {};
+
+	/* get directory */
+	if (!!(r = gs_get_current_executable_directory(
+		PathCurrentExecutableDirBuf, sizeof PathCurrentExecutableDirBuf, &LenPathCurrentExecutableDir)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	/* ensure relative and append */
+
+	if (!!(r = gs_nix_path_append_abs_rel(
+		PathCurrentExecutableDirBuf, LenPathCurrentExecutableDir,
+		RelativeBuf, LenRelative,
+		PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	/* SKIP canonicalize into output AND JUST COPY */
+	/* no seriously it sucks that ex realpath(3) is not an
+	*  async-signal-safe function. */
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		PathModificationBuf, LenPathModification,
+		ioCombinedBuf, CombinedBufSize, oLenCombined)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 clean:
 

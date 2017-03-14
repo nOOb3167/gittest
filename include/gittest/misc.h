@@ -88,4 +88,6 @@ void gs_current_thread_name_set(
 
 void gs_debug_break();
 
+int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute);
+
 #endif /* _GITTEST_MISC_H_ */

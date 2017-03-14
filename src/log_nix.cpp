@@ -62,9 +62,6 @@ int gs_log_nix_open_dump_file(
 	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
 	int *oFdLogFile)
 {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
-	*    async-signal-safe functions: open is listed */
-
 	int r = 0;
 
 	if (LogFileNameBuf[LenLogFileName] != '\0')
