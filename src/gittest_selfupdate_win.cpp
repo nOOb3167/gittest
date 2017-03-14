@@ -485,49 +485,6 @@ clean:
 	return r;
 }
 
-int gs_build_child_filename(
-	const char *ParentFileNameBuf, size_t LenParentFileName,
-	const char *ExpectedSuffix, size_t LenExpectedSuffix,
-	const char *ExpectedExtension, size_t LenExpectedExtension,
-	const char *ExtraSuffix, size_t LenExtraSuffix,
-	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName)
-{
-	// modify example ${path}${expectedsuffix}${expectedextension}
-	// into           ${path}${expectedsuffix}${extrasuffix}${expectedextension}'\0'
-	// aka c:/blah/gittest.exe -> c:/blah/gittest_helper.exe
-
-	int r = 0;
-
-	const size_t OffsetStartOfCheck = LenParentFileName - LenExpectedSuffix;
-	const size_t OffsetStartOfChange = LenParentFileName - LenExpectedExtension;
-	const size_t LenChildFileName = OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension;
-
-	if (LenParentFileName < LenExpectedSuffix)
-		GS_ERR_CLEAN(1);
-	if (LenExpectedSuffix < LenExpectedExtension)
-		GS_ERR_CLEAN(1);
-
-	if (strcmp(ExpectedSuffix, ParentFileNameBuf + OffsetStartOfCheck) != 0)
-		GS_ERR_CLEAN(1);
-	if (strcmp(ExpectedExtension, ParentFileNameBuf + OffsetStartOfChange) != 0)
-		GS_ERR_CLEAN(1);
-
-	if (ChildFileNameSize < OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension + 1 /*zero terminator*/)
-		GS_ERR_CLEAN(1);
-
-	memcpy(ioChildFileNameBuf, ParentFileNameBuf, OffsetStartOfChange);
-	memcpy(ioChildFileNameBuf + OffsetStartOfChange, ExtraSuffix, LenExtraSuffix);
-	memcpy(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix, ExpectedExtension, LenExpectedExtension);
-	memset(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension, '\0', 1);
-
-	if (oLenChildFileName)
-		*oLenChildFileName = LenChildFileName;
-
-clean:
-
-	return r;
-}
-
 int gs_write_temp_file(
 	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize,
 	char *oTempFileNameBuf, size_t TempFileNameBufSize)

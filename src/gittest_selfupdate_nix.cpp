@@ -114,3 +114,28 @@ clean:
 
 	return r;
 }
+
+int aux_selfupdate_create_child(
+	const char *FileNameChildBuf, size_t LenFileNameChild,
+	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize)
+{
+	int r = 0;
+
+	char *BufferUpdateDataC = (char *)BufferUpdateData;
+
+	int fdChildFile = -1;
+
+	// FIXME: it would be nicer to create a temporary file and move it over
+	//   instead of writing the file directly.
+
+	if (!!(r = gs_nix_open_mask_rwx(FileNameChildBuf, LenFileNameChild, &fdChildFile)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_nix_write_wrapper(fdChildFile, BufferUpdateDataC, BufferUpdateSize)))
+		GS_GOTO_CLEAN();
+
+clean:
+	gs_nix_close_wrapper_noerr(fdChildFile);
+
+	return r;
+}

@@ -9,6 +9,44 @@
 
 #include <gittest/misc_nix.h>
 
+int gs_nix_open_wrapper(
+	const char *LogFileNameBuf, size_t LenLogFileName,
+	int OpenFlags, mode_t OpenMode,
+	int *oFdLogFile);
+
+int gs_nix_open_wrapper(
+	const char *FileNameBuf, size_t LenFileName,
+	int OpenFlags, mode_t OpenMode,
+	int *oFdFile)
+{
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: open is listed */
+
+	/* http://man7.org/linux/man-pages/man2/open.2.html
+	*    O_CREAT and O_TMPFILE flags mandate use of the third (mode) argument to open */
+
+	int r = 0;
+
+	int fdFile = -1;
+
+	while ((fdFile = open(FileNameBuf, OpenFlags, OpenMode))) {
+		if (errno == EINTR)
+			continue;
+		else
+			{ r = 1; goto clean; }
+	}
+
+	if (oFdFile)
+		*oFdFile = fdFile;
+
+clean:
+	if (!!r) {
+		gs_nix_close_wrapper_noerr(fdFile);
+	}
+
+	return r;
+}
+
 int gs_nix_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
 	int r = 0;
 
@@ -330,48 +368,6 @@ clean:
 	return r;
 }
 
-int gs_nix_open_wrapper(
-	const char *LogFileNameBuf, size_t LenLogFileName,
-	int *oFdLogFile)
-{
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
-	*    async-signal-safe functions: open is listed */
-
-	int r = 0;
-
-	int fdLogFile = -1;
-
-	int OpenFlags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC;
-	mode_t OpenMode = S_IRUSR | S_IWUSR; /* user read and write, add other access flags? */
-
-	while (true) {
-		errno = 0;
-
-		/* http://man7.org/linux/man-pages/man2/open.2.html
-		*    O_CREAT flag mandates use of the third (mode) argument to open */
-		fdLogFile = open(LogFileNameBuf, OpenFlags, OpenMode);
-
-		if (fdLogFile == -1 && (errno == EINTR))
-			continue;
-		else if (fdLogFile == -1)
-			{ r = 1; goto clean; }
-		else
-			break;
-	}
-
-	if (oFdLogFile)
-		*oFdLogFile = fdLogFile;
-
-clean:
-	if (!!r) {
-		/* not much to do about a close error here */
-		if (!!(r = gs_nix_close_wrapper(fdLogFile)))
-			{ /* dummy */ }
-	}
-
-	return r;
-}
-
 int gs_nix_close_wrapper(int fd) {
 	/* http://man7.org/linux/man-pages/man7/signal.7.html
 	*    async-signal-safe functions: close is listed */
@@ -401,6 +397,11 @@ noclean:
 clean:
 
 	return r;
+}
+
+int gs_nix_close_wrapper_noerr(int fd) {
+	if (!!gs_nix_close_wrapper(fd))
+		{ /* dummy */ }
 }
 
 int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf) {
@@ -459,6 +460,87 @@ clean:
 
 int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf) {
 	return gs_nix_write_wrapper(STDOUT_FILENO, Buf, LenBuf);
+}
+
+int gs_nix_open_tmp_mask_rwx(int *oFdTmpFile) {
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: open is listed */
+
+	int r = 0;
+
+	// FIXME: O_TMPFILE is super magic
+
+	// FIXME: O_TMPFILE introduced as late as Linux 3.11 kernel release
+	//   https://kernelnewbies.org/Linux_3.11#head-8be09d59438b31c2a724547838f234cb33c40357
+	// FIXME: even worse, O_TMPFILE requires support by the filesystem (as per open(2))
+
+	// FIXME: besides all these O_TMPFILE problems, the way to link it into filesystem is magic
+	//   therefore just do not use this function please.
+
+	const char MagicOTmpFileName[] = ".";
+	size_t LenMagicOTmpFileName = (sizeof MagicOTmpFileName) - 1;
+
+	/* user read write and execute, add other access flags? */
+	if (!!(r = gs_nix_open_wrapper(
+		MagicOTmpFileName, LenMagicOTmpFileName,
+		O_WRONLY | O_TMPFILE | O_CLOEXEC,
+		S_IRUSR | S_IWUSR | S_IXUSR,
+		oFdTmpFile)))
+	{
+		goto clean;
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_nix_open_mask_rw(
+	const char *LogFileNameBuf, size_t LenLogFileName,
+	int *oFdLogFile)
+{
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: open is listed */
+
+	int r = 0;
+
+	/* user read and write, add other access flags? */
+	if (!!(r = gs_nix_open_wrapper(
+		LogFileNameBuf, LenLogFileName,
+		O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
+		S_IRUSR | S_IWUSR,
+		oFdLogFile)))
+	{
+		goto clean;
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_nix_open_mask_rwx(
+	const char *LogFileNameBuf, size_t LenLogFileName,
+	int *oFdLogFile)
+{
+	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	*    async-signal-safe functions: open is listed */
+
+	int r = 0;
+
+	/* user read write and execute, add other access flags? */
+	if (!!(r = gs_nix_open_wrapper(
+		LogFileNameBuf, LenLogFileName,
+		O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
+		S_IRUSR | S_IWUSR | S_IXUSR,
+		oFdLogFile)))
+	{
+		goto clean;
+	}
+
+clean:
+
+	return r;
 }
 
 void gs_current_thread_name_set(

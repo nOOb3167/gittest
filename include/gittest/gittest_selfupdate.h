@@ -60,28 +60,7 @@ struct GsAuxConfigCommonVars {
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
 
-int aux_config_read_interpret_relative_current_executable(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
-int aux_config_key_ex_interpret_relative_current_executable(
-	const confmap_t &KeyVal, const char *Key, std::string *oVal);
-int aux_config_get_common_vars(
-	const confmap_t &KeyVal,
-	GsAuxConfigCommonVars *oCommonVars);
-
-int gs_build_path_interpret_relative_current_executable(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
-
-int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
-
-int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
-
-int gs_get_current_executable_directory(
-	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
-
-int gs_build_current_executable_relative_filename(
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
+/* junk */
 
 #if 0
 int gs_build_current_executable_relative_filename_tr2_(
@@ -95,12 +74,39 @@ int gs_build_path_interpret_relative_current_executable_tr2_(
 	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
 #endif /* 0 */
 
+/* to be implemented platform neutrally */
+
+int aux_config_read_interpret_relative_current_executable(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
+int aux_config_key_ex_interpret_relative_current_executable(
+	const confmap_t &KeyVal, const char *Key, std::string *oVal);
+int aux_config_get_common_vars(
+	const confmap_t &KeyVal,
+	GsAuxConfigCommonVars *oCommonVars);
+
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
+
 int gs_build_child_filename(
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	const char *ExpectedSuffix, size_t LenExpectedSuffix,
 	const char *ExpectedExtension, size_t LenExpectedExtension,
 	const char *ExtraSuffix, size_t LenExtraSuffix,
 	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName);
+
+/* to be implemented per platform */
+
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
+
+int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
+
+int gs_get_current_executable_directory(
+	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
 
 int aux_selfupdate_create_child(
 	const char *FileNameChildBuf, size_t LenFileNameChild,

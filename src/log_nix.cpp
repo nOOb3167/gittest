@@ -81,7 +81,7 @@ int gs_log_nix_open_dump_file(
 		r = 1; goto clean;
 	}
 
-	if (!!(r = gs_nix_open_wrapper(LogFileNameBuf, LenLogFileName, oFdLogFile)))
+	if (!!(r = gs_nix_open_mask_rw(LogFileNameBuf, LenLogFileName, oFdLogFile)))
 		goto clean;
 
 clean:
@@ -308,9 +308,7 @@ int gs_log_crash_handler_dump_global_log_list() {
 
 
 clean:
-	/* not much to do about a close error here */
-	if (!!(r = gs_nix_close_wrapper(fdLogFile)))
-		{ /* dummy */ };
+	gs_nix_close_wrapper_noerr(fdLogFile);
 
 	return r;
 }
