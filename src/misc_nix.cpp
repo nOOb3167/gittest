@@ -172,6 +172,8 @@ int gs_nix_path_add_trailing_slash_cond_inplace(
 	DataStart[Offset++] = '/';  /* 1 */
 	DataStart[Offset++] = '\0'; /* 1 */
 
+	Offset--; /* we want to end at the inserted zero */
+
 	if (OffsetOnePastEndNew)
 		*OffsetOnePastEndNew = Offset;
 
@@ -197,6 +199,8 @@ int gs_nix_path_append_midslashing_inplace(
 	memmove(DataStart + Offset, ToAddBuf, LenToAdd); /* LenToAdd */
 	Offset += LenToAdd;
 	DataStart[Offset++] = '\0'; /* 1 */
+
+	Offset--; /* want to end up at the inserted zero */
 
 	if (OffsetOnePastEndNew)
 		*OffsetOnePastEndNew = Offset;
@@ -347,7 +351,7 @@ int gs_nix_readlink_wrapper(
 	size_t LenFileName = 0;
 	ssize_t count = 0;
 
-	if (!!(count = readlink(InputPathBuf, ioFileNameBuf, FileNameSize)))
+	if (-1 == (count = readlink(InputPathBuf, ioFileNameBuf, FileNameSize)))
 		{ r = 1; goto clean; }
 
 	if (count >= FileNameSize)
