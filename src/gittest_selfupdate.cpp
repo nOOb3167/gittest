@@ -224,31 +224,6 @@ clean:
 	return r;
 }
 
-int aux_selfupdate_main_mode_child(
-	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
-	const char *ArgvParentFileName, size_t LenArgvParentFileName,
-	const char *ArgvChildFileName, size_t LenArgvChildFileName)
-{
-	int r = 0;
-
-	// FIXME: are overwriting the parent and forking it free of race conditions?
-
-	if (!!(r = aux_win_selfupdate_overwrite_parent(
-		ArgvHandleSerialized, LenArgvHandleSerialized,
-		ArgvParentFileName, LenArgvParentFileName,
-		ArgvChildFileName, LenArgvChildFileName)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = aux_selfupdate_fork_parent_mode_main_and_quit(ArgvParentFileName, LenArgvParentFileName)))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
 int aux_selfupdate_main_mode_main() {
 	int r = 0;
 
@@ -315,20 +290,8 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 	{
 		GS_LOG(I, S, "chld start");
 
-		if (argc != 6)
-			GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
-
-		const size_t LenArgvHandleSerialized = strlen(argv[3]);
-		const size_t LenArgvParentFileName = strlen(argv[4]);
-		const size_t LenArgvChildFileName = strlen(argv[5]);
-
-		if (!!(r = aux_selfupdate_main_mode_child(
-			argv[3], LenArgvHandleSerialized,
-			argv[4], LenArgvParentFileName,
-			argv[5], LenArgvChildFileName)))
-		{
+		if (!!(r = aux_selfupdate_main_prepare_mode_child(argc, argv)))
 			GS_GOTO_CLEAN();
-		}
 
 		GS_LOG(I, S, "chld end");
 	}

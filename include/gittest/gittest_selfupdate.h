@@ -95,6 +95,12 @@ int gs_build_child_filename(
 	const char *ExtraSuffix, size_t LenExtraSuffix,
 	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName);
 
+int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
+
+int aux_selfupdate_main_mode_main();
+
+int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
+
 /* to be implemented per platform */
 
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
@@ -118,13 +124,6 @@ int aux_selfupdate_fork_parent_mode_main_and_quit(
 int aux_selfupdate_fork_child_and_quit(
 	const char *FileNameChildBuf, size_t LenFileNameChild);
 
-int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
-int aux_selfupdate_main_mode_child(
-	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
-	const char *ArgvParentFileName, size_t LenArgvParentFileName,
-	const char *ArgvChildFileName, size_t LenArgvChildFileName);
-int aux_selfupdate_main_mode_main();
-
-int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
+int aux_selfupdate_main_prepare_mode_child(int argc, char **argv);
 
 #endif /* _GITTEST_GITTEST_SELFUPDATE_H_ */
