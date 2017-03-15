@@ -346,17 +346,12 @@ int gs_nix_readlink_wrapper(
 	size_t LenFileName = 0;
 	ssize_t count = 0;
 
-	errno = 0;
+	if (!!(count = readlink(InputPathBuf, ioFileNameBuf, FileNameSize)))
+		{ r = 1; goto clean; }
 
-	count = readlink(MAGIC_PROC_PATH_NAME, ioFileNameBuf, FileNameSize);
+	if (count >= FileNameSize)
+		{ r = 1; goto clean; }
 
-	// FIXME: should ignore ENOENT ? see proc(5) for /proc/[pid]/exe deleted behaviour.
-	if (count == -1 && (errno == ENOENT))
-		{ r = 1; goto clean; }
-	else if (count == -1)
-		{ r = 1; goto clean; }
-	else if (count >= FileNameSize)
-		{ r = 1; goto clean; }
 	/* count >= 0 && count < FileNameSize */
 
 	/* readlink does not zero terminate */
@@ -380,19 +375,11 @@ int gs_nix_close_wrapper(int fd) {
 	if (fd == -1)
 		{ r = 0; goto noclean; }
 
-	while (true) {
-		int err = 0;
-
-		errno = 0;
-
-		err = close(fd);
-
-		if (err == -1 && (errno == EINTR))
+	while (!!(err = close(fd))) {
+		if (errno == EINTR)
 			continue;
-		else if (err == -1)
-			{ r = 1; goto clean; }
 		else
-			break;
+			{ r = 1; goto clean; }
 	}
 
 noclean:
@@ -419,10 +406,11 @@ int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf) {
 
 	size_t count_total = 0;
 
+	if (fd == -1)
+		{ r = 1; goto clean; }
+
 	while (count_total < LenBuf) {
 		ssize_t count = 0;
-
-		errno = 0;
 
 		count = write(fd, Buf + count_total, LenBuf - count_total);
 
@@ -441,20 +429,13 @@ int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf) {
 	*    probably do not need to fsync the console
 	*    but we may or may not be writing to the console */
 
-	do {
-		int ok = 0;
-
-		errno = 0;
-
-		ok = fsync(fd);
-
+	while (!!fsync(fd)) {
 		/* EROFS / EINVAL expected for a console directed write - just continue */
-		if (!!ok && (errno == EROFS || errno == EINVAL))
+		if (errno == EROFS || errno == EINVAL)
 			break;
-		else if (!!ok)
+		else
 			{ r = 1; goto clean; }
-
-	} while (0);
+	}
 
 clean:
 
