@@ -37,7 +37,6 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_NIX)
   ## ZLIB is a dependency of LibGit2
   FIND_PACKAGE(ZLIB REQUIRED)
   FIND_PACKAGE(ENet REQUIRED)
-  FIND_PACKAGE(Shlwapi REQUIRED)
   
   # set output variables
   
@@ -51,6 +50,5 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_NIX)
     ${ENET_LIBRARIES}
     # ZLIB must be on the link list AFTER LibGit2 to resolve symbols
     ${ZLIB_LIBRARIES}
-    ${SHLWAPI_LIBRARIES}
   PARENT_SCOPE)
 ENDFUNCTION ()
