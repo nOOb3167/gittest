@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <string.h>
 
 #include <signal.h>
 #include <sys/prctl.h>
@@ -375,7 +376,7 @@ int gs_nix_close_wrapper(int fd) {
 	if (fd == -1)
 		{ r = 0; goto noclean; }
 
-	while (!!(err = close(fd))) {
+	while (!!close(fd)) {
 		if (errno == EINTR)
 			continue;
 		else
@@ -616,8 +617,9 @@ void gs_current_thread_name_set(
 		GS_GOTO_CLEAN();
 
 clean:
+	/* just ignore any errors - return void */
 
-	return r;
+	return;
 }
 
 void gs_debug_break() {

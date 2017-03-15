@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 
 #include <signal.h>
 
@@ -136,8 +137,7 @@ int gs_log_nix_crash_handler_unhijack_signal_revert_default(int signum) {
 	*  https://www.gnu.org/software/libc/manual/html_node/Signals-in-Handler.html#Signals-in-Handler
 	*    """sigaction to explicitly specify which signals should be blocked"""
 	*    """These signals are in addition to the signal for which the handler was invoked"""
-	*  even with empty set, delivery of signal signum during execution of handler for
-	*  signal signum, will still be blocked. */
+	*  sigemptyset still prevents concurrent delivery of the same signal. */
 
 	if (!!(r = sigemptyset(&act.sa_mask)))
 		goto clean;
@@ -156,7 +156,7 @@ int gs_log_nix_crash_handler_hijack_signal(int signum) {
 	struct sigaction act = {};
 
 	/* act.sa_mask initialized later */
-	act.sa_sigaction = gs_log_nix_crash_handler_sa_sigaction;
+	act.sa_sigaction = gs_log_nix_crash_handler_sa_sigaction_SIGNAL_HANDLER_;
 	act.sa_flags = SA_SIGINFO;
 
 	/* sigfillset aka we request to block all signals during execution signal signum */
