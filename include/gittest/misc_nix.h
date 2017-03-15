@@ -35,6 +35,11 @@ int gs_nix_readlink_wrapper(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
 
+int gs_nix_close_wrapper(int fd);
+int gs_nix_close_wrapper_noerr(int fd);
+int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf);
+int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf);
+
 int gs_nix_open_tmp_mask_rwx(int *oFdTmpFile);
 int gs_nix_open_mask_rw(
 	const char *LogFileNameBuf, size_t LenLogFileName,
@@ -43,9 +48,8 @@ int gs_nix_open_mask_rwx(
 	const char *LogFileNameBuf, size_t LenLogFileName,
 	int *oFdLogFile);
 
-int gs_nix_close_wrapper(int fd);
-int gs_nix_close_wrapper_noerr(int fd);
-int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf);
-int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf);
+int gs_nix_fork_exec(
+	char *ParentArgvUnifiedBuf, size_t LenParentArgvUnified,
+	char **ArgvPtrs, size_t *LenArgvPtrs);
 
 #endif /* _GITTEST_MISC_NIX_H_ */

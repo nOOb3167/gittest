@@ -19,7 +19,7 @@ int gs_nix_open_wrapper(
 	int OpenFlags, mode_t OpenMode,
 	int *oFdFile)
 {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: open is listed */
 
 	/* http://man7.org/linux/man-pages/man2/open.2.html
@@ -317,7 +317,7 @@ int gs_nix_access_wrapper(
 	const char *InputPathBuf, size_t LenInpuPath,
 	int mode)
 {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: access is listed */
 
 	int r = 0;
@@ -334,7 +334,7 @@ int gs_nix_readlink_wrapper(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName)
 {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: readlink is listed
 	*  realpath is readlink's competitor for this task but not listed */
 
@@ -369,7 +369,7 @@ clean:
 }
 
 int gs_nix_close_wrapper(int fd) {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: close is listed */
 
 	int r = 0;
@@ -409,7 +409,7 @@ int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf) {
 	*  http://stackoverflow.com/questions/1694164/is-errno-thread-safe/1694170#1694170
 	*    even if thread local errno makes the function (sans side-effects) thread-safe
 	*    receiving signal within signal on same thread would require it to also be reentrant
-	*  http://man7.org/linux/man-pages/man7/signal.7.html
+	*  http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: write and fsync are listed */
 
 	int r = 0;
@@ -463,7 +463,7 @@ int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf) {
 }
 
 int gs_nix_open_tmp_mask_rwx(int *oFdTmpFile) {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: open is listed */
 
 	int r = 0;
@@ -499,7 +499,7 @@ int gs_nix_open_mask_rw(
 	const char *LogFileNameBuf, size_t LenLogFileName,
 	int *oFdLogFile)
 {
-	/* http://man7.org/linux/man-pages/man7/signal.7.html
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: open is listed */
 
 	int r = 0;
@@ -536,6 +536,39 @@ int gs_nix_open_mask_rwx(
 		oFdLogFile)))
 	{
 		goto clean;
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_nix_fork_exec(
+	char *ParentArgvUnifiedBuf, size_t LenParentArgvUnified,
+	char **ArgvPtrs, size_t *LenArgvPtrs)
+{
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
+	*    async-signal-safe functions: fork is listed.
+	*    execvp is actually not but happens in child.
+	*    fork actually mentioned to be candidate for de-listing */
+
+	int r = 0;
+
+	pid_t Pid;
+	int errExec = -1;
+
+	/* fork can result in EAGAIN, but does not seem resumable */
+	if (-1 == (Pid = fork()))
+		{ r = 1; goto clean; }
+
+	if (Pid == 0) {
+		/* child */
+		if (-1 == (errExec = execvp(ArgvPtrs[0], ArgvPtrs)))
+			{ r = 1; goto clean; }
+	} 
+	else {
+		/* parent */
+		/* nothing - just return */
 	}
 
 clean:

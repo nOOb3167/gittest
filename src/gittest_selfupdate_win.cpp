@@ -36,6 +36,16 @@
 #define GS_STR_CHILD_CONSTANT "CHILD"
 #define GS_CHILD_PARENT_TIMEOUT_MS 5000
 
+int gs_win_build_parent_command_line_mode_main(
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	char *oParentCommandLine, size_t ParentCommandLineSize, size_t *oLenParentCommandLine);
+
+int gs_win_build_child_command_line(
+	const char *ChildFileNameBuf, size_t LenChildFileName,
+	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	char *oChildCommandLine, size_t ChildCommandLineSize, size_t *oLenChildCommandLine);
+
 void gs_close_handle(HANDLE handle) {
 	if (handle)
 		if (!CloseHandle(handle))
@@ -91,6 +101,48 @@ int gs_deserialize_windows_process_handle(
 
 	if (oHandle)
 		*oHandle = Handle;
+
+clean:
+
+	return r;
+}
+
+int gs_win_build_parent_command_line_mode_main(
+	const char *ParentFileNameBuf, size_t LenParentFileName,
+	char *oParentCommandLine, size_t ParentCommandLineSize, size_t *oLenParentCommandLine)
+{
+	int r = 0;
+
+	size_t LenParentCommandLine =
+		(1 /*quote*/ + LenParentFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                       + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_MAIN)                             + 1 /*zero*/);
+
+	if (LenParentCommandLine >= ParentCommandLineSize)
+		GS_ERR_CLEAN(1);
+
+	{
+		char * const PtrArg0 = oParentCommandLine;
+		char * const PtrArg1 = PtrArg0 + 1 + LenParentFileName + 1 + 1;
+		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
+		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN) + 1;
+
+		GS_ASSERT(PtrArg3 - PtrArg0 == LenParentCommandLine);
+
+		memset(PtrArg0, '"', 1);
+		memcpy(PtrArg0 + 1, ParentFileNameBuf, LenParentFileName);
+		memset(PtrArg0 + 1 + LenParentFileName, '"', 1);
+		memset(PtrArg0 + 1 + LenParentFileName + 1, ' ', 1);
+
+		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
+		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
+
+		memcpy(PtrArg2, GS_SELFUPDATE_ARG_MAIN, strlen(GS_SELFUPDATE_ARG_MAIN));
+		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN), '\0', 1);
+	}
+
+	if (oLenParentCommandLine)
+		*oLenParentCommandLine = LenParentCommandLine;
 
 clean:
 
@@ -378,49 +430,7 @@ clean:
 }
 #endif /* 0 */
 
-int gs_build_parent_command_line_mode_main(
-	const char *ParentFileNameBuf, size_t LenParentFileName,
-	char *oParentCommandLine, size_t ParentCommandLineSize, size_t *oLenParentCommandLine)
-{
-	int r = 0;
-
-	size_t LenParentCommandLine =
-		(1 /*quote*/ + LenParentFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                       + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_MAIN)                             + 1 /*zero*/);
-
-	if (LenParentCommandLine >= ParentCommandLineSize)
-		GS_ERR_CLEAN(1);
-
-	{
-		char * const PtrArg0 = oParentCommandLine;
-		char * const PtrArg1 = PtrArg0 + 1 + LenParentFileName + 1 + 1;
-		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
-		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN) + 1;
-
-		GS_ASSERT(PtrArg3 - PtrArg0 == LenParentCommandLine);
-
-		memset(PtrArg0, '"', 1);
-		memcpy(PtrArg0 + 1, ParentFileNameBuf, LenParentFileName);
-		memset(PtrArg0 + 1 + LenParentFileName, '"', 1);
-		memset(PtrArg0 + 1 + LenParentFileName + 1, ' ', 1);
-
-		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
-		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
-
-		memcpy(PtrArg2, GS_SELFUPDATE_ARG_MAIN, strlen(GS_SELFUPDATE_ARG_MAIN));
-		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN), '\0', 1);
-	}
-
-	if (oLenParentCommandLine)
-		*oLenParentCommandLine = LenParentCommandLine;
-
-clean:
-
-	return r;
-}
-
-int gs_build_child_command_line(
+int gs_win_build_child_command_line(
 	const char *ChildFileNameBuf, size_t LenChildFileName,
 	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
 	const char *ParentFileNameBuf, size_t LenParentFileName,
@@ -432,11 +442,11 @@ int gs_build_child_command_line(
 
 	size_t LenChildCommandLine =
 		(1 /*quote*/ + LenChildFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_CHILD) + 1 /*space*/ +
-		LenHandleCurrentProcessSerialized /*handlestr*/ + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                      + 1 /*space*/ +
+		strlen(GS_SELFUPDATE_ARG_CHILD)                           + 1 /*space*/ +
+		LenHandleCurrentProcessSerialized /*handlestr*/           + 1 /*space*/ +
 		1 /*quote*/ + LenParentFileName /*pathstrparent*/ + 1 /*quote*/ + 1 /*space*/ +
-		1 /*quote*/ + LenChildFileName /*pathstrchild*/ + 1 /*quote*/ + 1 /*zero*/);
+		1 /*quote*/ + LenChildFileName /*pathstrchild*/ + 1 /*quote*/   + 1 /*zero*/);
 
 	if (LenChildCommandLine >= ChildCommandLineSize)
 		GS_ERR_CLEAN(1);
@@ -641,18 +651,18 @@ int aux_selfupdate_fork_parent_mode_main_and_quit(
 
 	GS_LOG(I, PF, "(re-)starting parent process [name=[%.*s]]", (int)LenFileNameParent, FileNameParentBuf);
 
-	if (!!(r = gs_build_parent_command_line_mode_main(
+	if (!!(r = gs_win_build_parent_command_line_mode_main(
 		FileNameParentBuf, LenFileNameParent,
 		ParentCommandLineBuf, sizeof ParentCommandLineBuf, &LenParentCommandLine)))
 	{
-		GS_ERR_CLEAN(1);
+		GS_GOTO_CLEAN();
 	}
 
 	if (!!(r = gs_process_start(
 		FileNameParentBuf, LenFileNameParent,
 		ParentCommandLineBuf, LenParentCommandLine)))
 	{
-		GS_ERR_CLEAN(1);
+		GS_GOTO_CLEAN();
 	}
 
 clean:
@@ -679,7 +689,7 @@ int aux_selfupdate_fork_child_and_quit(
 
 	BOOL  Ok = 0;
 
-	GS_LOG(I, PF, "Child Process [%.*s]", (int)LenFileNameChild, FileNameChildBuf);
+	GS_LOG(I, PF, "starting child process [name=[%.*s]]", (int)LenFileNameChild, FileNameChildBuf);
 
 	if (!!(r = gs_get_current_executable_filename(ParentFileName, sizeof ParentFileName, &LenParentFileName)))
 		GS_GOTO_CLEAN();
@@ -694,7 +704,7 @@ int aux_selfupdate_fork_child_and_quit(
 
 	LenHandleCurrentProcessSerialized = strlen(HandleCurrentProcessSerialized);
 
-	if (!!(r = gs_build_child_command_line(
+	if (!!(r = gs_win_build_child_command_line(
 		FileNameChildBuf, LenFileNameChild,
 		HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized,
 		ParentFileName, LenParentFileName,
