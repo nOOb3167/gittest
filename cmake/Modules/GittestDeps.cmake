@@ -38,6 +38,13 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_NIX)
   FIND_PACKAGE(ZLIB REQUIRED)
   FIND_PACKAGE(ENet REQUIRED)
   
+  ## http://stackoverflow.com/questions/1620918/cmake-and-libpthread/29871891#29871891
+  ## https://cmake.org/cmake/help/v3.6/module/FindThreads.html
+  ##   extra magic for gcc linking with pthreads (-pthread)
+  
+  set(THREADS_PREFER_PTHREAD_FLAG ON)
+  FIND_PACKAGE(Threads REQUIRED)
+  
   # set output variables
   
   SET(GITTEST_DEP_INCLUDE_DIRS
@@ -50,5 +57,6 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_NIX)
     ${ENET_LIBRARIES}
     # ZLIB must be on the link list AFTER LibGit2 to resolve symbols
     ${ZLIB_LIBRARIES}
+    Threads::Threads
   PARENT_SCOPE)
 ENDFUNCTION ()
