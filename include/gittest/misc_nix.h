@@ -39,6 +39,10 @@ int gs_nix_close_wrapper(int fd);
 int gs_nix_close_wrapper_noerr(int fd);
 int gs_nix_write_wrapper(int fd, const char *Buf, size_t LenBuf);
 int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf);
+int gs_nix_unlink_wrapper(const char *FileNameBuf, size_t LenFileName);
+int gs_nix_rename_wrapper(
+	const char *SrcFileNameBuf, size_t LenSrcFileName,
+	const char *DstFileNameBuf, size_t LenDstFileName);
 
 int gs_nix_open_tmp_mask_rwx(int *oFdTmpFile);
 int gs_nix_open_mask_rw(

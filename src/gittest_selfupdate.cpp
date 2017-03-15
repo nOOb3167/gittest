@@ -233,7 +233,7 @@ int aux_selfupdate_main_mode_child(
 
 	// FIXME: are overwriting the parent and forking it free of race conditions?
 
-	if (!!(r = aux_selfupdate_overwrite_parent(
+	if (!!(r = aux_win_selfupdate_overwrite_parent(
 		ArgvHandleSerialized, LenArgvHandleSerialized,
 		ArgvParentFileName, LenArgvParentFileName,
 		ArgvChildFileName, LenArgvChildFileName)))

@@ -9,6 +9,9 @@
 
 #include <gittest/misc_nix.h>
 
+/* http://pubs.opengroup.org/onlinepubs/7908799/xsh/systypes.h.html 
+*    pid_t is an intergral type */
+
 int gs_nix_open_wrapper(
 	const char *LogFileNameBuf, size_t LenLogFileName,
 	int OpenFlags, mode_t OpenMode,
@@ -462,6 +465,47 @@ int gs_nix_write_stdout_wrapper(const char *Buf, size_t LenBuf) {
 	return gs_nix_write_wrapper(STDOUT_FILENO, Buf, LenBuf);
 }
 
+int gs_nix_unlink_wrapper(const char *FileNameBuf, size_t LenFileName)
+{
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
+	*    async-signal-safe functions: unlink is listed */
+
+	int r = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		goto clean;
+
+	if (!!unlink(FileNameBuf))
+		{ r = 1; goto clean; }
+
+clean:
+
+	return r;
+}
+
+int gs_nix_rename_wrapper(
+	const char *SrcFileNameBuf, size_t LenSrcFileName,
+	const char *DstFileNameBuf, size_t LenDstFileName)
+{
+	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
+	*    async-signal-safe functions: rename is listed */
+
+	int r = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(SrcFileNameBuf, LenSrcFileName + 1)))
+		goto clean;
+
+	if (!!(r = gs_buf_ensure_haszero(DstFileNameBuf, LenDstFileName + 1)))
+		goto clean;
+
+	if (!!rename(SrcFileNameBuf, DstFileNameBuf))
+		{ r = 1; goto clean; }
+
+clean:
+
+	return r;
+}
+
 int gs_nix_open_tmp_mask_rwx(int *oFdTmpFile) {
 	/* http://man7.org/linux/man-pages/man7/signal-safety.7.html
 	*    async-signal-safe functions: open is listed */
@@ -554,7 +598,7 @@ int gs_nix_fork_exec(
 
 	int r = 0;
 
-	pid_t Pid;
+	pid_t Pid = 0;
 	int errExec = -1;
 
 	/* fork can result in EAGAIN, but does not seem resumable */

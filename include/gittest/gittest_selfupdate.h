@@ -118,11 +118,6 @@ int aux_selfupdate_fork_parent_mode_main_and_quit(
 int aux_selfupdate_fork_child_and_quit(
 	const char *FileNameChildBuf, size_t LenFileNameChild);
 
-int aux_selfupdate_overwrite_parent(
-	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
-	const char *ArgvParentFileName, size_t LenArgvParentFileName,
-	const char *ArgvChildFileName, size_t LenArgvChildFileName);
-
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
 int aux_selfupdate_main_mode_child(
 	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,

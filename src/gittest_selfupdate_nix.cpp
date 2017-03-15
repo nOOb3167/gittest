@@ -1,6 +1,7 @@
 #include <stddef.h>
 
 #include <unistd.h>
+#include <sys/types.h>
 
 #include <gittest/misc_nix.h>
 #include <gittest/gittest_selfupdate.h>
@@ -15,6 +16,10 @@ int gs_nix_build_child_command_line(
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	char *oChildArgvUnifiedBuf, size_t ChildArgvUnifiedBufSize, size_t *oLenChildArgvUnified,
 	char **ioArgvPtrs, size_t ArgvPtrsSize, size_t *oLenArgvPtrs);
+
+int aux_nix_selfupdate_overwrite_parent(
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName);
 
 
 int gs_nix_build_parent_command_line_mode_main(
@@ -154,6 +159,37 @@ int gs_nix_build_child_command_line(
 clean:
 
 	return r;
+}
+
+int aux_nix_selfupdate_overwrite_parent(
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName)
+{
+	/* http://stackoverflow.com/questions/1712033/replacing-a-running-executable-in-linux/1712109#1712109 */
+
+	int r = 0;
+
+	pid_t Pid = getppid();
+
+	GS_LOG(I, PF,
+		"NOT waiting on parent process id because WHY would we need that feature, eh [id=[%llX]]",
+		(long long)Pid);
+
+	GS_LOG(I, PF, "moving [src=[%.*s], dst=[%.*s]]",
+		LenArgvChildFileName, ArgvChildFileName,
+		LenArgvParentFileName, ArgvParentFileName);
+
+	if (!!(r = gs_nix_rename_wrapper(
+		ArgvChildFileName, LenArgvChildFileName,
+		ArgvParentFileName, LenArgvParentFileName)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+
 }
 
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {

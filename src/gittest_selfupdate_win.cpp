@@ -46,6 +46,12 @@ int gs_win_build_child_command_line(
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	char *oChildCommandLine, size_t ChildCommandLineSize, size_t *oLenChildCommandLine);
 
+int aux_win_selfupdate_overwrite_parent(
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName);
+
+
 void gs_close_handle(HANDLE handle) {
 	if (handle)
 		if (!CloseHandle(handle))
@@ -495,6 +501,50 @@ clean:
 	return r;
 }
 
+int aux_win_selfupdate_overwrite_parent(
+	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
+	const char *ArgvParentFileName, size_t LenArgvParentFileName,
+	const char *ArgvChildFileName, size_t LenArgvChildFileName)
+{
+	int r = 0;
+
+	size_t LenChildFileName = 0;
+	char ChildFileName[512] = {};
+
+	HANDLE hProcessParent = NULL;
+	DWORD Ret = 0;
+	BOOL  Ok = 0;
+
+	if (!!(r = gs_get_current_executable_filename(ChildFileName, sizeof ChildFileName, &LenChildFileName)))
+		GS_GOTO_CLEAN();
+
+	if (strcmp(ChildFileName, ArgvChildFileName) != 0)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_deserialize_windows_process_handle(&hProcessParent, ArgvHandleSerialized, LenArgvHandleSerialized)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, PF, "waiting on deserialized process handle [h=[%llX]]", (long long)hProcessParent);
+
+	// could also be WAIT_TIMEOUT. other values are failure modes.
+	if (WAIT_OBJECT_0 != (Ret = WaitForSingleObject(hProcessParent, GS_CHILD_PARENT_TIMEOUT_MS)))
+		GS_ERR_CLEAN(1);
+
+	GS_LOG(I, PF, "moving [src=[%.*s], dst=[%.*s]]",
+		LenArgvChildFileName, ArgvChildFileName,
+		LenArgvParentFileName, ArgvParentFileName);
+
+	if (!(Ok = MoveFileEx(ArgvChildFileName, ArgvParentFileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)))
+		GS_ERR_CLEAN(1);
+
+clean:
+	gs_close_handle(hProcessParent);
+
+	return r;
+
+}
+
+
 int gs_write_temp_file(
 	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize,
 	char *oTempFileNameBuf, size_t TempFileNameBufSize)
@@ -727,47 +777,4 @@ clean:
 	//gs_close_handle(hCurrentProcessPseudo);
 
 	return r;
-}
-
-int aux_selfupdate_overwrite_parent(
-	const char *ArgvHandleSerialized, size_t LenArgvHandleSerialized,
-	const char *ArgvParentFileName, size_t LenArgvParentFileName,
-	const char *ArgvChildFileName, size_t LenArgvChildFileName)
-{
-	int r = 0;
-
-	size_t LenChildFileName = 0;
-	char ChildFileName[512] = {};
-
-	HANDLE hProcessParent = NULL;
-	DWORD Ret = 0;
-	BOOL  Ok = 0;
-
-	if (!!(r = gs_get_current_executable_filename(ChildFileName, sizeof ChildFileName, &LenChildFileName)))
-		GS_GOTO_CLEAN();
-
-	if (strcmp(ChildFileName, ArgvChildFileName) != 0)
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_deserialize_windows_process_handle(&hProcessParent, ArgvHandleSerialized, LenArgvHandleSerialized)))
-		GS_GOTO_CLEAN();
-
-	GS_LOG(I, PF, "waiting on deserialized process handle [h=[%llX]]", (long long)hProcessParent);
-
-	// could also be WAIT_TIMEOUT. other values are failure modes.
-	if (WAIT_OBJECT_0 != (Ret = WaitForSingleObject(hProcessParent, GS_CHILD_PARENT_TIMEOUT_MS)))
-		GS_ERR_CLEAN(1);
-
-	GS_LOG(I, PF, "moving [src=[%.*s], dst=[%.*s]]",
-		LenArgvChildFileName, ArgvChildFileName,
-		LenArgvParentFileName, ArgvParentFileName);
-
-	if (!(Ok = MoveFileEx(ArgvChildFileName, ArgvParentFileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)))
-		GS_ERR_CLEAN(1);
-
-clean:
-	gs_close_handle(hProcessParent);
-
-	return r;
-
 }
