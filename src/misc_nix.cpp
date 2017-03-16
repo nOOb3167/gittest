@@ -33,7 +33,7 @@ int gs_nix_open_wrapper(
 
 	int fdFile = -1;
 
-	while ((fdFile = open(FileNameBuf, OpenFlags, OpenMode))) {
+	while (-1 == (fdFile = open(FileNameBuf, OpenFlags, OpenMode))) {
 		if (errno == EINTR)
 			continue;
 		else
