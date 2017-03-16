@@ -207,7 +207,9 @@ int aux_config_parse_skip_newline(const char *DataStart, uint32_t DataLength, ui
 	return 0;
 }
 
-int aux_config_parse(const std::string &Buffer, std::map<std::string, std::string> *oKeyVal)
+int aux_config_parse(
+	const char *BufferBuf, size_t LenBuffer,
+	std::map<std::string, std::string> *oKeyVal)
 {
 	int r = 0;
 
@@ -215,8 +217,8 @@ int aux_config_parse(const std::string &Buffer, std::map<std::string, std::strin
 
 	uint32_t Offset = 0;
 	uint32_t OldOffset = 0;
-	const char *DataStart = Buffer.data();
-	uint32_t DataLength = Buffer.size();
+	const char *DataStart = BufferBuf;
+	uint32_t DataLength = LenBuffer;
 
 	const char equals = '=';
 	const char hdr_nulterm_expected[] = "GITTEST_CONF";
@@ -272,8 +274,9 @@ clean:
 	return r;
 }
 
-int aux_config_read(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
+int aux_config_read_fullpath(
+	const char *PathFullBuf, size_t LenPathFull,
+	std::map<std::string, std::string> *oKeyVal)
 {
 	int r = 0;
 
@@ -287,7 +290,6 @@ int aux_config_read(
 	const size_t ArbitraryBufferSize = 4096;
 	char buf[ArbitraryBufferSize];
 
-	std::stringstream locationss;
 	std::string retbuffer;
 	
 	FILE *f = NULL;
@@ -295,9 +297,10 @@ int aux_config_read(
     size_t ret = 0;
     size_t idx = 0;
 
-	locationss << ExpectedLocation << "/" << ExpectedName;
+	if (!!(r = gs_buf_ensure_haszero(PathFullBuf, LenPathFull + 1)))
+		{ r = 1; goto clean; }
 
-	if (!(f = fopen(locationss.str().c_str(), "rb")))
+	if (!(f = fopen(PathFullBuf, "rb")))
 		{ r = 1; goto clean; }
 
 	while ((ret = fread(buf, 1, ArbitraryBufferSize, f)) > 0)
@@ -306,7 +309,7 @@ int aux_config_read(
 	if (ferror(f) || !feof(f))
 		{ r = 1; goto clean; }
 
-	if (!!(r = aux_config_parse(retbuffer, &KeyVal)))
+	if (!!(r = aux_config_parse(retbuffer.data(), retbuffer.size(), &KeyVal)))
 		goto clean;
 
 	if (oKeyVal)

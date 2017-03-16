@@ -17,27 +17,131 @@
 
 #include <gittest/gittest_selfupdate.h>
 
-int aux_config_read_interpret_relative_current_executable(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
-{
-	size_t string_len_arbitrary_max = 2048;
+int aux_config_read_builtin(std::map<std::string, std::string> *oKeyVal) {
+	int r = 0;
 
-	size_t LenExpectedLocation = 0;
+	std::string BufferBuiltinConfig(GS_CONFIG_DEFS_GLOBAL_CONFIG_BUILTIN_HEXSTRING);
+	std::string DecodedConfig;
+
+	if (!!(r = aux_config_decode_hex_pairwise_swapped(BufferBuiltinConfig, &DecodedConfig)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_parse(
+		DecodedConfig.data(), DecodedConfig.size(),
+		oKeyVal)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int aux_config_read_builtin_or_relative_current_executable(
+	const char *ExpectedLocationBuf, size_t LenExpectedLocation,
+	const char *ExpectedNameBuf, size_t LenExpectedName,
+	std::map<std::string, std::string> *oKeyVal)
+{
+	int r = 0;
 
 	size_t LenPath = 0;
 	char PathBuf[512];
 
-	if (!!(gs_buf_strnlen(ExpectedLocation, string_len_arbitrary_max, &LenExpectedLocation)))
-		return 1;
+	size_t LenPathFull = 0;
+	char PathFullBuf[512];
 
-	if (!!(gs_build_path_interpret_relative_current_executable(
+	size_t PathIsExist = 0;
+
+	if (!!(r = gs_build_path_interpret_relative_current_executable(
+		ExpectedLocationBuf, LenExpectedLocation,
+		PathBuf, sizeof PathBuf, &LenPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_path_append_abs_rel(
+		PathBuf, LenPath,
+		ExpectedNameBuf, LenExpectedName,
+		PathFullBuf, sizeof PathFullBuf, &LenPathFull)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_file_exist(PathFullBuf, LenPathFull, &PathIsExist)))
+		GS_GOTO_CLEAN();
+
+	if (PathIsExist) {
+		/* read from the file system */
+
+		if (!!(r = aux_config_read_fullpath(
+			PathFullBuf, LenPathFull,
+			oKeyVal)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+	else {
+		/* use the builtin config (preprocessor definition) */
+
+		if (!!(r = aux_config_read_builtin(oKeyVal)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int aux_config_read_interpret_relative_current_executable(
+	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
+{
+	// FIXME: bad API, replace
+
+	int r = 0;
+
+	size_t string_len_arbitrary_max = 2048;
+
+	size_t LenExpectedLocation = 0;
+	size_t LenExpectedName = 0;
+
+	size_t LenPath = 0;
+	char PathBuf[512];
+
+	size_t LenPathFull = 0;
+	char PathFullBuf[512];
+
+	if (!!(r = gs_buf_strnlen(ExpectedLocation, string_len_arbitrary_max, &LenExpectedLocation)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_buf_strnlen(ExpectedName, string_len_arbitrary_max, &LenExpectedName)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_build_path_interpret_relative_current_executable(
 		ExpectedLocation, LenExpectedLocation,
 		PathBuf, sizeof PathBuf, &LenPath)))
 	{
-		return 1;
+		GS_GOTO_CLEAN();
 	}
 
-	return aux_config_read(PathBuf, ExpectedName, oKeyVal);
+	if (!!(r = gs_path_append_abs_rel(
+		PathBuf, LenPath,
+		ExpectedName, LenExpectedName,
+		PathFullBuf, sizeof PathFullBuf, &LenPathFull)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_config_read_fullpath(
+		PathFullBuf, LenPathFull,
+		oKeyVal)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
 }
 
 int aux_config_key_ex_interpret_relative_current_executable(

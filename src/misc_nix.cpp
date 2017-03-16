@@ -210,53 +210,6 @@ clean:
 	return r;
 }
 
-int gs_nix_path_append_abs_rel(
-	const char *AbsoluteBuf, size_t LenAbsolute,
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
-{
-	int r = 0;
-
-	size_t OutputPathEndOffset = 0;
-
-	size_t AbsoluteIsAbsolute = 0;
-	size_t RelativeIsAbsolute = 0;
-
-	if (!!(r = gs_nix_path_is_absolute(AbsoluteBuf, LenAbsolute, &AbsoluteIsAbsolute)))
-		goto clean;
-
-	if (!!(r = gs_nix_path_is_absolute(RelativeBuf, LenRelative, &RelativeIsAbsolute)))
-		goto clean;
-
-	if ((! AbsoluteIsAbsolute) || (RelativeIsAbsolute))
-		{ r = 1; goto clean; }
-
-	/* prep output buffer with absolute path */
-
-	if (!!(r = gs_buf_copy_zero_terminate(
-		AbsoluteBuf, LenAbsolute,
-		ioOutputPathBuf, OutputPathBufSize, &OutputPathEndOffset)))
-	{
-		goto clean;
-	}
-
-	/* append */
-
-	if (!!(r = gs_nix_path_append_midslashing_inplace(
-		RelativeBuf, LenRelative,
-		ioOutputPathBuf, OutputPathBufSize, OutputPathEndOffset, &OutputPathEndOffset)))
-	{
-		goto clean;
-	}
-
-	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
-		goto clean;
-
-clean:
-
-	return r;
-}
-
 int gs_nix_absolute_path_directory(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
@@ -633,4 +586,51 @@ void gs_debug_break() {
 
 int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
 	return gs_nix_path_is_absolute(PathBuf, LenPath, oIsAbsolute);
+}
+
+int gs_path_append_abs_rel(
+	const char *AbsoluteBuf, size_t LenAbsolute,
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	size_t OutputPathEndOffset = 0;
+
+	size_t AbsoluteIsAbsolute = 0;
+	size_t RelativeIsAbsolute = 0;
+
+	if (!!(r = gs_nix_path_is_absolute(AbsoluteBuf, LenAbsolute, &AbsoluteIsAbsolute)))
+		goto clean;
+
+	if (!!(r = gs_nix_path_is_absolute(RelativeBuf, LenRelative, &RelativeIsAbsolute)))
+		goto clean;
+
+	if ((! AbsoluteIsAbsolute) || (RelativeIsAbsolute))
+	{ r = 1; goto clean; }
+
+	/* prep output buffer with absolute path */
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		AbsoluteBuf, LenAbsolute,
+		ioOutputPathBuf, OutputPathBufSize, &OutputPathEndOffset)))
+	{
+		goto clean;
+	}
+
+	/* append */
+
+	if (!!(r = gs_nix_path_append_midslashing_inplace(
+		RelativeBuf, LenRelative,
+		ioOutputPathBuf, OutputPathBufSize, OutputPathEndOffset, &OutputPathEndOffset)))
+	{
+		goto clean;
+	}
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		goto clean;
+
+clean:
+
+	return r;
 }

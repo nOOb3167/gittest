@@ -90,4 +90,9 @@ void gs_debug_break();
 
 int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute);
 
+int gs_path_append_abs_rel(
+	const char *AbsoluteBuf, size_t LenAbsolute,
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
+
 #endif /* _GITTEST_MISC_H_ */

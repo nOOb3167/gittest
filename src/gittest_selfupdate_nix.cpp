@@ -220,11 +220,29 @@ clean:
 	return r;
 }
 
+int gs_file_exist(
+	const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsExist)
+{
+	/* errors count as non-existence */
+	int errAccess = gs_nix_access_wrapper(FileNameBuf, LenFileName, F_OK);
+
+	if (oIsExist)
+		*oIsExist = !errAccess;
+
+	return 0;
+}
+
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
 	int r = 0;
 
-	if (!!(r = gs_nix_access_wrapper(FileNameBuf, LenFileName, F_OK)))
+	size_t IsExist = 0;
+
+	if (!!(r = gs_file_exist(FileNameBuf, LenFileName, &IsExist)))
 		goto clean;
+
+	if (!IsExist)
+		{ r = 1; goto clean; }
 
 clean:
 

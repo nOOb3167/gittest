@@ -110,3 +110,44 @@ void gs_debug_break() {
 int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
 	return gs_win_path_is_absolute(PathBuf, LenPath, oIsAbsolute);
 }
+
+int gs_path_append_abs_rel(
+	const char *AbsoluteBuf, size_t LenAbsolute,
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	size_t LenOutputPathTmp = 0;
+
+	/** maximum length for PathIsRelative and PathAppend **/
+	if (LenAbsolute > MAX_PATH || LenRelative > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	if (PathIsRelative(AbsoluteBuf))
+		GS_GOTO_CLEAN();
+
+	if (! PathIsRelative(RelativeBuf))
+		GS_GOTO_CLEAN();
+
+	/* prep output buffer with absolute path */
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		AbsoluteBuf, LenAbsolute,
+		ioOutputPathBuf, OutputPathBufSize, &LenOutputPathTmp)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	/* append */
+
+	if (! PathAppend(ioOutputPathBuf, RelativeBuf))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}

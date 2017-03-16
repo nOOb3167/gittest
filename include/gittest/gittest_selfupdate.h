@@ -76,6 +76,11 @@ int gs_build_path_interpret_relative_current_executable_tr2_(
 
 /* to be implemented platform neutrally */
 
+int aux_config_read_builtin(std::map<std::string, std::string> *oKeyVal);
+int aux_config_read_builtin_or_relative_current_executable(
+	const char *ExpectedLocationBuf, size_t LenExpectedLocation,
+	const char *ExpectedNameBuf, size_t LenExpectedName,
+	std::map<std::string, std::string> *oKeyVal);
 int aux_config_read_interpret_relative_current_executable(
 	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
 int aux_config_key_ex_interpret_relative_current_executable(
@@ -102,6 +107,10 @@ int aux_selfupdate_main_mode_main();
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
 
 /* to be implemented per platform */
+
+int gs_file_exist(
+	const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsExist);
 
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
 

@@ -160,47 +160,6 @@ clean:
 	return r;
 }
 
-int gs_win_path_append_abs_rel(
-	const char *AbsoluteBuf, size_t LenAbsolute,
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
-{
-	int r = 0;
-
-	size_t LenOutputPathTmp = 0;
-
-	/** maximum length for PathIsRelative and PathAppend **/
-	if (LenAbsolute > MAX_PATH || LenRelative > MAX_PATH)
-		GS_ERR_CLEAN(1);
-
-	if (PathIsRelative(AbsoluteBuf))
-		GS_GOTO_CLEAN();
-
-	if (! PathIsRelative(RelativeBuf))
-		GS_GOTO_CLEAN();
-
-	/* prep output buffer with absolute path */
-
-	if (!!(r = gs_buf_copy_zero_terminate(
-		AbsoluteBuf, LenAbsolute,
-		ioOutputPathBuf, OutputPathBufSize, &LenOutputPathTmp)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	/* append */
-
-	if (! PathAppend(ioOutputPathBuf, RelativeBuf))
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
 int gs_win_path_canonicalize(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
@@ -243,6 +202,29 @@ int gs_win_path_directory(
 
 	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
 		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_file_exist(
+	const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsExist)
+{
+	int r = 0;
+
+	int IsExist = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	/* https://blogs.msdn.microsoft.com/oldnewthing/20071023-00/?p=24713/ */
+	/* INVALID_FILE_ATTRIBUTES if file does not exist, apparently */
+	IsExist = !(INVALID_FILE_ATTRIBUTES == GetFileAttributes(FileNameBuf));
+
+	if (oIsExist)
+		*oIsExist = IsExist;
 
 clean:
 
@@ -328,7 +310,7 @@ int gs_build_current_executable_relative_filename(
 
 	/* ensure relative and append */
 
-	if (!!(r = gs_win_path_append_abs_rel(
+	if (!!(r = gs_path_append_abs_rel(
 		PathCurrentExecutableDirBuf, LenPathCurrentExecutableDir,
 		RelativeBuf, LenRelative,
 		PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))

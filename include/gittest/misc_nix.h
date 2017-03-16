@@ -19,11 +19,6 @@ int gs_nix_path_append_midslashing_inplace(
 	const char *ToAddBuf, size_t LenToAdd,
 	char *DataStart, size_t DataLength, size_t OffsetOnePastEnd, size_t *OffsetOnePastEndNew);
 
-int gs_nix_path_append_abs_rel(
-	const char *AbsoluteBuf, size_t LenAbsolute,
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
-
 int gs_nix_absolute_path_directory(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
