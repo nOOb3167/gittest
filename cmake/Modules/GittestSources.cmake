@@ -140,8 +140,15 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
     gittest_repo_setup
   )
 
-  # target compile definitions
+  # explicit suffix definition for executables (prefer .exe even on nix)
   
+  SET_PROPERTY(TARGET gittest_serv       PROPERTY SUFFIX ".exe")
+  SET_PROPERTY(TARGET gittest_clnt       PROPERTY SUFFIX ".exe")
+  SET_PROPERTY(TARGET gittest_clnt_clone PROPERTY SUFFIX ".exe")
+  SET_PROPERTY(TARGET gittest_repo_setup PROPERTY SUFFIX ".exe")
+  
+  # target compile definitions
+
   FILE(READ "${CMAKE_SOURCE_DIR}/data/gittest_config_serv.conf" GS_CMAKE_CONFIG_BUILTIN_HEXSTRING HEX)
   
   SET(GITTEST_DEFINITIONS
