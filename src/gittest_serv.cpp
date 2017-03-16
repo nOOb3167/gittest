@@ -15,12 +15,6 @@ int startserv() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	uint32_t ConfServPort = 0;
-	std::string ConfRefNameSelfUpdate;
-	std::string ConfRefNameMain;
-	std::string ConfRepoMainOpenPath;
-	std::string ConfRepoSelfUpdateOpenPath;
-
 	sp<FullConnectionClient> FcsServ;
 
 	log_guard_t log(GS_LOG_GET("serv"));
