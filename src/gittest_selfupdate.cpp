@@ -17,6 +17,27 @@
 
 #include <gittest/gittest_selfupdate.h>
 
+int aux_config_read_default_everything(std::map<std::string, std::string> *oKeyVal) {
+	int r = 0;
+
+	const char LocBuf[] = GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_PATHNAME;
+	size_t LenLoc = (sizeof(GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_PATHNAME)) - 1;
+	const char NameBuf[] = GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_FILENAME;
+	size_t LenName = (sizeof(GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_FILENAME)) - 1;
+
+	if (!!(r = aux_config_read_builtin_or_relative_current_executable(
+		LocBuf, LenLoc,
+		NameBuf, LenName,
+		oKeyVal)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
 int aux_config_read_builtin(std::map<std::string, std::string> *oKeyVal) {
 	int r = 0;
 
@@ -86,57 +107,6 @@ int aux_config_read_builtin_or_relative_current_executable(
 
 		if (!!(r = aux_config_read_builtin(oKeyVal)))
 			GS_GOTO_CLEAN();
-	}
-
-clean:
-
-	return r;
-}
-
-int aux_config_read_interpret_relative_current_executable(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal)
-{
-	// FIXME: bad API, replace
-
-	int r = 0;
-
-	size_t string_len_arbitrary_max = 2048;
-
-	size_t LenExpectedLocation = 0;
-	size_t LenExpectedName = 0;
-
-	size_t LenPath = 0;
-	char PathBuf[512];
-
-	size_t LenPathFull = 0;
-	char PathFullBuf[512];
-
-	if (!!(r = gs_buf_strnlen(ExpectedLocation, string_len_arbitrary_max, &LenExpectedLocation)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_buf_strnlen(ExpectedName, string_len_arbitrary_max, &LenExpectedName)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_build_path_interpret_relative_current_executable(
-		ExpectedLocation, LenExpectedLocation,
-		PathBuf, sizeof PathBuf, &LenPath)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = gs_path_append_abs_rel(
-		PathBuf, LenPath,
-		ExpectedName, LenExpectedName,
-		PathFullBuf, sizeof PathFullBuf, &LenPathFull)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = aux_config_read_fullpath(
-		PathFullBuf, LenPathFull,
-		oKeyVal)))
-	{
-		GS_GOTO_CLEAN();
 	}
 
 clean:
@@ -338,7 +308,7 @@ int aux_selfupdate_main_mode_main() {
 
 	sp<FullConnectionClient> FcsClnt;
 
-	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_default_everything(&KeyVal)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))

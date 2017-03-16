@@ -19,7 +19,7 @@ int startserv() {
 
 	log_guard_t log(GS_LOG_GET("serv"));
 
-	if (!!(r = aux_config_read_interpret_relative_current_executable("../data/", "gittest_config_serv.conf", &KeyVal)))
+	if (!!(r = aux_config_read_default_everything(&KeyVal)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))

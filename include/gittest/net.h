@@ -620,6 +620,4 @@ int aux_full_create_connection_client(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<FullConnectionClient> *oConnectionClient);
 
-int stuff2();
-
 #endif /* _GITTEST_NET_H_ */

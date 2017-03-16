@@ -107,6 +107,5 @@ int stuff(
 	const char *RefName, size_t LenRefName,
 	const char *RepoOpenPath, size_t LenRepoOpenPath,
 	const char *RepoTOpenPath, size_t LenRepoTOpenPath);
-int gittest_main(int argc, char **argv);
 
 #endif /* _GITTEST_GITTEST_H_ */

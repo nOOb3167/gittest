@@ -16,8 +16,8 @@
 #define GS_STR_PARENT_EXPECTED_EXTENSION ".exe"
 #define GS_STR_PARENT_EXTRA_SUFFIX "_helper"
 
-/* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
-#define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
+#define GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_PATHNAME "../data"
+#define GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_FILENAME "gittest_config_serv.conf"
 
 #define GS_MAGIC_CRASH_EXPR() { int *X = NULL; *X = 1234; }
 
@@ -76,13 +76,12 @@ int gs_build_path_interpret_relative_current_executable_tr2_(
 
 /* to be implemented platform neutrally */
 
+int aux_config_read_default_everything(std::map<std::string, std::string> *oKeyVal);
 int aux_config_read_builtin(std::map<std::string, std::string> *oKeyVal);
 int aux_config_read_builtin_or_relative_current_executable(
 	const char *ExpectedLocationBuf, size_t LenExpectedLocation,
 	const char *ExpectedNameBuf, size_t LenExpectedName,
 	std::map<std::string, std::string> *oKeyVal);
-int aux_config_read_interpret_relative_current_executable(
-	const char *ExpectedLocation, const char *ExpectedName, std::map<std::string, std::string> *oKeyVal);
 int aux_config_key_ex_interpret_relative_current_executable(
 	const confmap_t &KeyVal, const char *Key, std::string *oVal);
 int aux_config_get_common_vars(

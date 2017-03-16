@@ -33,6 +33,9 @@
 // https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
 //  CREATE_NO_WINDOW - for no console handle
 
+/* for use in GetTempFileName. GetTempFileName uses only 'up to the first three' chars */
+#define GS_STR_TEMP_FILE_PREFIX_STRING "gst"
+
 #define GS_STR_CHILD_CONSTANT "CHILD"
 #define GS_CHILD_PARENT_TIMEOUT_MS 5000
 
