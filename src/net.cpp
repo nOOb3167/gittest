@@ -58,10 +58,6 @@ PacketUniqueWithOffset & PacketUniqueWithOffset::operator=(PacketUniqueWithOffse
 	return *this;
 }
 
-GsHostSurrogate::GsHostSurrogate(ENetHost *host)
-	: mHost(host)
-{}
-
 GsConnectionSurrogate::GsConnectionSurrogate(ENetHost *host, ENetPeer *peer, uint32_t IsPrincipalClientConnection)
 	: mIsValid(1),
 	mIsPrincipalClientConnection(IsPrincipalClientConnection),
@@ -858,9 +854,6 @@ int serv_state_crank(
 			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
 			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
 
-			if (!!(r = gs_strided_for_oid_vec_cpp(&Treelist, &TreelistStrided)))
-				GS_GOTO_CLEAN();
-
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 				GS_GOTO_CLEAN();
 
@@ -871,6 +864,9 @@ int serv_state_crank(
 				GS_GOTO_CLEAN();
 
 			GS_LOG(I, PF, "listing trees [num=%d]", (int)Treelist.size());
+
+			if (!!(r = gs_strided_for_oid_vec_cpp(&Treelist, &TreelistStrided)))
+				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_treelist(TreelistStrided, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
@@ -2381,21 +2377,21 @@ int aux_serv_serv_connect_immediately(
 
 	ENetAddress AddressForServAux = {};
 	ENetHost *server = NULL;
-	sp<GsHostSurrogate> HostSurrogate;
+	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate);
 
-	if (!!(r = aux_enet_host_server_create_addr_extra_for_serv_aux(ServPort, &server, &AddressForServAux)))
+	if (!!(r = aux_enet_host_server_create_addr_extra_for_serv_aux(ServPort, &HostSurrogate->mHost, &AddressForServAux)))
 		GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
-		*ioHostSurrogate = sp<GsHostSurrogate>(new GsHostSurrogate(server));
+		*ioHostSurrogate = HostSurrogate;
 
 	if (oAddressForServAux)
 		*oAddressForServAux = AddressForServAux;
 
 clean:
 	if (!!r) {
-		if (server)
-			enet_host_destroy(server);
+		if (HostSurrogate->mHost)
+			enet_host_destroy(HostSurrogate->mHost);
 	}
 
 	return r;
@@ -2710,7 +2706,8 @@ int clnt_serv_thread_func(
 
 	uint32_t WantReconnect = false;
 
-	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate((*ioConnectionSurrogate)->mHost));
+	sp<GsHostSurrogate> HostSurrogate(new GsHostSurrogate());
+	HostSurrogate->mHost = (*ioConnectionSurrogate)->mHost;
 
 	if (!!(r = aux_serv_thread_func(WorkerDataRecv, WorkerDataSend, &HostSurrogate, ioConnectionSurrogateMap)))
 		GS_ERR_NO_CLEAN(1);
@@ -3378,9 +3375,10 @@ int clnt_state_need_bloblist_setup(const sp<ClntState> &State,
 	if (!!(r = aux_make_packet_unique_with_offset(&PacketTree, OffsetSizeBufferTree, OffsetObjectBufferTree, TmpTreePacketWithOffset.get())))
 		GS_GOTO_CLEAN();
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE, a,
-		{ a.mMissingBloblist = MissingBloblist;
-		  a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
+	// FIXME: obsolete code
+	//GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State.get(), GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE, a,
+	//	{ a.mMissingBloblist = MissingBloblist;
+	//	  a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
 
 clean:
 
@@ -3398,7 +3396,9 @@ int clnt_state_need_written_blob_and_tree_setup(const sp<ClntState> &State,
 	git_repository * const RepositoryT = *State->mRepositoryT;
 	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
 	const sp<std::vector<git_oid> > &MissingBloblist = State->mMissingBloblist;
-	const sp<PacketUniqueWithOffset> &PacketTreeWithOffset = State->mTreePacketWithOffset;
+	//const sp<PacketUniqueWithOffset> &PacketTreeWithOffset = State->mTreePacketWithOffset;
+	// FIXME: obsolete code
+	const sp<PacketUniqueWithOffset> &PacketTreeWithOffset = NULL;
 	const gs_packet_unique_t &PacketTree = PacketTreeWithOffset->mPacket;
 	const uint32_t &OffsetSizeBufferTree = PacketTreeWithOffset->mOffsetSize;
 	const uint32_t &OffsetObjectBufferTree = PacketTreeWithOffset->mOffsetObject;
@@ -3605,6 +3605,23 @@ clean:
 	return r;
 }
 
+//FIXME: shim decl
+struct GsExtraHostCreate;
+//FIXME: shim decl
+struct GsFullConnectionClient
+{
+	sp<std::thread> ThreadNtwk;
+	sp<std::thread> ThreadWorker;
+	sp<GsExtraHostCreate> ThreadNtwkExtraHostCreate;
+};
+//FIXME: shim decl
+int gs_net_full_create_connection_client(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	sp<GsFullConnectionClient> *oConnectionClient);
+
 int aux_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
@@ -3612,42 +3629,58 @@ int aux_full_create_connection_client(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<FullConnectionClient> *oConnectionClient)
 {
-	int r = 0;
-
-	sp<FullConnectionClient> ConnectionClient;
-
-	{
-		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
-		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> AuxData(new ServAuxData);
-
-		sp<std::thread> ClientWorkerThread(new std::thread(
-			clnt_worker_thread_func_f,
-			RefNameMainBuf, LenRefNameMain,
-			RepoMainPathBuf, LenRepoMainPath,
-			AuxData,
-			WorkerDataRecv,
-			WorkerDataSend));
-
-		sp<std::thread> ClientAuxThread(new std::thread(
-			clnt_serv_aux_thread_func_f,
-			AuxData));
-
-		sp<std::thread> ClientThread(new std::thread(
-			clnt_thread_func_f,
-			WorkerDataRecv,
-			WorkerDataSend,
-			AuxData,
-			ServPort,
-			ServHostNameBuf, LenServHostName));
-
-		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientWorkerThread, ClientAuxThread, ClientThread));
-	}
-
-	if (oConnectionClient)
-		*oConnectionClient = ConnectionClient;
-
-clean:
-
-	return r;
+	sp<GsFullConnectionClient> shim;
+	return gs_net_full_create_connection_client(
+		ServPort,
+		ServHostNameBuf, LenServHostName,
+		RefNameMainBuf, LenRefNameMain,
+		RepoMainPathBuf, LenRepoMainPath,
+		&shim);
 }
+
+//int aux_full_create_connection_client(
+//	uint32_t ServPort,
+//	const char *ServHostNameBuf, size_t LenServHostName,
+//	const char *RefNameMainBuf, size_t LenRefNameMain,
+//	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+//	sp<FullConnectionClient> *oConnectionClient)
+//{
+//	int r = 0;
+//
+//	sp<FullConnectionClient> ConnectionClient;
+//
+//	{
+//		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
+//		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
+//		sp<ServAuxData> AuxData(new ServAuxData);
+//
+//		sp<std::thread> ClientWorkerThread(new std::thread(
+//			clnt_worker_thread_func_f,
+//			RefNameMainBuf, LenRefNameMain,
+//			RepoMainPathBuf, LenRepoMainPath,
+//			AuxData,
+//			WorkerDataRecv,
+//			WorkerDataSend));
+//
+//		sp<std::thread> ClientAuxThread(new std::thread(
+//			clnt_serv_aux_thread_func_f,
+//			AuxData));
+//
+//		sp<std::thread> ClientThread(new std::thread(
+//			clnt_thread_func_f,
+//			WorkerDataRecv,
+//			WorkerDataSend,
+//			AuxData,
+//			ServPort,
+//			ServHostNameBuf, LenServHostName));
+//
+//		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ClientWorkerThread, ClientAuxThread, ClientThread));
+//	}
+//
+//	if (oConnectionClient)
+//		*oConnectionClient = ConnectionClient;
+//
+//clean:
+//
+//	return r;
+//}

@@ -19,6 +19,8 @@
 #include <gittest/misc.h>
 #include <gittest/frame.h>
 
+struct GsPacketWithOffset;  // FIXME: net2
+
 #define GS_PORT 3756
 
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
@@ -95,11 +97,7 @@ GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;)
 #define GS_BYPART_TRIPWIRE_GsConnectionSurrogateId 0x68347232
 #define GS_BYPART_DATA_INIT_GsConnectionSurrogateId(VARNAME, ID) (VARNAME).m0Id = ID;
 
-class GsHostSurrogate {
-public:
-	GsHostSurrogate(ENetHost *host);
-
-public:
+struct GsHostSurrogate {
 	ENetHost *mHost;
 };
 
@@ -252,7 +250,7 @@ struct ClntState {
 	sp<std::vector<git_oid> > mMissingTreelist;
 
 	sp<std::vector<git_oid> >  mMissingBloblist;
-	sp<PacketUniqueWithOffset> mTreePacketWithOffset;
+	sp<GsPacketWithOffset> mTreePacketWithOffset;
 
 	sp<std::vector<git_oid> > mWrittenBlob;
 	sp<std::vector<git_oid> > mWrittenTree;

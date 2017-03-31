@@ -585,6 +585,10 @@ int gs_log_create_common_logs() {
 	GS_LOG_ADD(gs_log_create_ret("serv_aux"));
 	GS_LOG_ADD(gs_log_create_ret("serv_serv"));
 
+	// net2
+	GS_LOG_ADD(gs_log_create_ret("ntwk_clnt"));
+	GS_LOG_ADD(gs_log_create_ret("work_clnt"));
+
 clean:
 
 	return r;

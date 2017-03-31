@@ -293,12 +293,18 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   SET(GITTEST_NET_HEADERS
     include/gittest/frame.h
     include/gittest/net.h
+    include/gittest/crank.h
   )
   
   SET(GITTEST_NET_SOURCES
     src/frame.cpp
     src/net.cpp
+    src/net2.cpp
+    src/crank.cpp
   )
+  
+  # FIXME: temporary crutch
+  SET_SOURCE_FILES_PROPERTIES(src/net2.cpp PROPERTIES HEADER_FILE_ONLY TRUE)
 
   # gittest_selfupdate
   
