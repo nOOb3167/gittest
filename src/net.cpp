@@ -517,6 +517,7 @@ void aux_get_serv_worker_request_private(ServWorkerRequestData *Request, gs_conn
 		*oId = Request->mId;
 }
 
+// FIXME: dead or soon to be dead code?
 int aux_serv_worker_thread_service_request_blobs(
 	ServAuxData *ServAuxData, ServWorkerData *WorkerDataSend, ServWorkerRequestData *Request,
 	ENetPacket *Packet, uint32_t OffsetSize, git_repository *Repository, const GsFrameType &FrameTypeResponse)

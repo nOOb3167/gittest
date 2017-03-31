@@ -93,3 +93,20 @@ int clnt_state_crank2(
 	ClntState *State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath);
+
+int serv_state_service_request_blobs2(
+	struct GsWorkerData *WorkerDataSend,
+	gs_connection_surrogate_id_t IdForSend,
+	struct GsIntrTokenSurrogate *IntrToken,
+	GsPacket *Packet,
+	uint32_t OffsetSize,
+	git_repository *Repository,
+	const GsFrameType &FrameTypeResponse);
+int serv_state_crank2(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsIntrTokenSurrogate *IntrToken,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath);

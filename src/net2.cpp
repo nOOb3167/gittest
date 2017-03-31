@@ -5,10 +5,15 @@
 #include <gittest/log.h>
 #include <gittest/net.h>
 
-#define GS_EXTRA_HOST_CREATE_CLIENT_MAGIC 0x501C325E 
+#define GS_EXTRA_HOST_CREATE_CLIENT_MAGIC 0x501C325E
 #define GS_EXTRA_WORKER_CLIENT_MAGIC      0x501C325F
 #define GS_STORE_NTWK_CLIENT_MAGIC        0x501C3260
 #define GS_STORE_WORKER_CLIENT_MAGIC      0x501C3261
+
+#define GS_EXTRA_HOST_CREATE_SERVER_MAGIC 0x502C325E
+#define GS_EXTRA_WORKER_SERVER_MAGIC      0x502C325F
+#define GS_STORE_NTWK_SERVER_MAGIC        0x502C3260
+#define GS_STORE_WORKER_SERVER_MAGIC      0x502C3261
 
 #define GS_TIMEOUT_1SEC 1000
 
@@ -130,10 +135,19 @@ struct GsExtraHostCreateClient
 	const char *mServHostNameBuf; size_t mLenServHostName;
 };
 
+struct GsExtraHostCreateServer
+{
+	struct GsExtraHostCreate base;
+
+	uint32_t mServPort;
+};
+
 struct GsExtraWorker
 {
 	uint32_t magic;
 
+	// FIXME: cb_create_t should be a freestanding function - can't have
+	//   derived struct specifics like gs_connection_surrogate_id..
 	int(*cb_create_t)(
 		struct GsExtraWorker **oExtraWorker,
 		gs_connection_surrogate_id_t Id);
@@ -147,12 +161,24 @@ struct GsExtraWorkerClient
 	gs_connection_surrogate_id_t mId;
 };
 
+struct GsExtraWorkerServer
+{
+	struct GsExtraWorker base;
+};
+
 struct GsStoreNtwk
 {
 	uint32_t magic;
 };
 
 struct GsStoreNtwkClient
+{
+	struct GsStoreNtwk base;
+
+	struct GsIntrTokenSurrogate mIntrTokenSurrogate;
+};
+
+struct GsStoreNtwkServer
 {
 	struct GsStoreNtwk base;
 
@@ -180,6 +206,18 @@ struct GsStoreWorkerClient
 	struct GsIntrTokenSurrogate mIntrToken;
 
 	sp<ClntState> mClntState;
+};
+
+struct GsStoreWorkerServer
+{
+	struct GsStoreWorker base;
+
+	const char *mRefNameMainBuf; size_t mLenRefNameMain;
+	const char *mRefNameSelfUpdateBuf; size_t mLenRefNameSelfUpdate;
+	const char *mRepoMainPathBuf; size_t mLenRepoMainPath;
+	const char *mRepoSelfUpdatePathBuf; size_t mLenRepoSelfUpdatePath;
+
+	struct GsIntrTokenSurrogate mIntrToken;
 };
 
 struct GsFullConnection
@@ -242,6 +280,17 @@ int gs_extra_worker_cb_create_t_client(
 	struct GsExtraWorker **oExtraWorker,
 	gs_connection_surrogate_id_t Id);
 int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker);
+
+int gs_extra_host_create_cb_create_t_server(
+	GsExtraHostCreate *ExtraHostCreate,
+	GsHostSurrogate *ioHostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	GsExtraWorker **oExtraWorker);
+
+int gs_extra_worker_cb_create_t_server(
+	struct GsExtraWorker **oExtraWorker,
+	gs_connection_surrogate_id_t Id);
+int gs_extra_worker_cb_destroy_t_server(struct GsExtraWorker *ExtraWorker);
 
 int gs_ntwk_reconnect_expend(
 	GsExtraHostCreate *ExtraHostCreate,
@@ -319,6 +368,12 @@ int gs_net_full_create_connection_client(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<GsFullConnection> *oConnectionClient);
+
+int gs_store_worker_cb_crank_t_server(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker,
+	struct GsExtraWorker *ExtraWorker);
 
 int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
@@ -681,6 +736,81 @@ int gs_extra_worker_cb_create_t_client(
 int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker)
 {
 	if (ExtraWorker->magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		return -1;
+
+	delete ExtraWorker;
+
+	return 0;
+}
+
+int gs_extra_host_create_cb_create_t_server(
+	GsExtraHostCreate *ExtraHostCreate,
+	GsHostSurrogate *ioHostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	GsExtraWorker **oExtraWorker)
+{
+	int r = 0;
+
+	struct GsExtraHostCreateServer *pThis = (struct GsExtraHostCreateServer *) ExtraHostCreate;
+
+	ENetAddress addr = {};
+	ENetIntrHostCreateFlags FlagsHost = {};
+	ENetHost *host = NULL;
+
+	GsExtraWorker *ExtraWorker = NULL;
+
+	int errService = 0;
+
+	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_SERVER_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	/* create host */
+
+	/* NOTE: ENET_HOST_ANY (0) binds to all interfaces but will also cause host->address to have 0 as host */
+	addr.host = ENET_HOST_ANY;
+	addr.port = pThis->mServPort;
+
+	// FIXME: 128 peerCount, 1 channelLimit
+	if (!(host = enet_host_create_interruptible(&addr, 128, 1, 0, 0, &FlagsHost)))
+		GS_ERR_CLEAN(1);
+
+	// FIXME: dummy zero Id
+	if (!!(r = gs_extra_worker_cb_create_t_client(&ExtraWorker, 0)))
+		GS_GOTO_CLEAN();
+
+	if (ioHostSurrogate)
+		ioHostSurrogate->mHost = host;
+
+	if (oExtraWorker)
+		*oExtraWorker = ExtraWorker;
+
+clean:
+
+	return r;
+}
+
+/** @param Id ignored - refactor (remove struct specific params aka make function freestanding)
+*/
+int gs_extra_worker_cb_create_t_server(
+	struct GsExtraWorker **oExtraWorker,
+	gs_connection_surrogate_id_t Id)
+{
+	struct GsExtraWorkerServer * pThis = new GsExtraWorkerServer();
+
+	pThis->base.magic = GS_EXTRA_WORKER_SERVER_MAGIC;
+
+	pThis->base.cb_create_t = gs_extra_worker_cb_create_t_server;
+	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_server;
+
+	if (oExtraWorker)
+		*oExtraWorker = &pThis->base;
+
+	return 0;
+}
+
+int gs_extra_worker_cb_destroy_t_server(struct GsExtraWorker *ExtraWorker)
+{
+	if (ExtraWorker->magic != GS_EXTRA_WORKER_SERVER_MAGIC)
 		return -1;
 
 	delete ExtraWorker;
@@ -1349,6 +1479,110 @@ int gs_net_full_create_connection(
 
 	if (oConnection)
 		*oConnection = Connection;
+
+clean:
+
+	return r;
+}
+
+int gs_net_full_create_connection_server(
+	uint32_t ServPort,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	sp<GsFullConnection> *oConnectionServer)
+{
+	int r = 0;
+
+	sp<GsFullConnection> ConnectionServer;
+
+	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
+	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
+
+	GsExtraHostCreateServer *ExtraHostCreate = new GsExtraHostCreateServer();
+	GsStoreNtwkServer       *StoreNtwk       = new GsStoreNtwkServer();
+	GsStoreWorkerServer     *StoreWorker     = new GsStoreWorkerServer();
+
+	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
+	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
+	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
+
+	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
+		GS_GOTO_CLEAN();
+
+	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
+		GS_ERR_CLEAN(1);
+
+	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SERVER_MAGIC;
+	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_server;
+	ExtraHostCreate->mServPort = ServPort;
+
+	StoreNtwk->base.magic = GS_STORE_NTWK_SERVER_MAGIC;
+	StoreNtwk->mIntrTokenSurrogate = IntrTokenSurrogate;
+
+	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
+	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
+	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
+	StoreWorker->mLenRefNameMain = LenRefNameMain;
+	StoreWorker->mRefNameSelfUpdateBuf = RefNameSelfUpdateBuf;
+	StoreWorker->mLenRefNameSelfUpdate = LenRefNameSelfUpdate;
+	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
+	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
+	StoreWorker->mRepoSelfUpdatePathBuf = RepoSelfUpdatePathBuf;
+	StoreWorker->mLenRepoSelfUpdatePath = LenRepoSelfUpdatePath;
+	StoreWorker->mIntrToken = IntrTokenSurrogate;
+
+	if (!!(r = gs_net_full_create_connection(
+		ServPort,
+		pExtraHostCreate,
+		pStoreNtwk,
+		pStoreWorker,
+		&ConnectionServer)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (oConnectionServer)
+		*oConnectionServer = ConnectionServer;
+
+clean:
+
+	return r;
+}
+
+int gs_store_worker_cb_crank_t_server(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker,
+	struct GsExtraWorker *ExtraWorker)
+{
+	int r = 0;
+
+	GsStoreWorkerServer *pStoreWorker = (GsStoreWorkerServer *) StoreWorker;
+	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) ExtraWorker;
+
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_SERVER_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	while (true) {
+
+		if (!!(r = serv_state_crank2(
+			WorkerDataRecv,
+			WorkerDataSend,
+			&pStoreWorker->mIntrToken,
+			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
+			pStoreWorker->mRefNameSelfUpdateBuf, pStoreWorker->mLenRefNameSelfUpdate,
+			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath,
+			pStoreWorker->mRepoSelfUpdatePathBuf, pStoreWorker->mLenRepoSelfUpdatePath)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	}
 
 clean:
 
