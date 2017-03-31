@@ -3608,7 +3608,7 @@ clean:
 //FIXME: shim decl
 struct GsExtraHostCreate;
 //FIXME: shim decl
-struct GsFullConnectionClient
+struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
@@ -3620,7 +3620,7 @@ int gs_net_full_create_connection_client(
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnectionClient> *oConnectionClient);
+	sp<GsFullConnection> *oConnectionClient);
 
 int aux_full_create_connection_client(
 	uint32_t ServPort,
@@ -3629,7 +3629,7 @@ int aux_full_create_connection_client(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	sp<FullConnectionClient> *oConnectionClient)
 {
-	sp<GsFullConnectionClient> shim;
+	sp<GsFullConnection> shim;
 	return gs_net_full_create_connection_client(
 		ServPort,
 		ServHostNameBuf, LenServHostName,

@@ -325,6 +325,11 @@ int aux_selfupdate_main_mode_main() {
 		GS_GOTO_CLEAN();
 	}
 
+	// FIXME: endless loop
+
+	for (;;)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
 clean:
 
 	return r;

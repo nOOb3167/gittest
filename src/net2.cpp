@@ -182,7 +182,7 @@ struct GsStoreWorkerClient
 	sp<ClntState> mClntState;
 };
 
-struct GsFullConnectionClient
+struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
@@ -306,12 +306,19 @@ int gs_worker_thread_func(
 	sp<GsStoreWorker> StoreWorker,
 	const char *optExtraThreadName);
 
+int gs_net_full_create_connection(
+	uint32_t ServPort,
+	sp<GsExtraHostCreate> pExtraHostCreate,
+	sp<GsStoreNtwk>       pStoreNtwk,
+	sp<GsStoreWorker>     pStoreWorker,
+	sp<GsFullConnection> *oConnection);
+
 int gs_net_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnectionClient> *oConnectionClient);
+	sp<GsFullConnection> *oConnectionClient);
 
 int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
@@ -1291,35 +1298,22 @@ int gs_worker_thread_func(
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
-int gs_net_full_create_connection_client(
+int gs_net_full_create_connection(
 	uint32_t ServPort,
-	const char *ServHostNameBuf, size_t LenServHostName,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnectionClient> *oConnectionClient)
+	sp<GsExtraHostCreate> pExtraHostCreate,
+	sp<GsStoreNtwk>       pStoreNtwk,
+	sp<GsStoreWorker>     pStoreWorker,
+	sp<GsFullConnection> *oConnection)
 {
 	int r = 0;
 
-	sp<GsFullConnectionClient> ConnectionClient;
+	sp<GsFullConnection> Connection;
 
 	GsWorkerData *rawWorkerDataRecv = NULL;
 	GsWorkerData *rawWorkerDataSend = NULL;
 
 	sp<GsWorkerData> WorkerDataRecv;
 	sp<GsWorkerData> WorkerDataSend;
-
-	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
-	GsIntrTokenSurrogate IntrTokenSurrogate = {};
-
-	sp<ClntState> ClntState(new ClntState);
-
-	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
-	GsStoreNtwkClient *StoreNtwk = new GsStoreNtwkClient();
-	GsStoreWorkerClient *StoreWorker = new GsStoreWorkerClient();
-
-	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
-	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
-	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
 
 	sp<std::thread> ClientWorkerThread;
 	sp<std::thread> ClientNtwkThread;
@@ -1332,6 +1326,58 @@ int gs_net_full_create_connection_client(
 
 	GS_SP_SET_RAW_NULLING(WorkerDataRecv, rawWorkerDataRecv, GsWorkerData);
 	GS_SP_SET_RAW_NULLING(WorkerDataSend, rawWorkerDataSend, GsWorkerData);
+
+	ClientWorkerThread = sp<std::thread>(new std::thread(
+		gs_worker_thread_func,
+		WorkerDataRecv,
+		WorkerDataSend,
+		pStoreWorker,
+		"clnt"));
+
+	ClientNtwkThread = sp<std::thread>(new std::thread(
+		gs_ntwk_thread_func,
+		WorkerDataRecv,
+		WorkerDataSend,
+		pStoreNtwk,
+		pExtraHostCreate,
+		"clnt"));
+
+	Connection = sp<GsFullConnection>(new GsFullConnection);
+	Connection->ThreadNtwk = ClientNtwkThread;
+	Connection->ThreadWorker = ClientWorkerThread;
+	Connection->ThreadNtwkExtraHostCreate = pExtraHostCreate;
+
+	if (oConnection)
+		*oConnection = Connection;
+
+clean:
+
+	return r;
+}
+
+int gs_net_full_create_connection_client(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	sp<GsFullConnection> *oConnectionClient)
+{
+	int r = 0;
+
+	sp<GsFullConnection> ConnectionClient;
+
+	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
+	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
+
+	sp<ClntState> ClntState(new ClntState);
+
+	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
+	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
+	GsStoreWorkerClient     *StoreWorker     = new GsStoreWorkerClient();
+
+	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
+	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
+	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
@@ -1360,31 +1406,18 @@ int gs_net_full_create_connection_client(
 	StoreWorker->mIntrToken = IntrTokenSurrogate;
 	StoreWorker->mClntState = ClntState;
 
-	ClientWorkerThread = sp<std::thread>(new std::thread(
-		gs_worker_thread_func,
-		WorkerDataRecv,
-		WorkerDataSend,
-		pStoreWorker,
-		"clnt"));
-
-	ClientNtwkThread = sp<std::thread>(new std::thread(
-		gs_ntwk_thread_func,
-		WorkerDataRecv,
-		WorkerDataSend,
-		pStoreNtwk,
+	if (!!(r = gs_net_full_create_connection(
+		ServPort,
 		pExtraHostCreate,
-		"clnt"));
-
-	ConnectionClient = sp<GsFullConnectionClient>(new GsFullConnectionClient);
-	ConnectionClient->ThreadNtwk = ClientNtwkThread;
-	ConnectionClient->ThreadWorker = ClientWorkerThread;
-	ConnectionClient->ThreadNtwkExtraHostCreate = pExtraHostCreate;
+		pStoreNtwk,
+		pStoreWorker,
+		&ConnectionClient)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	if (oConnectionClient)
 		*oConnectionClient = ConnectionClient;
-
-	while (true)
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
 clean:
 
