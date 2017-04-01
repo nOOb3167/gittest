@@ -15,7 +15,7 @@ int startserv() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	sp<FullConnectionClient> FcsServ;
+	sp<GsFullConnection> FcsServ;
 
 	log_guard_t log(GS_LOG_GET("serv"));
 

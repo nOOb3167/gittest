@@ -25,6 +25,9 @@
 #include <gittest/frame.h>
 #include <gittest/gittest_selfupdate.h>
 
+#include <gittest/crank_clnt.h>
+#include <gittest/crank_serv.h>
+
 #include <gittest/net.h>
 
 /*
@@ -3561,82 +3564,81 @@ int aux_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	sp<FullConnectionClient> *oConnectionClient)
+	sp<GsFullConnection> *oConnectionServer)
 {
-	int r = 0;
-
-	sp<FullConnectionClient> ConnectionClient;
-
-	GS_LOG(I, S, "starting server");
-
-	{
-		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
-		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
-		sp<ServAuxData> DataAux(new ServAuxData);
-
-		sp<std::thread> ServerWorkerThread(new std::thread(
-			serv_worker_thread_func_f,
-			RefNameMainBuf, LenRefNameMain,
-			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
-			RepoMainPathBuf, LenRepoMainPath,
-			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
-			DataAux,
-			WorkerDataRecv,
-			WorkerDataSend));
-
-		sp<std::thread> ServerAuxThread(new std::thread(
-			serv_serv_aux_thread_func_f,
-			DataAux));
-
-		sp<std::thread> ServerThread(new std::thread(
-			serv_thread_func_f,
-			WorkerDataRecv,
-			WorkerDataSend,
-			DataAux,
-			ServPort));
-
-		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ServerWorkerThread, ServerAuxThread, ServerThread));
-	}
-
-	if (oConnectionClient)
-		*oConnectionClient = ConnectionClient;
-
-clean:
-
-	return r;
+	return gs_net_full_create_connection_server(
+		ServPort,
+		RefNameMainBuf, LenRefNameMain,
+		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+		RepoMainPathBuf, LenRepoMainPath,
+		RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+		oConnectionServer);
 }
 
-//FIXME: shim decl
-struct GsExtraHostCreate;
-//FIXME: shim decl
-struct GsFullConnection
-{
-	sp<std::thread> ThreadNtwk;
-	sp<std::thread> ThreadWorker;
-	sp<GsExtraHostCreate> ThreadNtwkExtraHostCreate;
-};
-//FIXME: shim decl
-int gs_net_full_create_connection_client(
-	uint32_t ServPort,
-	const char *ServHostNameBuf, size_t LenServHostName,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnection> *oConnectionClient);
+//int aux_full_create_connection_server(
+//	uint32_t ServPort,
+//	const char *RefNameMainBuf, size_t LenRefNameMain,
+//	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+//	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+//	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+//	sp<FullConnectionClient> *oConnectionClient)
+//{
+//	int r = 0;
+//
+//	sp<FullConnectionClient> ConnectionClient;
+//
+//	GS_LOG(I, S, "starting server");
+//
+//	{
+//		sp<ServWorkerData> WorkerDataSend(new ServWorkerData);
+//		sp<ServWorkerData> WorkerDataRecv(new ServWorkerData);
+//		sp<ServAuxData> DataAux(new ServAuxData);
+//
+//		sp<std::thread> ServerWorkerThread(new std::thread(
+//			serv_worker_thread_func_f,
+//			RefNameMainBuf, LenRefNameMain,
+//			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+//			RepoMainPathBuf, LenRepoMainPath,
+//			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+//			DataAux,
+//			WorkerDataRecv,
+//			WorkerDataSend));
+//
+//		sp<std::thread> ServerAuxThread(new std::thread(
+//			serv_serv_aux_thread_func_f,
+//			DataAux));
+//
+//		sp<std::thread> ServerThread(new std::thread(
+//			serv_thread_func_f,
+//			WorkerDataRecv,
+//			WorkerDataSend,
+//			DataAux,
+//			ServPort));
+//
+//		ConnectionClient = sp<FullConnectionClient>(new FullConnectionClient(ServerWorkerThread, ServerAuxThread, ServerThread));
+//	}
+//
+//	if (oConnectionClient)
+//		*oConnectionClient = ConnectionClient;
+//
+//clean:
+//
+//	return r;
+//}
 
 int aux_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<FullConnectionClient> *oConnectionClient)
+	sp<GsFullConnection> *oConnectionClient)
 {
-	sp<GsFullConnection> shim;
 	return gs_net_full_create_connection_client(
 		ServPort,
 		ServHostNameBuf, LenServHostName,
 		RefNameMainBuf, LenRefNameMain,
 		RepoMainPathBuf, LenRepoMainPath,
-		&shim);
+		oConnectionClient);
 }
 
 //int aux_full_create_connection_client(

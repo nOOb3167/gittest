@@ -19,6 +19,7 @@
 #include <gittest/misc.h>
 #include <gittest/frame.h>
 
+struct GsFullConnection;   // FIXME: net2
 struct GsPacketWithOffset;  // FIXME: net2
 
 #define GS_PORT 3756
@@ -610,12 +611,12 @@ int aux_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	sp<FullConnectionClient> *oConnectionClient);
+	sp<GsFullConnection> *oConnectionServer);
 int aux_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<FullConnectionClient> *oConnectionClient);
+	sp<GsFullConnection> *oConnectionClient);
 
 #endif /* _GITTEST_NET_H_ */

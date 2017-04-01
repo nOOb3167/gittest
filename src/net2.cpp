@@ -410,9 +410,6 @@ int gs_ntwk_host_service(
 	Intr.base.cb_last_chance = gs_aux_aux_aux_cb_last_chance_t;
 	Intr.WorkerDataSend = WorkerDataSend;
 
-	if (StoreNtwk->magic != GS_STORE_NTWK_CLIENT_MAGIC)
-		GS_ERR_CLEAN(1);
-
 	while (0 <= (errService = enet_host_service_interruptible(
 		HostSurrogate->mHost,
 		&event,

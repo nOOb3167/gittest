@@ -319,7 +319,7 @@ int gs_net_full_create_connection_server(
 	StoreNtwk->base.magic = GS_STORE_NTWK_SERVER_MAGIC;
 	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
 
-	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
+	StoreWorker->base.magic = GS_STORE_WORKER_SERVER_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;

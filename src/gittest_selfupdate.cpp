@@ -13,6 +13,7 @@
 #include <gittest/misc.h>
 #include <gittest/gittest.h>
 #include <gittest/net.h>
+#include <gittest/net2.h>
 #include <gittest/log.h>
 
 #include <gittest/gittest_selfupdate.h>
@@ -306,7 +307,7 @@ int aux_selfupdate_main_mode_main() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	sp<FullConnectionClient> FcsClnt;
+	sp<GsFullConnection> FcsClnt;
 
 	if (!!(r = aux_config_read_default_everything(&KeyVal)))
 		GS_GOTO_CLEAN();

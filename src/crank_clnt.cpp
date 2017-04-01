@@ -634,7 +634,7 @@ int gs_net_full_create_connection_client(
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;
 	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
-	StoreWorker->mLenRefNameMain = LenRepoMainPath;
+	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
 	StoreWorker->mIntrToken = IntrTokenSurrogate;
 	StoreWorker->mClntState = ClntState;
 
