@@ -710,6 +710,8 @@ int gs_extra_host_create_cb_create_t_client(
 	ENetPeer *peer = NULL;
 	ENetEvent event = {};
 
+	GsConnectionSurrogate ConnectionSurrogate = {};
+
 	gs_connection_surrogate_id_t AssignedId = 0;
 
 	GsExtraWorker *ExtraWorker = NULL;
@@ -751,12 +753,13 @@ int gs_extra_host_create_cb_create_t_client(
 
 	/* register connection and prepare extra worker data */
 
+	ConnectionSurrogate.mHost = host;
+	ConnectionSurrogate.mPeer = peer;
+	ConnectionSurrogate.mIsPrincipalClientConnection = false;
+
 	// FIXME: pretty ugly initialization of GsConnectionSurrogate
 	if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
-		new GsConnectionSurrogate(
-			host,
-			event.peer,
-			false),
+		ConnectionSurrogate,
 		ioConnectionSurrogateMap,
 		&AssignedId)))
 	{

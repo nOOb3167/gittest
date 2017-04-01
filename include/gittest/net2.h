@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <enet/enet.h>
 
-#include <gittest/net.h>
-
 #define GS_EXTRA_HOST_CREATE_CLIENT_MAGIC 0x501C325E
 #define GS_EXTRA_WORKER_CLIENT_MAGIC      0x501C325F
 #define GS_STORE_NTWK_CLIENT_MAGIC        0x501C3260
@@ -19,8 +17,31 @@
 
 #define GS_TIMEOUT_1SEC 1000
 
+struct GsConnectionSurrogate;
+
+typedef uint64_t gs_connection_surrogate_id_t;
+typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
+
+GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;);
+#define GS_BYPART_TRIPWIRE_GsConnectionSurrogateId 0x68347232
+#define GS_BYPART_DATA_INIT_GsConnectionSurrogateId(VARNAME, ID) (VARNAME).m0Id = ID;
+
 struct GsExtraWorker;
 struct GsWorkerData;
+
+struct GsConnectionSurrogateMap {
+	std::atomic<uint64_t> mAtomicCount;
+	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
+
+	GsConnectionSurrogateMap();
+};
+
+struct ClntStateReconnect {
+	uint32_t NumReconnections;
+	uint32_t NumReconnectionsLeft;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
 
 /** manual-init struct
     value struct
@@ -36,6 +57,23 @@ struct ENetIntrNtwk {
 */
 struct GsIntrTokenSurrogate {
 	struct ENetIntrToken *mIntrToken;
+};
+
+/** manual-init struct
+    value struct
+*/
+struct GsHostSurrogate {
+	ENetHost *mHost;
+};
+
+/** manual-init struct
+    value struct
+*/
+struct GsConnectionSurrogate {
+	uint32_t mIsPrincipalClientConnection;
+
+	ENetHost *mHost;
+	ENetPeer *mPeer;
 };
 
 /** manual-init struct
@@ -221,7 +259,7 @@ int gs_ntwk_host_service_wrap_want_reconnect(
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	uint32_t *ioWantReconnect);
 int gs_aux_aux_aux_connection_register_transfer_ownership(
-	GsConnectionSurrogate *ioConnectionSurrogate,
+	GsConnectionSurrogate valConnectionSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t *oAssignedId);
 int gs_aux_aux_aux_cb_last_chance_t(

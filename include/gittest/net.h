@@ -19,6 +19,9 @@
 #include <gittest/misc.h>
 #include <gittest/frame.h>
 
+#include <gittest/net2.h>
+#include <gittest/crank_clnt.h>
+
 struct GsFullConnection;   // FIXME: net2
 struct GsPacketWithOffset;  // FIXME: net2
 
@@ -30,58 +33,11 @@ struct GsPacketWithOffset;  // FIXME: net2
 #define GS_CONNECT_NUMRECONNECT 5
 #define GS_RECEIVE_TIMEOUT_MS 500000
 
-/* is this really neccessary? */
-#define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
-	{ ClntState VARNAME_TMPSTATE;                                                                       \
-      if (!!clnt_state_cpy(& (VARNAME_TMPSTATE), (PTR_VARNAME_CLNTSTATE)))                              \
-        GS_ERR_CLEAN(9998);                                                                             \
-	  { STATEMENTBLOCK }                                                                                \
-	  if (!!clnt_state_code_ensure(& (VARNAME_TMPSTATE), (CODE)))                                       \
-	    GS_ERR_CLEAN(9999);                                                                             \
-	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
-	    GS_ERR_CLEAN(9998); }
-
-#define GS_CLNT_STATE_CODE_DECL2(name) GS_CLNT_STATE_CODE_ ## name
-#define GS_CLNT_STATE_CODE_DECL(name) { # name , GS_CLNT_STATE_CODE_DECL2(name) }
-
-#define GS_CLNT_STATE_CODE_DEFINE_ARRAY(VARNAME)             \
-	GsClntStateCodeEntry VARNAME[] = {                       \
-		GS_CLNT_STATE_CODE_DECL(NEED_REPOSITORY),            \
-		GS_CLNT_STATE_CODE_DECL(NEED_TREE_HEAD),             \
-		GS_CLNT_STATE_CODE_DECL(NEED_TREELIST),              \
-		GS_CLNT_STATE_CODE_DECL(NEED_BLOBLIST),              \
-		GS_CLNT_STATE_CODE_DECL(NEED_WRITTEN_BLOB_AND_TREE), \
-		GS_CLNT_STATE_CODE_DECL(NEED_NOTHING),               \
-	    };                                                       \
-	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
-
-#define GS_CLNT_STATE_CODE_CHECK_ARRAY_NONUCF(VARNAME) \
-	for (size_t i = 0; i < Len ## VARNAME; i++) \
-		if ((VARNAME)[i].mCodeNum != i) \
-			GS_ERR_CLEAN_L(1, E, S, "state code array non-contiguous");
-
-enum gs_clnt_state_code_t {
-	GS_CLNT_STATE_CODE_NEED_REPOSITORY = 0,
-	GS_CLNT_STATE_CODE_NEED_TREE_HEAD = 1,
-	GS_CLNT_STATE_CODE_NEED_TREELIST = 2,
-	GS_CLNT_STATE_CODE_NEED_BLOBLIST = 3,
-	GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE = 4,
-	GS_CLNT_STATE_CODE_NEED_NOTHING = 5,
-	GS_CLNT_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
-};
-
-struct GsClntStateCodeEntry {
-	const char *mCodeName;
-	uint32_t    mCodeNum;
-};
-
 /* GsBypartCbDataOidVector */
 GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
 #define GS_BYPART_TRIPWIRE_OidVector 0x23132358
 #define GS_BYPART_DATA_INIT_OidVector(VARNAME, POIDVEC) (VARNAME).m0OidVec = POIDVEC;
 int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l);
-
-class GsConnectionSurrogate;
 
 struct gs_packet_unique_t_deleter {
 	void operator()(ENetPacket **xpacket) const;
@@ -90,40 +46,6 @@ struct gs_packet_unique_t_deleter {
 typedef ::std::shared_ptr<ENetPacket *> gs_packet_t;
 typedef ::std::unique_ptr<ENetPacket *, gs_packet_unique_t_deleter> gs_packet_unique_t;
 typedef std::pair<ENetHost *, ENetPeer *> gs_host_peer_pair_t;
-
-typedef uint64_t gs_connection_surrogate_id_t;
-typedef ::std::map<gs_connection_surrogate_id_t, sp<GsConnectionSurrogate> > gs_connection_surrogate_map_t;
-
-GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;);
-#define GS_BYPART_TRIPWIRE_GsConnectionSurrogateId 0x68347232
-#define GS_BYPART_DATA_INIT_GsConnectionSurrogateId(VARNAME, ID) (VARNAME).m0Id = ID;
-
-struct GsHostSurrogate {
-	ENetHost *mHost;
-};
-
-class GsConnectionSurrogate {
-public:
-	GsConnectionSurrogate(ENetHost *host, ENetPeer *peer, uint32_t IsPrincipalClientConnection);
-
-	void Invalidate();
-	void IsPrincipalClientConnection();
-
-private:
-	std::atomic<uint32_t> mIsValid;
-	std::atomic<uint32_t> mIsPrincipalClientConnection;
-
-public:
-	ENetHost *mHost;
-	ENetPeer *mPeer;
-};
-
-struct GsConnectionSurrogateMap {
-	std::atomic<uint64_t> mAtomicCount;
-	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
-
-	GsConnectionSurrogateMap();
-};
 
 struct PacketWithOffset {
 	gs_packet_t mPacket;
@@ -235,30 +157,6 @@ private:
 	sp<std::condition_variable> mAuxDataCond;
 };
 
-struct ClntStateReconnect {
-	uint32_t NumReconnections;
-	uint32_t NumReconnectionsLeft;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-struct ClntState {
-	sp<git_repository *> mRepositoryT;
-
-	sp<git_oid> mTreeHeadOid;
-
-	sp<std::vector<git_oid> > mTreelist;
-	sp<std::vector<git_oid> > mMissingTreelist;
-
-	sp<std::vector<git_oid> >  mMissingBloblist;
-	sp<GsPacketWithOffset> mTreePacketWithOffset;
-
-	sp<std::vector<git_oid> > mWrittenBlob;
-	sp<std::vector<git_oid> > mWrittenTree;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
 class FullConnectionClient {
 public:
 	FullConnectionClient(const sp<std::thread> &ThreadWorker, const sp<std::thread> &ThreadAux, const sp<std::thread> &Thread);
@@ -274,19 +172,20 @@ int gs_connection_surrogate_map_clear(
 int gs_connection_surrogate_map_insert_id(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	const sp<GsConnectionSurrogate> &ConnectionSurrogate);
+	const struct GsConnectionSurrogate valConnectionSurrogate);
 int gs_connection_surrogate_map_insert(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	const sp<GsConnectionSurrogate> &ConnectionSurrogate,
+	const GsConnectionSurrogate valConnectionSurrogate,
 	gs_connection_surrogate_id_t *oConnectionSurrogateId);
 int gs_connection_surrogate_map_get_try(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	sp<GsConnectionSurrogate> *oConnectionSurrogate);
+	struct GsConnectionSurrogate *oConnectionSurrogate,
+	uint32_t *oIsPresent);
 int gs_connection_surrogate_map_get(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	sp<GsConnectionSurrogate> *oConnectionSurrogate);
+	struct GsConnectionSurrogate *oConnectionSurrogate);
 int gs_connection_surrogate_map_erase(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId);

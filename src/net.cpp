@@ -36,8 +36,6 @@
 * = Inferred size vs Explicit size for frame vector serialization =
 */
 
-struct ClntState;
-
 void gs_packet_unique_t_deleter::operator()(ENetPacket **xpacket) const {
 		if (xpacket)
 			if (*xpacket)  /* NOTE: reading enet source, enet_packet_destroy can be called with null, but check */
@@ -59,17 +57,6 @@ PacketUniqueWithOffset & PacketUniqueWithOffset::operator=(PacketUniqueWithOffse
 		mOffsetObject = other.mOffsetObject;
 	}
 	return *this;
-}
-
-GsConnectionSurrogate::GsConnectionSurrogate(ENetHost *host, ENetPeer *peer, uint32_t IsPrincipalClientConnection)
-	: mIsValid(1),
-	mIsPrincipalClientConnection(IsPrincipalClientConnection),
-	mHost(host),
-	mPeer(peer)
-{}
-
-void GsConnectionSurrogate::Invalidate() {
-	mIsValid.store(0);
 }
 
 ServWorkerRequestData::ServWorkerRequestData(
@@ -261,12 +248,12 @@ int gs_connection_surrogate_map_clear(
 int gs_connection_surrogate_map_insert_id(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	const sp<GsConnectionSurrogate> &ConnectionSurrogate)
+	const struct GsConnectionSurrogate valConnectionSurrogate)
 {
 	int r = 0;
 
 	if (! ioConnectionSurrogateMap->mConnectionSurrogateMap->insert(
-			gs_connection_surrogate_map_t::value_type(ConnectionSurrogateId, ConnectionSurrogate)).second)
+			gs_connection_surrogate_map_t::value_type(ConnectionSurrogateId, valConnectionSurrogate)).second)
 	{
 		GS_ERR_CLEAN_L(1, E, S, "insertion prevented (is a stale element present, and why?)");
 	}
@@ -278,14 +265,14 @@ clean:
 
 int gs_connection_surrogate_map_insert(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	const sp<GsConnectionSurrogate> &ConnectionSurrogate,
+	const struct GsConnectionSurrogate valConnectionSurrogate,
 	gs_connection_surrogate_id_t *oConnectionSurrogateId)
 {
 	int r = 0;
 
 	gs_connection_surrogate_id_t Id = ioConnectionSurrogateMap->mAtomicCount.fetch_add(1);
 
-	if (!!(r = gs_connection_surrogate_map_insert_id(ioConnectionSurrogateMap, Id, ConnectionSurrogate)))
+	if (!!(r = gs_connection_surrogate_map_insert_id(ioConnectionSurrogateMap, Id, valConnectionSurrogate)))
 		GS_GOTO_CLEAN();
 
 	if (oConnectionSurrogateId)
@@ -299,20 +286,27 @@ clean:
 int gs_connection_surrogate_map_get_try(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	sp<GsConnectionSurrogate> *oConnectionSurrogate)
+	struct GsConnectionSurrogate *oConnectionSurrogate,
+	uint32_t *oIsPresent)
 {
 	int r = 0;
 
-	sp<GsConnectionSurrogate> ConnectionSurrogate;
+	struct GsConnectionSurrogate ConnectionSurrogate = {};
+	uint32_t IsPresent = false;
 
 	gs_connection_surrogate_map_t::iterator it =
 		ioConnectionSurrogateMap->mConnectionSurrogateMap->find(ConnectionSurrogateId);
 
-	if (it != ioConnectionSurrogateMap->mConnectionSurrogateMap->end())
+	if (it != ioConnectionSurrogateMap->mConnectionSurrogateMap->end()) {
 		ConnectionSurrogate = it->second;
+		IsPresent = true;
+	}
 
 	if (oConnectionSurrogate)
 		*oConnectionSurrogate = ConnectionSurrogate;
+
+	if (oIsPresent)
+		*oIsPresent = IsPresent;
 
 clean:
 
@@ -322,14 +316,22 @@ clean:
 int gs_connection_surrogate_map_get(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	sp<GsConnectionSurrogate> *oConnectionSurrogate)
+	struct GsConnectionSurrogate *oConnectionSurrogate)
 {
 	int r = 0;
 
-	if (!!(r = gs_connection_surrogate_map_get_try(ioConnectionSurrogateMap, ConnectionSurrogateId, oConnectionSurrogate)))
-		GS_GOTO_CLEAN();
+	uint32_t IsPresent = false;
 
-	if (! oConnectionSurrogate->get())
+	if (!!(r = gs_connection_surrogate_map_get_try(
+		ioConnectionSurrogateMap,
+		ConnectionSurrogateId,
+		oConnectionSurrogate,
+		&IsPresent)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (! IsPresent)
 		GS_ERR_CLEAN_L(1, E, S, "retrieval prevented (is an element missing, and why?)");
 
 clean:

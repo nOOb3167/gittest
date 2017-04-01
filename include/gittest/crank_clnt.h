@@ -1,8 +1,68 @@
 #ifndef _GITTEST_CRANK_CLNT_H_
 #define _GITTEST_CRANK_CLNT_H_
 
-#include <gittest/net.h>
 #include <gittest/net2.h>
+
+#define GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(PTR_VARNAME_CLNTSTATE, CODE, VARNAME_TMPSTATE, STATEMENTBLOCK) \
+	{ ClntState VARNAME_TMPSTATE;                                                                       \
+      if (!!clnt_state_cpy(& (VARNAME_TMPSTATE), (PTR_VARNAME_CLNTSTATE)))                              \
+        GS_ERR_CLEAN(9998);                                                                             \
+	  { STATEMENTBLOCK }                                                                                \
+	  if (!!clnt_state_code_ensure(& (VARNAME_TMPSTATE), (CODE)))                                       \
+	    GS_ERR_CLEAN(9999);                                                                             \
+	  if (!!clnt_state_cpy((PTR_VARNAME_CLNTSTATE), & (VARNAME_TMPSTATE)))                              \
+	    GS_ERR_CLEAN(9998); }
+
+#define GS_CLNT_STATE_CODE_DECL2(name) GS_CLNT_STATE_CODE_ ## name
+#define GS_CLNT_STATE_CODE_DECL(name) { # name , GS_CLNT_STATE_CODE_DECL2(name) }
+
+#define GS_CLNT_STATE_CODE_DEFINE_ARRAY(VARNAME)             \
+	GsClntStateCodeEntry VARNAME[] = {                       \
+		GS_CLNT_STATE_CODE_DECL(NEED_REPOSITORY),            \
+		GS_CLNT_STATE_CODE_DECL(NEED_TREE_HEAD),             \
+		GS_CLNT_STATE_CODE_DECL(NEED_TREELIST),              \
+		GS_CLNT_STATE_CODE_DECL(NEED_BLOBLIST),              \
+		GS_CLNT_STATE_CODE_DECL(NEED_WRITTEN_BLOB_AND_TREE), \
+		GS_CLNT_STATE_CODE_DECL(NEED_NOTHING),               \
+	    };                                                       \
+	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
+
+#define GS_CLNT_STATE_CODE_CHECK_ARRAY_NONUCF(VARNAME) \
+	for (size_t i = 0; i < Len ## VARNAME; i++) \
+		if ((VARNAME)[i].mCodeNum != i) \
+			GS_ERR_CLEAN_L(1, E, S, "state code array non-contiguous");
+
+enum gs_clnt_state_code_t {
+	GS_CLNT_STATE_CODE_NEED_REPOSITORY = 0,
+	GS_CLNT_STATE_CODE_NEED_TREE_HEAD = 1,
+	GS_CLNT_STATE_CODE_NEED_TREELIST = 2,
+	GS_CLNT_STATE_CODE_NEED_BLOBLIST = 3,
+	GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE = 4,
+	GS_CLNT_STATE_CODE_NEED_NOTHING = 5,
+	GS_CLNT_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
+};
+
+struct GsClntStateCodeEntry {
+	const char *mCodeName;
+	uint32_t    mCodeNum;
+};
+
+struct ClntState {
+	sp<git_repository *> mRepositoryT;
+
+	sp<git_oid> mTreeHeadOid;
+
+	sp<std::vector<git_oid> > mTreelist;
+	sp<std::vector<git_oid> > mMissingTreelist;
+
+	sp<std::vector<git_oid> >  mMissingBloblist;
+	sp<GsPacketWithOffset> mTreePacketWithOffset;
+
+	sp<std::vector<git_oid> > mWrittenBlob;
+	sp<std::vector<git_oid> > mWrittenTree;
+
+	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
+};
 
 struct GsExtraHostCreateClient
 {

@@ -340,17 +340,16 @@ clean:
     The connection is assigned an entry with Id within the connection map.
 	That same Id is then bonded to the ENetPeer 'data' field.
 
-   @param ioConnectionSurrogate fields unpacked, pointer wrapped
-                                (into a shared_ptr which receives ownership)
+   @param valConnectionSurrogate copied / copy-constructed (for shared_ptr use)
 */
 int gs_aux_aux_aux_connection_register_transfer_ownership(
-	GsConnectionSurrogate *ioConnectionSurrogate,
+	GsConnectionSurrogate valConnectionSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t *oAssignedId)
 {
 	int r = 0;
 
-	sp<GsConnectionSurrogate> ConnectionSurrogate(ioConnectionSurrogate);
+	ENetPeer *peer = valConnectionSurrogate.mPeer;
 
 	gs_connection_surrogate_id_t Id = 0;
 
@@ -359,7 +358,7 @@ int gs_aux_aux_aux_connection_register_transfer_ownership(
 	/* assign entry with id */
 	if (!!(r = gs_connection_surrogate_map_insert(
 		ioConnectionSurrogateMap,
-		ConnectionSurrogate,
+		valConnectionSurrogate,
 		&Id)))
 	{
 		GS_GOTO_CLEAN();
@@ -368,8 +367,9 @@ int gs_aux_aux_aux_connection_register_transfer_ownership(
 	GS_BYPART_DATA_INIT(GsConnectionSurrogateId, ctxstruct, Id);
 
 	/* bond to the peer */
+	/* NOTE: making use of property that mPeer pointer field was copied into the connection surrogate map */
 	// FIXME: sigh raw allocation, deletion occurs in principle on receipt of ENET_EVENT_TYPE_DISCONNECT events
-	ioConnectionSurrogate->mPeer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
+	peer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
 
 	if (oAssignedId)
 		*oAssignedId = Id;
@@ -431,22 +431,24 @@ int gs_ntwk_host_service(
 
 			for (uint32_t i = 0; i < RequestSend.size(); i++)
 			{
-				gs_connection_surrogate_id_t IdOfSend = 0;
-				sp<GsConnectionSurrogate> ConnectionSurrogateSend;
+				gs_connection_surrogate_id_t IdOfSend = RequestSend[i].mId;
+
+				struct GsConnectionSurrogate ConnectionSurrogateSend = {};
+				uint32_t ConnectionSurrogateSendIsPresent = false;
 
 				GS_LOG(I, S, "processing send");
 
-				// FIXME: get ID from request
-
 				GS_ASSERT(RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET);
 
-				IdOfSend = RequestSend[i].mId;
-
-				if (!!(r = gs_connection_surrogate_map_get_try(ioConnectionSurrogateMap, IdOfSend, &ConnectionSurrogateSend)))
+				if (!!(r = gs_connection_surrogate_map_get_try(
+					ioConnectionSurrogateMap,
+					IdOfSend,
+					&ConnectionSurrogateSend,
+					&ConnectionSurrogateSendIsPresent)))
 					GS_GOTO_CLEAN();
 
 				/* if a reconnection occurred, outstanding send requests would have missing send IDs */
-				if (! ConnectionSurrogateSend) {
+				if (! ConnectionSurrogateSendIsPresent) {
 					GS_LOG(W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
 					continue;
 				}
@@ -455,13 +457,13 @@ int gs_ntwk_host_service(
 				/* FIXME: racing against worker, right?
 				     just before reconnect, worker may have queued some requests against the current host.
 					 after reconnect, the queued requests get processed (ex here), and the host mismatches. */
-				if (ConnectionSurrogateSend->mHost != HostSurrogate->mHost) {
+				if (ConnectionSurrogateSend.mHost != HostSurrogate->mHost) {
 					GS_LOG(W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
 					continue;
 				}
 
 				if (!!(r = gs_connection_surrogate_packet_send(
-					ConnectionSurrogateSend.get(),
+					&ConnectionSurrogateSend,
 					RequestSend[i].mPacket)))
 				{
 					GS_GOTO_CLEAN();
@@ -488,12 +490,14 @@ int gs_ntwk_host_service(
 
 			gs_connection_surrogate_id_t AssignedId = 0;
 
-			// FIXME: pretty ugly initialization of GsConnectionSurrogate
+			GsConnectionSurrogate ConnectionSurrogate = {};
+
+			ConnectionSurrogate.mHost = HostSurrogate->mHost;
+			ConnectionSurrogate.mPeer = event.peer;
+			ConnectionSurrogate.mIsPrincipalClientConnection = false;
+
 			if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
-				new GsConnectionSurrogate(
-					HostSurrogate->mHost,
-					event.peer,
-					false),
+				ConnectionSurrogate,
 				ioConnectionSurrogateMap,
 				&AssignedId)))
 			{
