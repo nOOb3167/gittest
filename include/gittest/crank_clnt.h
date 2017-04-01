@@ -96,6 +96,13 @@ struct GsStoreWorkerClient
 	sp<ClntState> mClntState;
 };
 
+const char * gs_clnt_state_code_to_name(uint32_t Code);
+
+int clnt_state_make_default(ClntState *oState);
+int clnt_state_cpy(ClntState *dst, const ClntState *src);
+int clnt_state_code(ClntState *State, uint32_t *oCode);
+int clnt_state_code_ensure(ClntState *State, uint32_t WantedCode);
+
 int clnt_state_need_repository_setup2(
 	ClntState *State,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath);

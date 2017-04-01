@@ -12,7 +12,7 @@
 //#include <gittest/config_defs.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
-#include <gittest/net.h>
+#include <gittest/net2.h>
 #include <gittest/gittest_selfupdate.h>
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();

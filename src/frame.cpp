@@ -8,7 +8,7 @@
 #include <cstddef>  // offsetof
 
 #include <gittest/gittest.h>
-#include <gittest/net.h>
+#include <gittest/net2.h>
 #include <gittest/cbuf.h>
 
 #include <gittest/frame.h>

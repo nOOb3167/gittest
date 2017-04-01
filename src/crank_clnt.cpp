@@ -4,10 +4,95 @@
 
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>
-#include <gittest/net.h>
 #include <gittest/net2.h>
 
 #include <gittest/crank_clnt.h>
+
+const char * gs_clnt_state_code_to_name(uint32_t Code) {
+	/* NOTE: special error-handling */
+	int r = 0;
+
+	GS_CLNT_STATE_CODE_DEFINE_ARRAY(ClntStateCodeArray);
+	GS_CLNT_STATE_CODE_CHECK_ARRAY_NONUCF(ClntStateCodeArray);
+
+	if (! (Code < LenClntStateCodeArray))
+		GS_ERR_CLEAN(1);
+
+clean:
+	if (!!r)
+		GS_ASSERT(0);
+
+	return ClntStateCodeArray[Code].mCodeName;
+}
+
+int clnt_state_make_default(ClntState *oState) {
+	ClntState State;
+	if (oState)
+		*oState = State;
+	return 0;
+}
+
+int clnt_state_cpy(ClntState *dst, const ClntState *src) {
+	*dst = *src;
+	return 0;
+}
+
+int clnt_state_code(ClntState *State, uint32_t *oCode) {
+	int r = 0;
+	
+	int Code = 0;
+
+	if (! State->mRepositoryT)
+		{ Code = GS_CLNT_STATE_CODE_NEED_REPOSITORY; goto need_repository; }
+	if (! State->mTreeHeadOid)
+		{ Code = GS_CLNT_STATE_CODE_NEED_TREE_HEAD; goto need_tree_head; }
+	if (! State->mTreelist || ! State->mMissingTreelist)
+		{ Code = GS_CLNT_STATE_CODE_NEED_TREELIST; goto need_treelist; }
+	if (! State->mMissingBloblist || ! State->mTreePacketWithOffset)
+		{ Code = GS_CLNT_STATE_CODE_NEED_BLOBLIST; goto need_bloblist; }
+	if (! State->mWrittenBlob || ! State->mWrittenTree)
+		{ Code = GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE; goto need_written_blob_and_tree; }
+	if (true)
+		{ Code = GS_CLNT_STATE_CODE_NEED_NOTHING; goto need_nothing; }
+
+need_repository:
+	if (State->mTreeHeadOid)
+		GS_ERR_CLEAN(1);
+need_tree_head:
+	if (State->mTreelist || State->mMissingTreelist)
+		GS_ERR_CLEAN(1);
+need_treelist:
+	if (State->mMissingBloblist || State->mTreePacketWithOffset)
+		GS_ERR_CLEAN(1);
+need_bloblist:
+	if (State->mWrittenBlob || State->mWrittenTree)
+		GS_ERR_CLEAN(1);
+need_written_blob_and_tree:
+need_nothing:
+
+	if (oCode)
+		*oCode = Code;
+
+clean:
+
+	return r;
+}
+
+int clnt_state_code_ensure(ClntState *State, uint32_t WantedCode) {
+	int r = 0;
+
+	uint32_t FoundCode = 0;
+
+	if (!!(r = clnt_state_code(State, &FoundCode)))
+		GS_GOTO_CLEAN();
+
+	if (WantedCode != FoundCode)
+		GS_ERR_CLEAN(1);
+
+clean:
+
+	return r;
+}
 
 int clnt_state_need_repository_setup2(
 	ClntState *State,
@@ -65,7 +150,6 @@ int clnt_state_need_tree_head_setup2(
 	git_repository * const RepositoryT = *State->mRepositoryT;
 
 	std::string Buffer;
-	gs_packet_t Packet;
 	uint32_t Offset = 0;
 
 	git_oid CommitHeadOidT = {};
@@ -240,7 +324,6 @@ int clnt_state_need_bloblist_setup2(
 	int r = 0;
 
 	sp<std::vector<git_oid> > MissingBloblist(new std::vector<git_oid>);
-	sp<PacketUniqueWithOffset> PacketTreeWithOffset(new PacketUniqueWithOffset);
 
 	git_repository * const RepositoryT = *State->mRepositoryT;
 	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;

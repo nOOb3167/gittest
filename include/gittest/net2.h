@@ -5,6 +5,24 @@
 #include <stdint.h>
 #include <enet/enet.h>
 
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+
+#include <gittest/frame.h>
+
+#define GS_PORT 3756
+
+#define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
+#define GS_CONNECT_NUMRETRY   5
+#define GS_CONNECT_TIMEOUT_MS 1000
+#define GS_CONNECT_NUMRECONNECT 5
+#define GS_RECEIVE_TIMEOUT_MS 500000
+
+#define GS_TIMEOUT_1SEC 1000
+
 #define GS_EXTRA_HOST_CREATE_CLIENT_MAGIC 0x501C325E
 #define GS_EXTRA_WORKER_CLIENT_MAGIC      0x501C325F
 #define GS_STORE_NTWK_CLIENT_MAGIC        0x501C3260
@@ -15,7 +33,16 @@
 #define GS_STORE_NTWK_SERVER_MAGIC        0x502C3260
 #define GS_STORE_WORKER_SERVER_MAGIC      0x502C3261
 
-#define GS_TIMEOUT_1SEC 1000
+#define GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC 0x503C325E
+#define GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C325F
+#define GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC        0x503C3260
+#define GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C3261
+
+/* GsBypartCbDataOidVector */
+GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
+#define GS_BYPART_TRIPWIRE_OidVector 0x23132358
+#define GS_BYPART_DATA_INIT_OidVector(VARNAME, POIDVEC) (VARNAME).m0OidVec = POIDVEC;
+int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l);
 
 struct GsConnectionSurrogate;
 
@@ -29,11 +56,12 @@ GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;)
 struct GsExtraWorker;
 struct GsWorkerData;
 
+/** @sa
+       ::gs_connection_surrogate_map_create
+*/
 struct GsConnectionSurrogateMap {
 	std::atomic<uint64_t> mAtomicCount;
 	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
-
-	GsConnectionSurrogateMap();
 };
 
 struct ClntStateReconnect {
@@ -200,6 +228,34 @@ struct GsFullConnection
 	sp<std::thread> ThreadWorker;
 	sp<GsExtraHostCreate> ThreadNtwkExtraHostCreate;
 };
+
+int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSurrogateMap);
+int gs_connection_surrogate_map_clear(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap);
+int gs_connection_surrogate_map_insert_id(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	const struct GsConnectionSurrogate valConnectionSurrogate);
+int gs_connection_surrogate_map_insert(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	const GsConnectionSurrogate valConnectionSurrogate,
+	gs_connection_surrogate_id_t *oConnectionSurrogateId);
+int gs_connection_surrogate_map_get_try(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	struct GsConnectionSurrogate *oConnectionSurrogate,
+	uint32_t *oIsPresent);
+int gs_connection_surrogate_map_get(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	struct GsConnectionSurrogate *oConnectionSurrogate);
+int gs_connection_surrogate_map_erase(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId);
+
+int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect);
+bool clnt_state_reconnect_have_remaining(ClntStateReconnect *StateReconnect);
+int clnt_state_reconnect_expend(ClntStateReconnect *ioStateReconnect);
 
 int gs_connection_surrogate_packet_send(
 	GsConnectionSurrogate *ConnectionSurrogate,

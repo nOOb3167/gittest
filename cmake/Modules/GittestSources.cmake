@@ -292,18 +292,18 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
 
   SET(GITTEST_NET_HEADERS
     include/gittest/frame.h
-    include/gittest/net.h
     include/gittest/net2.h
     include/gittest/crank_clnt.h
     include/gittest/crank_serv.h
+    include/gittest/crank_selfupdate_basic.h
   )
   
   SET(GITTEST_NET_SOURCES
     src/frame.cpp
-    src/net.cpp
     src/net2.cpp
     src/crank_clnt.cpp
     src/crank_serv.cpp
+    src/crank_selfupdate_basic.cpp
   )
   
   # gittest_selfupdate

@@ -5,7 +5,6 @@
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>
 #include <gittest/frame.h>
-#include <gittest/net.h>
 #include <gittest/net2.h>
 
 #include <gittest/crank_serv.h>

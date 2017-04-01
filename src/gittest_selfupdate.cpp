@@ -8,13 +8,15 @@
 #include <cstdint>
 #include <cstring>
 
+#include <thread>  // std::this_thread
 #include <string>
 
 #include <gittest/misc.h>
-#include <gittest/gittest.h>
-#include <gittest/net.h>
-#include <gittest/net2.h>
 #include <gittest/log.h>
+#include <gittest/gittest.h>
+#include <gittest/net2.h>
+#include <gittest/crank_clnt.h>
+#include <gittest/crank_selfupdate_basic.h>
 
 #include <gittest/gittest_selfupdate.h>
 
@@ -279,8 +281,15 @@ int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 
 	GS_LOG(I, PF, "child_filename=[%.*s]", LenFileNameChild, FileNameChildBuf);
 
-	if (!!(r = aux_selfupdate_basic("localhost", FileNameCurrentBuf, &HaveUpdate, &BufferUpdate)))
+	if (!!(r = gs_net_full_create_connection_selfupdate_basic(
+		GS_PORT,    // FIXME: crutch - refactor passing from config
+		"localhost", strlen("localhost"),    // FIXME: crutch - refactor passing from config
+		FileNameCurrentBuf, LenFileNameCurrent,
+		&HaveUpdate,
+		&BufferUpdate)))
+	{
 		GS_GOTO_CLEAN_L(E, S, "failure obtaining the update");
+	}
 
 	GS_LOG(I, PF, "have_update=[%d]", (int)HaveUpdate);
 
@@ -315,7 +324,7 @@ int aux_selfupdate_main_mode_main() {
 	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_full_create_connection_client(
+	if (!!(r = gs_net_full_create_connection_client(
 		CommonVars.ServPort,
 		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
 		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,

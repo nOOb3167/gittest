@@ -1,9 +1,13 @@
 #include <cstdlib>
 #include <cassert>
 
+#include <thread>  // std::this_thread
+#include <chrono>
+
 #include <gittest/log.h>
 #include <gittest/gittest.h>
-#include <gittest/net.h>
+#include <gittest/net2.h>
+#include <gittest/crank_serv.h>
 #include <gittest/gittest_selfupdate.h>
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
@@ -25,7 +29,7 @@ int startserv() {
 	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_full_create_connection_server(
+	if (!!(r = gs_net_full_create_connection_server(
 		CommonVars.ServPort,
 		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
 		CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,

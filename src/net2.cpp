@@ -4,8 +4,182 @@
 
 #include <gittest/misc.h>
 #include <gittest/log.h>
-#include <gittest/net.h>
 #include <gittest/net2.h>
+
+int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l) {
+	int r = 0;
+
+	git_oid Oid = {};
+	GS_BYPART_DATA_VAR_CTX_NONUCF(OidVector, Data, ctx);
+
+	if (!!(r = aux_frame_read_oid((uint8_t *)d, (uint32_t)l, 0, NULL, (uint8_t *)Oid.id, GIT_OID_RAWSZ)))
+		GS_GOTO_CLEAN();
+
+	Data->m0OidVec->push_back(Oid);
+
+clean:
+
+	return r;
+}
+
+int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSurrogateMap)
+{
+	GsConnectionSurrogateMap *ConnectionSurrogateMap = new GsConnectionSurrogateMap();
+	
+	ConnectionSurrogateMap->mAtomicCount = std::atomic<uint32_t>(0);
+	ConnectionSurrogateMap->mConnectionSurrogateMap = sp<gs_connection_surrogate_map_t>(new gs_connection_surrogate_map_t);
+
+	if (oConnectionSurrogateMap)
+		*oConnectionSurrogateMap = ConnectionSurrogateMap;
+
+	return 0;
+}
+
+int gs_connection_surrogate_map_clear(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+{
+	ioConnectionSurrogateMap->mConnectionSurrogateMap->clear();
+	return 0;
+}
+
+int gs_connection_surrogate_map_insert_id(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	const struct GsConnectionSurrogate valConnectionSurrogate)
+{
+	int r = 0;
+
+	if (! ioConnectionSurrogateMap->mConnectionSurrogateMap->insert(
+			gs_connection_surrogate_map_t::value_type(ConnectionSurrogateId, valConnectionSurrogate)).second)
+	{
+		GS_ERR_CLEAN_L(1, E, S, "insertion prevented (is a stale element present, and why?)");
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_connection_surrogate_map_insert(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	const struct GsConnectionSurrogate valConnectionSurrogate,
+	gs_connection_surrogate_id_t *oConnectionSurrogateId)
+{
+	int r = 0;
+
+	gs_connection_surrogate_id_t Id = ioConnectionSurrogateMap->mAtomicCount.fetch_add(1);
+
+	if (!!(r = gs_connection_surrogate_map_insert_id(ioConnectionSurrogateMap, Id, valConnectionSurrogate)))
+		GS_GOTO_CLEAN();
+
+	if (oConnectionSurrogateId)
+		*oConnectionSurrogateId = Id;
+
+clean:
+
+	return r;
+}
+
+int gs_connection_surrogate_map_get_try(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	struct GsConnectionSurrogate *oConnectionSurrogate,
+	uint32_t *oIsPresent)
+{
+	int r = 0;
+
+	struct GsConnectionSurrogate ConnectionSurrogate = {};
+	uint32_t IsPresent = false;
+
+	gs_connection_surrogate_map_t::iterator it =
+		ioConnectionSurrogateMap->mConnectionSurrogateMap->find(ConnectionSurrogateId);
+
+	if (it != ioConnectionSurrogateMap->mConnectionSurrogateMap->end()) {
+		ConnectionSurrogate = it->second;
+		IsPresent = true;
+	}
+
+	if (oConnectionSurrogate)
+		*oConnectionSurrogate = ConnectionSurrogate;
+
+	if (oIsPresent)
+		*oIsPresent = IsPresent;
+
+clean:
+
+	return r;
+}
+
+int gs_connection_surrogate_map_get(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId,
+	struct GsConnectionSurrogate *oConnectionSurrogate)
+{
+	int r = 0;
+
+	uint32_t IsPresent = false;
+
+	if (!!(r = gs_connection_surrogate_map_get_try(
+		ioConnectionSurrogateMap,
+		ConnectionSurrogateId,
+		oConnectionSurrogate,
+		&IsPresent)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (! IsPresent)
+		GS_ERR_CLEAN_L(1, E, S, "retrieval prevented (is an element missing, and why?)");
+
+clean:
+
+	return r;
+}
+
+int gs_connection_surrogate_map_erase(
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t ConnectionSurrogateId)
+{
+	int r = 0;
+
+	gs_connection_surrogate_map_t::iterator it =
+		ioConnectionSurrogateMap->mConnectionSurrogateMap->find(ConnectionSurrogateId);
+
+	if (it == ioConnectionSurrogateMap->mConnectionSurrogateMap->end())
+		GS_ERR_CLEAN_L(1, E, S, "removal prevented (is an element missing, and why?)");
+
+	ioConnectionSurrogateMap->mConnectionSurrogateMap->erase(it);
+
+clean:
+
+	return r;
+}
+
+int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
+	ClntStateReconnect StateReconnect;
+	StateReconnect.NumReconnections = GS_CONNECT_NUMRECONNECT;
+	StateReconnect.NumReconnectionsLeft = StateReconnect.NumReconnections;
+	if (oStateReconnect)
+		*oStateReconnect = StateReconnect;
+	return 0;
+}
+
+bool clnt_state_reconnect_have_remaining(ClntStateReconnect *StateReconnect) {
+	return StateReconnect->NumReconnectionsLeft >= 1;
+}
+
+int clnt_state_reconnect_expend(ClntStateReconnect *ioStateReconnect) {
+	int r = 0;
+
+	if (! clnt_state_reconnect_have_remaining(ioStateReconnect))
+		GS_ERR_CLEAN(1);
+
+	ioStateReconnect->NumReconnectionsLeft -= 1;
+
+clean:
+
+	return r;
+}
 
 /** Send Packet (remember enet_peer_send required an ownership release) */
 int gs_connection_surrogate_packet_send(
@@ -590,13 +764,20 @@ int gs_ntwk_reconnecter(
 
 	ClntStateReconnect StateReconnect = {};
 
-	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap(new GsConnectionSurrogateMap());
+	GsConnectionSurrogateMap *rawConnectionSurrogateMap = NULL;
+
+	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap;
 
 	GsHostSurrogate HostSurrogate = {};
 
 	uint32_t WantReconnect = true;
 
 	GS_LOG(I, S, "entering reconnect-service cycle");
+
+	if (!!(r = gs_connection_surrogate_map_create(&rawConnectionSurrogateMap)))
+		GS_GOTO_CLEAN();
+
+	GS_SP_SET_RAW_NULLING(ConnectionSurrogateMap, rawConnectionSurrogateMap, GsConnectionSurrogateMap);
 
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
