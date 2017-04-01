@@ -11,6 +11,8 @@
 #include <condition_variable>
 #include <deque>
 
+#include <enet/enet.h>
+
 #include <gittest/frame.h>
 
 #define GS_PORT 3756

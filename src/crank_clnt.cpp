@@ -684,7 +684,7 @@ int gs_net_full_create_connection_client(
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
 
-	sp<ClntState> ClntState(new ClntState);
+	sp<ClntState> State(new ClntState());
 
 	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
 	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
@@ -700,7 +700,7 @@ int gs_net_full_create_connection_client(
 	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = clnt_state_make_default(ClntState.get())))
+	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
 
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
@@ -719,7 +719,7 @@ int gs_net_full_create_connection_client(
 	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
 	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
 	StoreWorker->mIntrToken = IntrTokenSurrogate;
-	StoreWorker->mClntState = ClntState;
+	StoreWorker->mClntState = State;
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
