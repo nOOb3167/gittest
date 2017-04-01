@@ -1,11 +1,13 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>
-
 #include <gittest/net.h>
+#include <gittest/net2.h>
 
-#include <gittest/crank.h>
-
-#include <../../gittest/src/net2.cpp>
+#include <gittest/crank_clnt.h>
 
 int clnt_state_need_repository_setup2(
 	ClntState *State,
@@ -585,275 +587,221 @@ clean:
 	return r;
 }
 
-int serv_state_service_request_blobs2(
-	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	GsPacket *Packet,
-	uint32_t OffsetSize,
-	git_repository *Repository,
-	const GsFrameType &FrameTypeResponse)
+int gs_net_full_create_connection_client(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	sp<GsFullConnection> *oConnectionClient)
 {
 	int r = 0;
 
-	std::string ResponseBuffer;
-	uint32_t Offset = OffsetSize;
-	uint32_t LengthLimit = 0;
-	std::vector<git_oid> BloblistRequested;
-	std::string SizeBufferBlob;
-	std::string ObjectBufferBlob;
+	sp<GsFullConnection> ConnectionClient;
 
-	GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
-	GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
+	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
+	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
 
-	GS_BYPART_DATA_VAR(OidVector, BypartBloblistRequested);
-	GS_BYPART_DATA_INIT(OidVector, BypartBloblistRequested, &BloblistRequested);
+	sp<ClntState> ClntState(new ClntState);
 
-	if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
+	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
+	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
+	GsStoreWorkerClient     *StoreWorker     = new GsStoreWorkerClient();
+
+	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
+	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
+	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
+
+	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartBloblistRequested, gs_bypart_cb_OidVector)))
+	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = clnt_state_make_default(ClntState.get())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = serv_serialize_blobs(Repository, &BloblistRequested, &SizeBufferBlob, &ObjectBufferBlob)))
-		GS_GOTO_CLEAN();
+	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
+	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_client;
+	ExtraHostCreate->mServPort = ServPort;
+	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
+	ExtraHostCreate->mLenServHostName = LenServHostName;
 
-	if (!!(r = aux_frame_full_write_response_blobs(
-		FrameTypeResponse, BloblistRequested.size(),
-		(uint8_t *)SizeBufferBlob.data(), SizeBufferBlob.size(),
-		(uint8_t *)ObjectBufferBlob.data(), ObjectBufferBlob.size(),
-		gs_bysize_cb_String, &BysizeResponseBuffer)))
+	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
+	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
+
+	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
+	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
+	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
+	StoreWorker->mLenRefNameMain = LenRefNameMain;
+	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
+	StoreWorker->mLenRefNameMain = LenRepoMainPath;
+	StoreWorker->mIntrToken = IntrTokenSurrogate;
+	StoreWorker->mClntState = ClntState;
+
+	if (!!(r = gs_net_full_create_connection(
+		ServPort,
+		pExtraHostCreate,
+		pStoreNtwk,
+		pStoreWorker,
+		&ConnectionClient)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
-		GS_GOTO_CLEAN();
+	if (oConnectionClient)
+		*oConnectionClient = ConnectionClient;
 
 clean:
 
 	return r;
 }
 
-int serv_state_crank2(
+int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath)
+	struct GsStoreWorker *StoreWorker,
+	struct GsExtraWorker *ExtraWorker)
 {
-		int r = 0;
+	int r = 0;
 
-	git_repository *Repository = NULL;
-	git_repository *RepositorySelfUpdate = NULL;
+	GsStoreWorkerClient *pStoreWorker = (GsStoreWorkerClient *) StoreWorker;
+	GsExtraWorkerClient *pExtraWorker = (GsExtraWorkerClient *) ExtraWorker;
 
-	if (!!(r = aux_repository_open(RepoMainPathBuf, &Repository)))
-		GS_GOTO_CLEAN();
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
 
-	if (!!(r = aux_repository_open(RepoSelfUpdatePathBuf, &RepositorySelfUpdate)))
-		GS_GOTO_CLEAN();
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
 
 	while (true) {
-		GsPacket *Packet = NULL;
-		gs_connection_surrogate_id_t IdForSend = 0;
 
-		GS_LOG(I, S, "waiting for request");
-
-		if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &Packet, &IdForSend)))
+		if (!!(r = clnt_state_crank2(
+			WorkerDataRecv,
+			WorkerDataSend,
+			pExtraWorker->mId,
+			&pStoreWorker->mIntrToken,
+			pStoreWorker->mClntState.get(),
+			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
+			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath)))
+		{
 			GS_GOTO_CLEAN();
-
-		uint32_t OffsetStart = 0;
-		uint32_t OffsetSize = 0;
-
-		GsFrameType FoundFrameType = {};
-
-		if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, OffsetStart, &OffsetSize, &FoundFrameType)))
-			GS_GOTO_CLEAN();
-
-		GS_LOG(I, PF, "servicing request [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
-
-		switch (FoundFrameType.mTypeNum)
-		{
-		case GS_FRAME_TYPE_REQUEST_LATEST_COMMIT_TREE:
-		{
-			std::string ResponseBuffer;
-			uint32_t Offset = OffsetSize;
-			git_oid CommitHeadOid = {};
-			git_oid TreeHeadOid = {};
-			GS_OID_STR_VAR(TreeHeadOid);
-
-			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
-			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
-
-			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = serv_latest_commit_tree_oid(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
-				GS_GOTO_CLEAN();
-
-			GS_OID_STR_MAKE(TreeHeadOid);
-			GS_LOG(I, PF, "latest commit tree [%s]", TreeHeadOidStr);
-
-			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
-				GS_GOTO_CLEAN();
-		}
-		break;
-
-		case GS_FRAME_TYPE_REQUEST_TREELIST:
-		{
-			std::string ResponseBuffer;
-			uint32_t Offset = OffsetSize;
-			git_oid TreeOid = {};
-			std::vector<git_oid> Treelist;
-			GsStrided TreelistStrided = {};
-
-			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
-			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
-
-			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, TreeOid.id, GIT_OID_RAWSZ)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = serv_oid_treelist(Repository, &TreeOid, &Treelist)))
-				GS_GOTO_CLEAN();
-
-			GS_LOG(I, PF, "listing trees [num=%d]", (int)Treelist.size());
-
-			if (!!(r = gs_strided_for_oid_vec_cpp(&Treelist, &TreelistStrided)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_full_write_response_treelist(TreelistStrided, gs_bysize_cb_String, &BysizeResponseBuffer)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
-				GS_GOTO_CLEAN();
-		}
-		break;
-
-		case GS_FRAME_TYPE_REQUEST_TREES:
-		{
-			std::string ResponseBuffer;
-			uint32_t Offset = OffsetSize;
-			uint32_t LengthLimit = 0;
-			std::vector<git_oid> TreelistRequested;
-			std::string SizeBufferTree;
-			std::string ObjectBufferTree;
-
-			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
-			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
-
-			GS_BYPART_DATA_VAR(OidVector, BypartTreelistRequested);
-			GS_BYPART_DATA_INIT(OidVector, BypartTreelistRequested, &TreelistRequested);
-
-			if (!!(r = aux_frame_read_size_limit(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartTreelistRequested, gs_bypart_cb_OidVector)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = serv_serialize_trees(Repository, &TreelistRequested, &SizeBufferTree, &ObjectBufferTree)))
-				GS_GOTO_CLEAN();
-
-			GS_LOG(I, PF, "serializing trees [num=%d]", (int)TreelistRequested.size());
-
-			if (!!(r = aux_frame_full_write_response_trees(
-				TreelistRequested.size(),
-				(uint8_t *)SizeBufferTree.data(), SizeBufferTree.size(),
-				(uint8_t *)ObjectBufferTree.data(), ObjectBufferTree.size(),
-				gs_bysize_cb_String, &BysizeResponseBuffer)))
-			{
-				GS_GOTO_CLEAN();
-			}
-
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
-				GS_GOTO_CLEAN();
-		}
-		break;
-
-		case GS_FRAME_TYPE_REQUEST_BLOBS:
-		{
-			if (!!(r = serv_state_service_request_blobs2(
-				WorkerDataSend,
-				IdForSend,
-				IntrToken,
-				Packet,
-				OffsetSize,
-				Repository,
-				GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
-			{
-				GS_GOTO_CLEAN();
-			}
-		}
-		break;
-
-		case GS_FRAME_TYPE_REQUEST_BLOBS_SELFUPDATE:
-		{
-			if (!!(r = serv_state_service_request_blobs2(
-				WorkerDataSend,
-				IdForSend,
-				IntrToken,
-				Packet,
-				OffsetSize,
-				RepositorySelfUpdate,
-				GS_FRAME_TYPE_DECL(RESPONSE_BLOBS_SELFUPDATE))))
-			{
-				GS_GOTO_CLEAN();
-			}
-		}
-		break;
-
-		case GS_FRAME_TYPE_REQUEST_LATEST_SELFUPDATE_BLOB:
-		{
-			std::string ResponseBuffer;
-			uint32_t Offset = OffsetSize;
-			git_oid CommitHeadOid = {};
-			git_oid TreeHeadOid = {};
-			git_oid BlobSelfUpdateOid = {};
-
-			GS_BYPART_DATA_VAR(String, BysizeResponseBuffer);
-			GS_BYPART_DATA_INIT(String, BysizeResponseBuffer, &ResponseBuffer);
-
-			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, RefNameSelfUpdateBuf, &CommitHeadOid, &TreeHeadOid)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(BlobSelfUpdateOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
-				GS_GOTO_CLEAN();
-		}
-		break;
-
-		default:
-		{
-			GS_LOG(E, PF, "[worker] unknown frametype received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
-			if (1)
-				GS_ERR_CLEAN(1);
-		}
-		break;
 		}
 
 	}
 
 clean:
-	if (RepositorySelfUpdate)
-		git_repository_free(RepositorySelfUpdate);
-
-	if (Repository)
-		git_repository_free(Repository);
 
 	return r;
+}
+
+int gs_extra_host_create_cb_create_t_client(
+	GsExtraHostCreate *ExtraHostCreate,
+	GsHostSurrogate *ioHostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	GsExtraWorker **oExtraWorker)
+{
+	int r = 0;
+
+	struct GsExtraHostCreateClient *pThis = (struct GsExtraHostCreateClient *) ExtraHostCreate;
+
+	ENetIntrHostCreateFlags FlagsHost = {};
+	ENetHost *host = NULL;
+	ENetAddress addr = {};
+	ENetPeer *peer = NULL;
+	ENetEvent event = {};
+
+	gs_connection_surrogate_id_t AssignedId = 0;
+
+	GsExtraWorker *ExtraWorker = NULL;
+
+	int errService = 0;
+
+	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	/* create host */
+
+	// FIXME: 128 peerCount, 1 channelLimit
+	if (!(host = enet_host_create_interruptible(NULL, 128, 1, 0, 0, &FlagsHost)))
+		GS_ERR_CLEAN(1);
+
+	/* connect host */
+
+	if (!!(r = enet_address_set_host(&addr, pThis->mServHostNameBuf)))
+		GS_ERR_CLEAN(1);
+	addr.port = pThis->mServPort;
+
+	if (!(peer = enet_host_connect(host, &addr, 1, 0)))
+		GS_ERR_CLEAN(1);
+
+	/* connect host - wait for completion */
+
+	while (0 <= (errService = enet_host_service(host, &event, GS_TIMEOUT_1SEC))) {
+		if (errService > 0 && event.peer == peer && event.type == ENET_EVENT_TYPE_CONNECT)
+			break;
+	}
+
+	/* a connection event must have been setup above */
+	if (errService < 0 ||
+		event.type != ENET_EVENT_TYPE_CONNECT ||
+		event.peer == NULL)
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	/* register connection and prepare extra worker data */
+
+	// FIXME: pretty ugly initialization of GsConnectionSurrogate
+	if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
+		new GsConnectionSurrogate(
+			host,
+			event.peer,
+			false),
+		ioConnectionSurrogateMap,
+		&AssignedId)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_extra_worker_cb_create_t_client(&ExtraWorker, AssignedId)))
+		GS_GOTO_CLEAN();
+
+	if (ioHostSurrogate)
+		ioHostSurrogate->mHost = host;
+
+	if (oExtraWorker)
+		*oExtraWorker = ExtraWorker;
+
+clean:
+
+	return r;
+}
+
+int gs_extra_worker_cb_create_t_client(
+	struct GsExtraWorker **oExtraWorker,
+	gs_connection_surrogate_id_t Id)
+{
+	struct GsExtraWorkerClient * pThis = new GsExtraWorkerClient();
+
+	pThis->base.magic = GS_EXTRA_WORKER_CLIENT_MAGIC;
+
+	pThis->base.cb_create_t = gs_extra_worker_cb_create_t_client;
+	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_client;
+
+	pThis->mId = Id;
+
+	if (oExtraWorker)
+		*oExtraWorker = &pThis->base;
+
+	return 0;
+}
+
+int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker)
+{
+	if (ExtraWorker->magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		return -1;
+
+	delete ExtraWorker;
+
+	return 0;
 }

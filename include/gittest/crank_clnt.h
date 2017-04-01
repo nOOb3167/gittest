@@ -1,3 +1,41 @@
+#ifndef _GITTEST_CRANK_CLNT_H_
+#define _GITTEST_CRANK_CLNT_H_
+
+#include <gittest/net.h>
+#include <gittest/net2.h>
+
+struct GsExtraHostCreateClient
+{
+	struct GsExtraHostCreate base;
+
+	uint32_t mServPort;
+	const char *mServHostNameBuf; size_t mLenServHostName;
+};
+
+struct GsExtraWorkerClient
+{
+	struct GsExtraWorker base;
+
+	gs_connection_surrogate_id_t mId;
+};
+
+struct GsStoreNtwkClient
+{
+	struct GsStoreNtwk base;
+};
+
+struct GsStoreWorkerClient
+{
+	struct GsStoreWorker base;
+
+	const char *mRefNameMainBuf; size_t mLenRefNameMain;
+	const char *mRepoMainPathBuf; size_t mLenRepoMainPath;
+
+	struct GsIntrTokenSurrogate mIntrToken;
+
+	sp<ClntState> mClntState;
+};
+
 int clnt_state_need_repository_setup2(
 	ClntState *State,
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath);
@@ -94,19 +132,28 @@ int clnt_state_crank2(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath);
 
-int serv_state_service_request_blobs2(
-	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	GsPacket *Packet,
-	uint32_t OffsetSize,
-	git_repository *Repository,
-	const GsFrameType &FrameTypeResponse);
-int serv_state_crank2(
+int gs_net_full_create_connection_client(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	sp<GsFullConnection> *oConnectionClient);
+
+int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath);
+	struct GsStoreWorker *StoreWorker,
+	struct GsExtraWorker *ExtraWorker);
+
+int gs_extra_host_create_cb_create_t_client(
+	GsExtraHostCreate *ExtraHostCreate,
+	GsHostSurrogate *ioHostSurrogate,
+	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	GsExtraWorker **oExtraWorker);
+
+int gs_extra_worker_cb_create_t_client(
+	struct GsExtraWorker **oExtraWorker,
+	gs_connection_surrogate_id_t Id);
+int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker);
+
+#endif /* _GITTEST_CRANK_CLNT_H_ */

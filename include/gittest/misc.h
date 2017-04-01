@@ -55,6 +55,9 @@
 #define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+#define GS_SP_SET_RAW_NULLING(VARNAME_SP, VARNAME_PRAW, TYPENAME) \
+	do { VARNAME_SP = std::shared_ptr<TYPENAME>(VARNAME_PRAW); VARNAME_PRAW = NULL; } while(0)
+
 typedef ::std::map<::std::string, ::std::string> confmap_t;
 
 // FIXME: evil? two character identifier inside header..
