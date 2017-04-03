@@ -6,6 +6,19 @@
 #include <gittest/log.h>
 #include <gittest/net2.h>
 
+/** Use as a deleter function of std::thread shared pointers
+	whom are to be detached before destruction.
+
+    @sa
+	   ::GsFullConnection
+*/
+static void gs_sp_thread_detaching_deleter(std::thread *t)
+{
+	if (t->joinable())
+		t->detach();
+	delete t;
+}
+
 int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l) {
 	int r = 0;
 
@@ -238,11 +251,11 @@ int gs_worker_data_create(struct GsWorkerData **oWorkerData)
 	return 0;
 }
 
-int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon)
+int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft)
 {
 	struct GsCtrlCon *CtrlCon = new GsCtrlCon();
 
-	CtrlCon->mHaveExited = false;
+	CtrlCon->mExitedSignalLeft = ExitedSignalLeft;
 	CtrlCon->mCtrlConMutex = sp<std::mutex>(new std::mutex);
 	CtrlCon->mCtrlConCondExited = sp<std::condition_variable>(new std::condition_variable);
 
@@ -254,11 +267,16 @@ int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon)
 
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon)
 {
+	bool WantNotify = false;
 	{
 		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
-		CtrlCon->mHaveExited = true;
+		if (CtrlCon->mExitedSignalLeft)
+			CtrlCon->mExitedSignalLeft -= 1;
+		if (!CtrlCon->mExitedSignalLeft)
+			WantNotify = true;
 	}
-	CtrlCon->mCtrlConCondExited->notify_all();
+	if (WantNotify)
+		CtrlCon->mCtrlConCondExited->notify_all();
 	return 0;
 }
 
@@ -266,7 +284,7 @@ int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
 {
 	{
 		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
-		CtrlCon->mCtrlConCondExited->wait(lock, [&]() { return CtrlCon->mHaveExited; });
+		CtrlCon->mCtrlConCondExited->wait(lock, [&]() { return ! CtrlCon->mExitedSignalLeft; });
 	}
 	return 0;
 }
@@ -294,6 +312,19 @@ int gs_worker_request_data_type_reconnect_prepare_make(
 	struct GsWorkerRequestData W = {};
 
 	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE;
+
+	if (outValWorkerRequest)
+		*outValWorkerRequest = W;
+
+	return 0;
+}
+
+int gs_worker_request_data_type_exit_make(
+	struct GsWorkerRequestData *outValWorkerRequest)
+{
+	struct GsWorkerRequestData W = {};
+
+	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT;
 
 	if (outValWorkerRequest)
 		*outValWorkerRequest = W;
@@ -527,7 +558,7 @@ int gs_ntwk_host_service_wrap_want_reconnect(
 		HostSurrogate,
 		ioConnectionSurrogateMap)))
 	{
-		GS_ERR_NO_CLEAN(1);
+		GS_ERR_NO_CLEAN(r);
 	}
 
 noclean:
@@ -638,6 +669,11 @@ int gs_ntwk_host_service(
 
 			for (uint32_t i = 0; i < RequestSend.size(); i++)
 			{
+				{
+					if (RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT)
+						GS_ERR_CLEAN(GS_ERRCODE_EXIT);
+				}
+
 				gs_connection_surrogate_id_t IdOfSend = RequestSend[i].mId;
 
 				struct GsConnectionSurrogate ConnectionSurrogateSend = {};
@@ -844,7 +880,14 @@ int gs_ntwk_reconnecter(
 
 	cleansub:
 		if (!!r) {
-			GS_LOG(E, S, "clnt_serv error into reconnect attempt");
+			if (r == GS_ERRCODE_RECONNECT) {
+				GS_LOG(E, S, "ntwk error into reconnect attempt");
+				continue;
+			}
+
+			if (r == GS_ERRCODE_EXIT) {
+				GS_ERR_NO_CLEAN(r);
+			}
 		}
 	}
 
@@ -873,17 +916,28 @@ void gs_ntwk_thread_func(
 
 	log_guard_t log(GS_LOG_GET(ThreadName.c_str()));
 
-	if (!!(r = gs_ntwk_reconnecter(
+	r = gs_ntwk_reconnecter(
 		WorkerDataRecv,
 		WorkerDataSend,
 		StoreNtwk,
-		ExtraHostCreate)))
-	{
+		ExtraHostCreate);
+
+	if (!!r && r == GS_ERRCODE_EXIT) {
+		
+		if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
+			GS_ERR_CLEAN(r);
+
+		GS_ERR_CLEAN(r);
+	}
+	if (!!r) {
 		GS_ASSERT(0);
 	}
 
-	for (;;)
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+clean:
+
+	GS_LOG(I, S, "thread exiting");
+
+	/* NOTE: void return */
 }
 
 /** we are expecting: possibly a reconnect_prepare, mandatorily a reconnect
@@ -1041,7 +1095,7 @@ int gs_worker_reconnecter(
 	cleansub:
 		if (!!r) {
 			if (r == GS_ERRCODE_RECONNECT) {
-				GS_LOG(E, S, "clnt_worker error into reconnect attempt");
+				GS_LOG(E, S, "worker error into reconnect attempt");
 				continue;
 			}
 
@@ -1082,8 +1136,18 @@ void gs_worker_thread_func(
 		StoreWorker);
 
 	if (!!r && r == GS_ERRCODE_EXIT) {
+		
+		struct GsWorkerRequestData RequestExit = {};
+
 		if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
 			GS_ERR_CLEAN(r);
+
+		if (!!(r = gs_worker_request_data_type_exit_make(&RequestExit)))
+			GS_ERR_CLEAN(r);
+
+		if (!!(r = gs_worker_request_enqueue(WorkerDataSend.get(), &RequestExit)))
+			GS_ERR_CLEAN(r);
+
 		GS_ERR_CLEAN(r);
 	}
 	if (!!r) {
@@ -1127,19 +1191,21 @@ int gs_net_full_create_connection(
 	GS_SP_SET_RAW_NULLING(WorkerDataSend, rawWorkerDataSend, GsWorkerData);
 
 	ClientWorkerThread = sp<std::thread>(new std::thread(
-		gs_worker_thread_func,
-		WorkerDataRecv,
-		WorkerDataSend,
-		pStoreWorker,
-		"clnt"));
+			gs_worker_thread_func,
+			WorkerDataRecv,
+			WorkerDataSend,
+			pStoreWorker,
+			"clnt"),
+		gs_sp_thread_detaching_deleter);
 
 	ClientNtwkThread = sp<std::thread>(new std::thread(
-		gs_ntwk_thread_func,
-		WorkerDataRecv,
-		WorkerDataSend,
-		pStoreNtwk,
-		pExtraHostCreate,
-		"clnt"));
+			gs_ntwk_thread_func,
+			WorkerDataRecv,
+			WorkerDataSend,
+			pStoreNtwk,
+			pExtraHostCreate,
+			"clnt"),
+		gs_sp_thread_detaching_deleter);
 
 	Connection = sp<GsFullConnection>(new GsFullConnection);
 	Connection->ThreadNtwk = ClientNtwkThread;

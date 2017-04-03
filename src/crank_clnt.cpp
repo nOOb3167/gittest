@@ -705,7 +705,7 @@ int gs_net_full_create_connection_client(
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_ctrl_con_create(&CtrlCon)))
+	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
 		GS_GOTO_CLEAN();
 
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
@@ -716,6 +716,7 @@ int gs_net_full_create_connection_client(
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
 	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
+	StoreNtwk->base.mCtrlCon = CtrlCon;
 
 	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;

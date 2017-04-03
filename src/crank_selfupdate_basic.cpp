@@ -230,6 +230,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
 	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
+	StoreNtwk->base.mCtrlCon = NULL; // FIXME: implement
 
 	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;

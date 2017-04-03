@@ -143,6 +143,7 @@ enum GsWorkerRequestDataType
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET = 1,
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE = 2,
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT = 3,
+	GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT = 4,
 };
 
 /**
@@ -150,11 +151,13 @@ enum GsWorkerRequestDataType
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET: mPacket, mId
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE: no data fields
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT: mExtraWorker
+  - GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT: no data fields
 
   @sa
      ::gs_worker_request_data_type_packet_make
 	 ::gs_worker_request_data_type_reconnect_prepare_make
 	 ::gs_worker_request_data_type_reconnect_reconnect_make
+	 ::gs_worker_request_data_type_exit_make
 */
 struct GsWorkerRequestData
 {
@@ -189,7 +192,7 @@ struct GsWorkerData
 */
 struct GsCtrlCon
 {
-	uint32_t mHaveExited;
+	uint32_t mExitedSignalLeft;
 	sp<std::mutex> mCtrlConMutex;
 	sp<std::condition_variable> mCtrlConCondExited;
 };
@@ -223,6 +226,8 @@ struct GsStoreNtwk
 	uint32_t magic;
 
 	struct GsIntrTokenSurrogate mIntrTokenSurrogate;
+
+	struct GsCtrlCon *mCtrlCon;
 };
 
 struct GsStoreWorker
@@ -238,6 +243,26 @@ struct GsStoreWorker
 		struct GsExtraWorker *ExtraWorker);
 };
 
+/**
+
+    WARNING: custom / special destruction protocol
+	- first: wait until mCtrlCon is signalled
+	           (the launched threads must signal before exiting)
+	- second: destroy the GsFullConnection
+	Signaling mCtrlCon before exiting from a launched thread races
+	against waiting on mCtrlCon and destroying GsFullConnection.
+	This is a problem because a thread is required to be
+	deached or joined before destruction.
+	The chosen resolution is ensure the threads are detached before
+	being destroyed.
+	This is accomplished containing threads in a shared pointer
+	with a custom thread-detaching deleter.
+
+    @sa
+	   ::gs_ctrl_con_wait_exited
+       ::gs_sp_thread_detaching_deleter
+	   ::std::thread::detach
+*/
 struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
@@ -284,7 +309,7 @@ int gs_packet_create(
 
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
 
-int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon);
+int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 
@@ -296,6 +321,8 @@ int gs_worker_request_data_type_reconnect_prepare_make(
 	struct GsWorkerRequestData *outValWorkerRequest);
 int gs_worker_request_data_type_reconnect_reconnect_make(
 	struct GsExtraWorker *ExtraWorker,
+	struct GsWorkerRequestData *outValWorkerRequest);
+int gs_worker_request_data_type_exit_make(
 	struct GsWorkerRequestData *outValWorkerRequest);
 bool gs_worker_request_isempty(struct GsWorkerData *pThis);
 int gs_worker_request_enqueue(
