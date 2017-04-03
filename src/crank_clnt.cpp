@@ -653,7 +653,7 @@ int clnt_state_crank2(
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{
-		GS_ASSERT(0);
+		GS_ERR_CLEAN(GS_ERRCODE_EXIT);
 	}
 	break;
 
@@ -686,6 +686,8 @@ int gs_net_full_create_connection_client(
 
 	sp<ClntState> State(new ClntState());
 
+	GsCtrlCon               *CtrlCon = NULL;
+
 	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
 	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
 	GsStoreWorkerClient     *StoreWorker     = new GsStoreWorkerClient();
@@ -703,6 +705,9 @@ int gs_net_full_create_connection_client(
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
 
+	if (!!(r = gs_ctrl_con_create(&CtrlCon)))
+		GS_GOTO_CLEAN();
+
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
 	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_client;
 	ExtraHostCreate->mServPort = ServPort;
@@ -714,6 +719,7 @@ int gs_net_full_create_connection_client(
 
 	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
+	StoreWorker->base.mCtrlCon = CtrlCon;
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;
 	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
@@ -730,6 +736,8 @@ int gs_net_full_create_connection_client(
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	GS_SP_SET_RAW_NULLING(ConnectionClient->mCtrlCon, CtrlCon, GsCtrlCon);
 
 	if (oConnectionClient)
 		*oConnectionClient = ConnectionClient;
@@ -767,10 +775,12 @@ int gs_store_worker_cb_crank_t_client(
 			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
 			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath)))
 		{
-			GS_GOTO_CLEAN();
+			GS_ERR_NO_CLEAN(r);
 		}
 
 	}
+
+noclean:
 
 clean:
 

@@ -335,10 +335,12 @@ int aux_selfupdate_main_mode_main() {
 		GS_GOTO_CLEAN();
 	}
 
-	// FIXME: endless loop
+	GS_LOG(I, S, "connection exit waiting");
 
-	for (;;)
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	if (!!(r = gs_ctrl_con_wait_exited(FcsClnt->mCtrlCon.get())))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "connection exit success");
 
 clean:
 

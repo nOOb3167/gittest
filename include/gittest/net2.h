@@ -182,6 +182,18 @@ struct GsWorkerData
 	sp<std::condition_variable> mWorkerDataCond;
 };
 
+/** @sa
+       ::gs_ctrl_con_create
+	   ::gs_ctrl_con_signal_exited
+	   ::gs_ctrl_con_wait_exited
+*/
+struct GsCtrlCon
+{
+	uint32_t mHaveExited;
+	sp<std::mutex> mCtrlConMutex;
+	sp<std::condition_variable> mCtrlConCondExited;
+};
+
 struct GsExtraHostCreate
 {
 	uint32_t magic;
@@ -217,6 +229,8 @@ struct GsStoreWorker
 {
 	uint32_t magic;
 
+	GsCtrlCon *mCtrlCon;
+
 	int(*cb_crank_t)(
 		struct GsWorkerData *WorkerDataRecv,
 		struct GsWorkerData *WorkerDataSend,
@@ -229,6 +243,7 @@ struct GsFullConnection
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
 	sp<GsExtraHostCreate> ThreadNtwkExtraHostCreate;
+	sp<GsCtrlCon> mCtrlCon;
 };
 
 int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSurrogateMap);
@@ -268,6 +283,10 @@ int gs_packet_create(
 	struct GsPacketSurrogate *valPacketSurrogate);
 
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
+
+int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon);
+int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
+int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 
 int gs_worker_request_data_type_packet_make(
 	struct GsPacket *Packet,
@@ -359,7 +378,7 @@ int gs_worker_reconnecter(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
 	sp<GsStoreWorker> StoreWorker);
-int gs_worker_thread_func(
+void gs_worker_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
 	sp<GsStoreWorker> StoreWorker,

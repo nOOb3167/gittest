@@ -238,6 +238,39 @@ int gs_worker_data_create(struct GsWorkerData **oWorkerData)
 	return 0;
 }
 
+int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon)
+{
+	struct GsCtrlCon *CtrlCon = new GsCtrlCon();
+
+	CtrlCon->mHaveExited = false;
+	CtrlCon->mCtrlConMutex = sp<std::mutex>(new std::mutex);
+	CtrlCon->mCtrlConCondExited = sp<std::condition_variable>(new std::condition_variable);
+
+	if (oCtrlCon)
+		*oCtrlCon = CtrlCon;
+
+	return 0;
+}
+
+int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon)
+{
+	{
+		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
+		CtrlCon->mHaveExited = true;
+	}
+	CtrlCon->mCtrlConCondExited->notify_all();
+	return 0;
+}
+
+int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
+{
+	{
+		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
+		CtrlCon->mCtrlConCondExited->wait(lock, [&]() { return CtrlCon->mHaveExited; });
+	}
+	return 0;
+}
+
 int gs_worker_request_data_type_packet_make(
 	struct GsPacket *Packet,
 	gs_connection_surrogate_id_t Id,
@@ -947,7 +980,7 @@ int gs_worker_service_wrap_want_reconnect(
 		StoreWorker,
 		ExtraWorker)))
 	{
-		GS_ERR_NO_CLEAN(1);
+		GS_ERR_NO_CLEAN(r);
 	}
 
 noclean:
@@ -1007,7 +1040,14 @@ int gs_worker_reconnecter(
 
 	cleansub:
 		if (!!r) {
-			GS_LOG(E, S, "clnt_worker error into reconnect attempt");
+			if (r == GS_ERRCODE_RECONNECT) {
+				GS_LOG(E, S, "clnt_worker error into reconnect attempt");
+				continue;
+			}
+
+			if (r == GS_ERRCODE_EXIT) {
+				GS_ERR_NO_CLEAN(r);
+			}
 		}
 	}
 
@@ -1018,13 +1058,14 @@ clean:
 	return r;
 }
 
-int gs_worker_thread_func(
+void gs_worker_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
 	sp<GsStoreWorker> StoreWorker,
 	const char *optExtraThreadName)
 {
 	int r = 0;
+	int err2 = 0;
 
 	std::string ThreadName("work_");
 
@@ -1035,16 +1076,25 @@ int gs_worker_thread_func(
 
 	log_guard_t log(GS_LOG_GET(ThreadName.c_str()));
 
-	if (!!(r = gs_worker_reconnecter(
+	r = gs_worker_reconnecter(
 		WorkerDataRecv,
 		WorkerDataSend,
-		StoreWorker)))
-	{
+		StoreWorker);
+
+	if (!!r && r == GS_ERRCODE_EXIT) {
+		if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
+			GS_ERR_CLEAN(r);
+		GS_ERR_CLEAN(r);
+	}
+	if (!!r) {
 		GS_ASSERT(0);
 	}
 
-	for (;;)
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+clean:
+
+	GS_LOG(I, S, "thread exiting");
+
+	/* NOTE: void return */
 }
 
 int gs_net_full_create_connection(
