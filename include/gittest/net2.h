@@ -355,13 +355,6 @@ int gs_ntwk_reconnect_expend(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	GsHostSurrogate *ioHostSurrogate,
 	uint32_t *ioWantReconnect);
-int gs_ntwk_host_service_wrap_want_reconnect(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreNtwk  *StoreNtwk,
-	struct GsHostSurrogate *HostSurrogate,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	uint32_t *ioWantReconnect);
 int gs_aux_aux_aux_connection_register_transfer_ownership(
 	GsConnectionSurrogate valConnectionSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
@@ -394,12 +387,6 @@ int gs_worker_reconnect_expend(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsExtraWorker **oExtraWorkerCond,
 	struct ClntStateReconnect *ioStateReconnect,
-	uint32_t *ioWantReconnect);
-int gs_worker_service_wrap_want_reconnect(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker,
 	uint32_t *ioWantReconnect);
 int gs_worker_reconnecter(
 	sp<GsWorkerData> WorkerDataRecv,

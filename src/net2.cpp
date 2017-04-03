@@ -539,41 +539,6 @@ clean:
 	return r;
 }
 
-int gs_ntwk_host_service_wrap_want_reconnect(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreNtwk  *StoreNtwk,
-	struct GsHostSurrogate *HostSurrogate,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	uint32_t *ioWantReconnect)
-{
-	int r = 0;
-
-	uint32_t WantReconnect = false;
-
-	if (!!(r = gs_ntwk_host_service(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreNtwk,
-		HostSurrogate,
-		ioConnectionSurrogateMap)))
-	{
-		GS_ERR_NO_CLEAN(r);
-	}
-
-noclean:
-	if (!!r) {
-		WantReconnect = true;
-	}
-
-	if (ioWantReconnect)
-		*ioWantReconnect = WantReconnect;
-
-clean:
-
-	return r;
-}
-
 /** Two part connection registration.
     The connection is assigned an entry with Id within the connection map.
 	That same Id is then bonded to the ENetPeer 'data' field.
@@ -851,7 +816,6 @@ int gs_ntwk_reconnecter(
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
 
-	/* NOTE: special error handling */
 	while (true) {
 
 		/* NOTE: no_clean */
@@ -866,29 +830,21 @@ int gs_ntwk_reconnecter(
 			GS_ERR_NO_CLEAN(r);
 		}
 
-		/* NOTE: cleansub */
-		if (!!(r = gs_ntwk_host_service_wrap_want_reconnect(
+		/* NOTE: special error handling */
+		r = gs_ntwk_host_service(
 			WorkerDataRecv.get(),
 			WorkerDataSend.get(),
 			StoreNtwk.get(),
 			&HostSurrogate,
-			ConnectionSurrogateMap.get(),
-			&WantReconnect)))
-		{
-			GS_GOTO_CLEANSUB();
-		}
+			ConnectionSurrogateMap.get());
 
-	cleansub:
-		if (!!r) {
-			if (r == GS_ERRCODE_RECONNECT) {
-				GS_LOG(E, S, "ntwk error into reconnect attempt");
-				continue;
-			}
-
-			if (r == GS_ERRCODE_EXIT) {
-				GS_ERR_NO_CLEAN(r);
-			}
+		if (!!r && r == GS_ERRCODE_RECONNECT) {
+			GS_LOG(E, S, "ntwk reconnect attempt");
+			WantReconnect = true;
+			continue;
 		}
+		if (!!r)
+			GS_ERR_NO_CLEAN(r);
 	}
 
 noclean:
@@ -1017,39 +973,6 @@ clean:
 	return r;
 }
 
-int gs_worker_service_wrap_want_reconnect(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker,
-	uint32_t *ioWantReconnect)
-{
-	int r = 0;
-
-	uint32_t WantReconnect = false;
-
-	if (!!(r = StoreWorker->cb_crank_t(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		ExtraWorker)))
-	{
-		GS_ERR_NO_CLEAN(r);
-	}
-
-noclean:
-	if (!!r) {
-		WantReconnect = true;
-	}
-
-	if (ioWantReconnect)
-		*ioWantReconnect = WantReconnect;
-
-clean:
-
-	return r;
-}
-
 int gs_worker_reconnecter(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
@@ -1068,7 +991,6 @@ int gs_worker_reconnecter(
 	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
 		GS_GOTO_CLEAN();
 
-	/* NOTE: special error handling */
 	while (true) {
 
 		/* NOTE: no_clean */
@@ -1081,28 +1003,20 @@ int gs_worker_reconnecter(
 			GS_ERR_NO_CLEAN(1);
 		}
 
-		/* NOTE: cleansub */
-		if (!!(r = gs_worker_service_wrap_want_reconnect(
+		/* NOTE: special error handling */
+		r = StoreWorker->cb_crank_t(
 			WorkerDataRecv.get(),
 			WorkerDataSend.get(),
 			StoreWorker.get(),
-			ExtraWorker,
-			&WantReconnect)))
-		{
-			GS_GOTO_CLEANSUB();
-		}
+			ExtraWorker);
 
-	cleansub:
-		if (!!r) {
-			if (r == GS_ERRCODE_RECONNECT) {
-				GS_LOG(E, S, "worker error into reconnect attempt");
-				continue;
-			}
-
-			if (r == GS_ERRCODE_EXIT) {
-				GS_ERR_NO_CLEAN(r);
-			}
+		if (!!r && r == GS_ERRCODE_RECONNECT) {
+			GS_LOG(E, S, "worker reconnect attempt");
+			WantReconnect = true;
+			continue;
 		}
+		if (!!r)
+			GS_ERR_NO_CLEAN(r);
 	}
 
 noclean:
