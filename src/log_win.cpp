@@ -121,8 +121,13 @@ int gs_log_crash_handler_printf_cb(void *ctx, const char *d, int64_t l) {
 }
 
 
-int gs_log_crash_handler_dump_global_log_list() {
+int gs_log_crash_handler_dump_global_log_list_suffix(
+	const char *SuffixBuf, size_t LenSuffix)
+{
 	int r = 0;
+
+	size_t LenCombinedExtraSuffix = 0;
+	char CombinedExtraSuffix[512];
 
 	size_t LenCurrentFileName = 0;
 	char CurrentFileNameBuf[512];
@@ -131,6 +136,14 @@ int gs_log_crash_handler_dump_global_log_list() {
 	char LogFileNameBuf[512];
 
 	HANDLE hLogFile = INVALID_HANDLE_VALUE;
+
+	if ((LenCombinedExtraSuffix = strlen(GS_LOG_STR_EXTRA_EXTENSION) + LenSuffix)
+		>= sizeof CombinedExtraSuffix)
+		{ r = 1; goto clean; }
+
+	memcpy(CombinedExtraSuffix, GS_LOG_STR_EXTRA_SUFFIX, strlen(GS_LOG_STR_EXTRA_SUFFIX));
+	memcpy(CombinedExtraSuffix + strlen(GS_LOG_STR_EXTRA_SUFFIX), SuffixBuf, LenSuffix);
+	memset(CombinedExtraSuffix + LenCombinedExtraSuffix, '\0', 1);
 
 	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
 		goto clean;
@@ -172,6 +185,11 @@ clean:
 		CloseHandle(hLogFile);
 
 	return r;
+}
+
+int gs_log_crash_handler_dump_global_log_list()
+{
+	return gs_log_crash_handler_dump_global_log_list_suffix("", strlen(""));
 }
 
 void gs_log_crash_handler_printall_cpp() {

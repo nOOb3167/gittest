@@ -317,7 +317,7 @@ int main(int argc, char **argv) {
 	}
 
 clean:
-	if (!!(r = gs_log_crash_handler_dump_global_log_list()))
+	if (!!(r = gs_log_crash_handler_dump_global_log_list_suffix("_err", strlen("_err"))))
 		GS_ASSERT(0);
 
 	if (!!r)

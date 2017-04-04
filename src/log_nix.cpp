@@ -254,8 +254,13 @@ clean:
 	return r;
 }
 
-int gs_log_crash_handler_dump_global_log_list() {
+int gs_log_crash_handler_dump_global_log_list_suffix(
+	const char *SuffixBuf, size_t LenSuffix)
+{
 	int r = 0;
+
+	size_t LenCombinedExtraSuffix = 0;
+	char CombinedExtraSuffix[512];
 
 	size_t LenCurrentFileName = 0;
 	char CurrentFileNameBuf[512];
@@ -265,6 +270,14 @@ int gs_log_crash_handler_dump_global_log_list() {
 
 	int fdLogFile = -1;
 
+	if ((LenCombinedExtraSuffix = strlen(GS_LOG_STR_EXTRA_EXTENSION) + LenSuffix)
+		>= sizeof CombinedExtraSuffix)
+		{ r = 1; goto clean; }
+
+	memcpy(CombinedExtraSuffix, GS_LOG_STR_EXTRA_SUFFIX, strlen(GS_LOG_STR_EXTRA_SUFFIX));
+	memcpy(CombinedExtraSuffix + strlen(GS_LOG_STR_EXTRA_SUFFIX), SuffixBuf, LenSuffix);
+	memset(CombinedExtraSuffix + LenCombinedExtraSuffix, '\0', 1);
+
 	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
 		goto clean;
 
@@ -273,7 +286,7 @@ int gs_log_crash_handler_dump_global_log_list() {
 		CurrentFileNameBuf, LenCurrentFileName,
 		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
 		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
-		GS_LOG_STR_EXTRA_SUFFIX, strlen(GS_LOG_STR_EXTRA_SUFFIX),
+		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),
 		LogFileNameBuf, sizeof LogFileNameBuf, &LenLogFileName)))
 	{
@@ -311,6 +324,11 @@ clean:
 	gs_nix_close_wrapper_noerr(fdLogFile);
 
 	return r;
+}
+
+int gs_log_crash_handler_dump_global_log_list()
+{
+	return gs_log_crash_handler_dump_global_log_list_suffix("", strlen(""));
 }
 
 int gs_log_crash_handler_setup() {
