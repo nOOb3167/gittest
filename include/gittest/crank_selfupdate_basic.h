@@ -33,6 +33,9 @@ struct GsStoreWorkerSelfUpdateBasic
 	const char *FileNameAbsoluteSelfUpdateBuf; size_t LenFileNameAbsoluteSelfUpdate;
 
 	struct GsIntrTokenSurrogate mIntrToken;
+
+	uint32_t    resultHaveUpdate;
+	std::string resultBufferUpdate;
 };
 
 int crank_selfupdate_basic(

@@ -187,6 +187,10 @@ int crank_selfupdate_basic(
 	if (oBufferUpdate)
 		oBufferUpdate->swap(BufferUpdate);
 
+	GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
+
+noclean:
+
 clean:
 	if (RepositoryMemory)
 		git_repository_free(RepositoryMemory);
@@ -208,6 +212,8 @@ int gs_net_full_create_connection_selfupdate_basic(
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
 
+	GsCtrlCon                        *CtrlCon = NULL;
+
 	GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = new GsExtraHostCreateSelfUpdateBasic();
 	GsStoreNtwkSelfUpdateBasic       *StoreNtwk       = new GsStoreNtwkSelfUpdateBasic();
 	GsStoreWorkerSelfUpdateBasic     *StoreWorker     = new GsStoreWorkerSelfUpdateBasic();
@@ -222,6 +228,9 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
+	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
+		GS_GOTO_CLEAN();
+
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC;
 	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_selfupdate_basic;
 	ExtraHostCreate->mServPort = ServPort;
@@ -230,12 +239,15 @@ int gs_net_full_create_connection_selfupdate_basic(
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
 	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = NULL; // FIXME: implement
+	StoreNtwk->base.mCtrlCon = CtrlCon;
 
 	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
+	StoreWorker->base.mCtrlCon = CtrlCon;
 	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
 	StoreWorker->LenFileNameAbsoluteSelfUpdate = LenFileNameAbsoluteSelfUpdate;
+	StoreWorker->resultHaveUpdate = false;
+	StoreWorker->resultBufferUpdate = std::string();
 	StoreWorker->mIntrToken = IntrTokenSurrogate;
 
 	if (!!(r = gs_net_full_create_connection(
@@ -248,8 +260,16 @@ int gs_net_full_create_connection_selfupdate_basic(
 		GS_GOTO_CLEAN();
 	}
 
-	// FIXME: implement properly (wait quit protocol signal end and extract output data)
-	GS_ASSERT(0);
+	GS_SP_SET_RAW_NULLING(ConnectionSelfUpdateBasic->mCtrlCon, CtrlCon, GsCtrlCon);
+
+	if (!!(r = gs_ctrl_con_wait_exited(ConnectionSelfUpdateBasic->mCtrlCon.get())))
+		GS_GOTO_CLEAN();
+
+	if (oHaveUpdate)
+		*oHaveUpdate = StoreWorker->resultHaveUpdate;
+
+	if (oBufferUpdate)
+		*oBufferUpdate = StoreWorker->resultBufferUpdate;
 
 clean:
 
@@ -286,12 +306,13 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 		&HaveUpdate,
 		&BufferUpdate)))
 	{
-		GS_GOTO_CLEAN();
+		GS_ERR_NO_CLEAN(r);
 	}
 
-	// FIXME: how does the control flow work here
-	//   want an equivalent of GS_ERRCODE_RECONNECT, but for quitting? quit protocol
-	GS_ASSERT(0);
+noclean:
+
+	pStoreWorker->resultHaveUpdate = HaveUpdate;
+	pStoreWorker->resultBufferUpdate.swap(BufferUpdate);
 
 clean:
 
@@ -322,7 +343,7 @@ int gs_extra_host_create_cb_create_t_selfupdate_basic(
 
 	int errService = 0;
 
-	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_CLIENT_MAGIC)
+	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC)
 		GS_ERR_CLEAN(1);
 
 	/* create host */
