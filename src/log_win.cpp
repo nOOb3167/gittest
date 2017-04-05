@@ -23,7 +23,7 @@
 
 int gs_log_win_open_dump_file(
 	const char *LogFileNameBuf, size_t LenLogFileName,
-	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
+	const char *ExpectedContainsBuf, size_t LenExpectedContains,
 	HANDLE *ohLogFile);
 
 struct GsLogCrashHandlerDumpData { uint32_t Tripwire; HANDLE hLogFile; size_t MaxWritePos; size_t CurrentWritePos; };
@@ -36,29 +36,21 @@ LONG WINAPI gs_log_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_P
 
 int gs_log_win_open_dump_file(
 	const char *LogFileNameBuf, size_t LenLogFileName,
-	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
+	const char *ExpectedContainsBuf, size_t LenExpectedContains,
 	HANDLE *ohLogFile)
 {
 	int r = 0;
 
 	HANDLE hLogFile = INVALID_HANDLE_VALUE;
 
-	if (LogFileNameBuf[LenLogFileName] != '\0')
-		{ r = 1; goto clean; }
+	if (!!(r = gs_buf_ensure_haszero(LogFileNameBuf, LenLogFileName + 1)))
+		goto clean;
 
-	if (ExpectedSuffixBuf[LenExpectedSuffix] != '\0')
-		{ r = 1; goto clean; }
+	if (!!(r = gs_buf_ensure_haszero(ExpectedContainsBuf, LenExpectedContains + 1)))
+		goto clean;
 
-	if (LenLogFileName < LenExpectedSuffix)
+	if (strstr(LogFileNameBuf, ExpectedContainsBuf) == NULL)
 		{ r = 1; goto clean; }
-
-	if (strncmp(
-		ExpectedSuffixBuf,
-		LogFileNameBuf + LenLogFileName - LenExpectedSuffix,
-		LenExpectedSuffix) != 0)
-	{
-		r = 1; goto clean;
-	}
 
 	if ((hLogFile = CreateFile(
 		LogFileNameBuf,
@@ -152,7 +144,7 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 		CurrentFileNameBuf, LenCurrentFileName,
 		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
 		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
-		GS_LOG_STR_EXTRA_SUFFIX, strlen(GS_LOG_STR_EXTRA_SUFFIX),
+		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),
 		LogFileNameBuf, sizeof LogFileNameBuf, &LenLogFileName)))
 	{
@@ -163,7 +155,7 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 
 	if (!!(r = gs_log_win_open_dump_file(
 		LogFileNameBuf, LenLogFileName,
-		GS_LOG_STR_EXPECTED_SUFFIX, strlen(GS_LOG_STR_EXPECTED_SUFFIX),
+		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		&hLogFile)))
 	{
 		goto clean;
