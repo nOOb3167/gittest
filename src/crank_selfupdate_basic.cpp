@@ -144,7 +144,6 @@ int crank_selfupdate_basic(
 		git_oid BlobZeroOid = {};
 		
 		git_blob *BlobZero = NULL;
-		git_buf BlobZeroBuf = {};
 
 		aux_LE_to_uint32(&BlobZeroSize, (char *)(PacketBlob->data + BlobOffsetSizeBuffer), GS_FRAME_SIZE_LEN);
 
@@ -158,21 +157,10 @@ int crank_selfupdate_basic(
 		if (git_oid_cmp(&BlobZeroOid, &BlobSelfUpdateOidVec.at(0)) != 0)
 			GS_ERR_CLEANSUB(1);
 
-		// FIXME: git_blob_filtered_content: actually this whole API is trash.
-		//   - it is not clear if empty string passed as 'path' parameter is ok.
-		//   - 'check_for_binary_data' MUST ALWAYS BE ZERO PLEASE - according to current libgit2 source
-		//   - freeing the buffer before freeing the blob seems to be the right thing in all cases?
-		// FIXME: this actually does filter the content!
-		//   file server side: "dummy\r\n"; blob server side: "dummy\n"; blob filtered client side: "dummy\r\n"
-		if (!!(r = git_blob_filtered_content(&BlobZeroBuf, BlobZero, "", 0)))
-			GS_GOTO_CLEANSUB();
-
 		HaveUpdate = 1;
-		BufferUpdate = std::string(BlobZeroBuf.ptr, BlobZeroBuf.size);
+		BufferUpdate = std::string((char *)git_blob_rawcontent(BlobZero), git_blob_rawsize(BlobZero));
 
 	cleansub:
-
-		git_buf_free(&BlobZeroBuf);
 
 		if (BlobZero)
 			git_blob_free(BlobZero);
