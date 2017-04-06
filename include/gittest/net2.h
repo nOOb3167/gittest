@@ -144,6 +144,7 @@ enum GsWorkerRequestDataType
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE = 2,
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT = 3,
 	GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT = 4,
+	GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT = 5,
 };
 
 /**
@@ -152,6 +153,7 @@ enum GsWorkerRequestDataType
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE: no data fields
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT: mExtraWorker
   - GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT: no data fields
+  - GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT: mId
 
   @sa
      ::gs_worker_request_data_type_packet_make
@@ -323,6 +325,9 @@ int gs_worker_request_data_type_reconnect_reconnect_make(
 	struct GsExtraWorker *ExtraWorker,
 	struct GsWorkerRequestData *outValWorkerRequest);
 int gs_worker_request_data_type_exit_make(
+	struct GsWorkerRequestData *outValWorkerRequest);
+int gs_worker_request_data_type_disconnect_make(
+	gs_connection_surrogate_id_t Id,
 	struct GsWorkerRequestData *outValWorkerRequest);
 bool gs_worker_request_isempty(struct GsWorkerData *pThis);
 int gs_worker_request_enqueue(

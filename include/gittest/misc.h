@@ -34,15 +34,15 @@
 
 #define GS_DBG_LOG() GS_LOG(CLEAN, S, "CLEAN");
 
-#define GS_ERR_NO_CLEAN(THE_R) { r = (THE_R); GS_DBG_LOG(); goto noclean; }
-#define GS_ERR_CLEAN(THE_R) { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; }
-#define GS_GOTO_CLEAN() { GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; }
-#define GS_ERR_CLEANSUB(THE_R) { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; }
-#define GS_GOTO_CLEANSUB() { GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; }
+#define GS_ERR_NO_CLEAN(THE_R) do { r = (THE_R); GS_DBG_LOG(); goto noclean; } while(0)
+#define GS_ERR_CLEAN(THE_R) do { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; } while(0)
+#define GS_GOTO_CLEAN() do { GS_DBG_LOG(); GS_DBG_CLEAN(); goto clean; } while(0)
+#define GS_ERR_CLEANSUB(THE_R) do { r = (THE_R); GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; } while(0)
+#define GS_GOTO_CLEANSUB() do { GS_DBG_LOG(); GS_DBG_CLEAN(); goto cleansub; } while(0)
 
-#define GS_ERR_NO_CLEAN_L(THE_R, LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_NO_CLEAN(THE_R); }
-#define GS_ERR_CLEAN_L(THE_R, LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_CLEAN(THE_R); }
-#define GS_GOTO_CLEAN_L(LEVEL, TT, ...) { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_GOTO_CLEAN(); }
+#define GS_ERR_NO_CLEAN_L(THE_R, LEVEL, TT, ...) do { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_NO_CLEAN(THE_R); } while(0)
+#define GS_ERR_CLEAN_L(THE_R, LEVEL, TT, ...) do { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_ERR_CLEAN(THE_R); } while(0)
+#define GS_GOTO_CLEAN_L(LEVEL, TT, ...) do { GS_LOG(LEVEL, TT, __VA_ARGS__); GS_GOTO_CLEAN(); } while(0)
 
 /* should not clash with other error codes etc - just used random.org */
 #define GS_ERRCODE_RECONNECT 0x7BDD6EAF

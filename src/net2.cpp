@@ -160,8 +160,8 @@ int gs_connection_surrogate_map_erase(
 
 	if (it == ioConnectionSurrogateMap->mConnectionSurrogateMap->end())
 		GS_ERR_CLEAN_L(1, E, S, "removal prevented (is an element missing, and why?)");
-
-	ioConnectionSurrogateMap->mConnectionSurrogateMap->erase(it);
+	else
+		ioConnectionSurrogateMap->mConnectionSurrogateMap->erase(it);
 
 clean:
 
@@ -340,6 +340,21 @@ int gs_worker_request_data_type_exit_make(
 	struct GsWorkerRequestData W = {};
 
 	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT;
+
+	if (outValWorkerRequest)
+		*outValWorkerRequest = W;
+
+	return 0;
+}
+
+int gs_worker_request_data_type_disconnect_make(
+	gs_connection_surrogate_id_t Id,
+	struct GsWorkerRequestData *outValWorkerRequest)
+{
+	struct GsWorkerRequestData W = {};
+
+	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT;
+	W.mId = Id;
 
 	if (outValWorkerRequest)
 		*outValWorkerRequest = W;
@@ -639,6 +654,39 @@ int gs_ntwk_host_service(
 						GS_ERR_CLEAN(GS_ERRCODE_EXIT);
 				}
 
+				do {
+					if (RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT) {
+						GS_LOG(I, S, "(from worker) ENET_EVENT_TYPE_DISCONNECT (from worker)");
+
+						struct GsConnectionSurrogate ConnectionSurrogateDisconnect = {};
+						uint32_t ConnectionSurrogateDisconnectIsPresent = false;
+
+						if (!!(r = gs_connection_surrogate_map_get_try(
+							ioConnectionSurrogateMap,
+							RequestSend[i].mId,
+							&ConnectionSurrogateDisconnect,
+							&ConnectionSurrogateDisconnectIsPresent)))
+						{
+							GS_GOTO_CLEAN();
+						}
+
+						if (!ConnectionSurrogateDisconnectIsPresent) {
+							GS_LOG(W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend[i].mId);
+							continue;
+						}
+
+						if (ConnectionSurrogateDisconnect.mHost != HostSurrogate->mHost) {
+							GS_LOG(W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend[i].mId);
+							continue;
+						}
+
+						if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, RequestSend[i].mId)))
+							GS_GOTO_CLEAN();
+
+						enet_peer_disconnect(ConnectionSurrogateDisconnect.mPeer, 0);
+					}
+				} while (0);
+
 				gs_connection_surrogate_id_t IdOfSend = RequestSend[i].mId;
 
 				struct GsConnectionSurrogate ConnectionSurrogateSend = {};
@@ -653,7 +701,9 @@ int gs_ntwk_host_service(
 					IdOfSend,
 					&ConnectionSurrogateSend,
 					&ConnectionSurrogateSendIsPresent)))
+				{
 					GS_GOTO_CLEAN();
+				}
 
 				/* if a reconnection occurred, outstanding send requests would have missing send IDs */
 				if (! ConnectionSurrogateSendIsPresent) {
