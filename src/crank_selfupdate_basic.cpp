@@ -243,7 +243,8 @@ int gs_net_full_create_connection_selfupdate_basic(
 		pExtraHostCreate,
 		pStoreNtwk,
 		pStoreWorker,
-		&ConnectionSelfUpdateBasic)))
+		&ConnectionSelfUpdateBasic,
+		"selfup")))
 	{
 		GS_GOTO_CLEAN();
 	}

@@ -380,18 +380,19 @@ void gs_ntwk_thread_func(
 	sp<GsExtraHostCreate> ExtraHostCreate,
 	const char *optExtraThreadName);
 
+int gs_worker_exit(
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker);
 int gs_worker_dequeue_handling_double_notify(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerRequestData *outValRequest);
-int gs_worker_reconnect_expend(
+int gs_worker_reconnect(
 	struct GsWorkerData *WorkerDataRecv,
-	struct GsExtraWorker **oExtraWorkerCond,
-	struct ClntStateReconnect *ioStateReconnect,
-	uint32_t *ioWantReconnect);
+	struct GsExtraWorker **oExtraWorker);
 int gs_worker_reconnecter(
-	sp<GsWorkerData> WorkerDataRecv,
-	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreWorker> StoreWorker);
+	GsWorkerData *WorkerDataRecv,
+	GsWorkerData *WorkerDataSend,
+	GsStoreWorker *StoreWorker);
 void gs_worker_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
@@ -403,6 +404,7 @@ int gs_net_full_create_connection(
 	sp<GsExtraHostCreate> pExtraHostCreate,
 	sp<GsStoreNtwk>       pStoreNtwk,
 	sp<GsStoreWorker>     pStoreWorker,
-	sp<GsFullConnection> *oConnection);
+	sp<GsFullConnection> *oConnection,
+	const char *optExtraThreadName);
 
 #endif /* _GITTEST_NET2_H_ */

@@ -803,7 +803,8 @@ int gs_net_full_create_connection_client(
 		pExtraHostCreate,
 		pStoreNtwk,
 		pStoreWorker,
-		&ConnectionClient)))
+		&ConnectionClient,
+		"clnt")))
 	{
 		GS_GOTO_CLEAN();
 	}

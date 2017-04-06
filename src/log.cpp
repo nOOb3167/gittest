@@ -588,6 +588,10 @@ int gs_log_create_common_logs() {
 	// net2
 	GS_LOG_ADD(gs_log_create_ret("ntwk_clnt"));
 	GS_LOG_ADD(gs_log_create_ret("work_clnt"));
+	GS_LOG_ADD(gs_log_create_ret("ntwk_serv"));
+	GS_LOG_ADD(gs_log_create_ret("work_serv"));
+	GS_LOG_ADD(gs_log_create_ret("ntwk_selfup"));
+	GS_LOG_ADD(gs_log_create_ret("work_selfup"));
 
 clean:
 

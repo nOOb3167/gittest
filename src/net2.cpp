@@ -886,7 +886,9 @@ void gs_ntwk_thread_func(
 		GS_ERR_CLEAN(r);
 	}
 	if (!!r) {
-		GS_ASSERT(0);
+		//GS_ASSERT(0);
+		// FIXME:
+		gs_log_crash_handler_dump_global_log_list_suffix(ThreadName.c_str(), ThreadName.size());
 	}
 
 clean:
@@ -894,6 +896,28 @@ clean:
 	GS_LOG(I, S, "thread exiting");
 
 	/* NOTE: void return */
+}
+
+int gs_worker_exit(
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker)
+{
+	int r = 0;
+
+	struct GsWorkerRequestData RequestExit = {};
+
+	if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
+		GS_ERR_CLEAN(r);
+
+	if (!!(r = gs_worker_request_data_type_exit_make(&RequestExit)))
+		GS_ERR_CLEAN(r);
+
+	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &RequestExit)))
+		GS_ERR_CLEAN(r);
+
+clean:
+
+	return r;
 }
 
 /** we are expecting: possibly a reconnect_prepare, mandatorily a reconnect
@@ -930,43 +954,30 @@ clean:
 	return r;
 }
 
-/** @param oExtraWorkerOpt do not reseat unless a reconnect has actually occurred.
-           beware of a reseat potentally the last reference to a GsExtraWorker, causing a leak.
-*/
-int gs_worker_reconnect_expend(
+/** @param ioExtraWorker beware of leaking a pointed-to pre-existing ExtraWorker */
+int gs_worker_reconnect(
 	struct GsWorkerData *WorkerDataRecv,
-	struct GsExtraWorker **oExtraWorkerCond,
-	struct ClntStateReconnect *ioStateReconnect,
-	uint32_t *ioWantReconnect)
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
-	GsExtraWorker *ExtraWorker = *oExtraWorkerCond;
+	GsWorkerRequestData Reconnect = {};
 
-	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
+	GS_LOG(I, S, "reconnection wanted");
+
+	GS_LOG(I, S, "receiving notification");
+
+	if (!!(r = gs_worker_dequeue_handling_double_notify(WorkerDataRecv, &Reconnect)))
 		GS_GOTO_CLEAN();
 
-	if (*ioWantReconnect) {
+	GS_LOG(I, S, "received notification");
 
-		GsWorkerRequestData Reconnect = {};
+	// FIXME: cb_destroy_t return value
+	if (ioExtraWorker && (*ioExtraWorker))
+		(*ioExtraWorker)->cb_destroy_t(*ioExtraWorker);
 
-		GS_LOG(I, S, "reconnection wanted");
-
-		GS_LOG(I, S, "receiving notification");
-
-		if (!!(r = gs_worker_dequeue_handling_double_notify(WorkerDataRecv, &Reconnect)))
-			GS_GOTO_CLEAN();
-
-		GS_LOG(I, S, "received notification");
-
-		ExtraWorker = Reconnect.mExtraWorker;
-	}
-
-	if (oExtraWorkerCond)
-		*oExtraWorkerCond = ExtraWorker;
-
-	if (ioWantReconnect)
-		*ioWantReconnect = false;
+	if (ioExtraWorker)
+		*ioExtraWorker = Reconnect.mExtraWorker;
 
 clean:
 
@@ -974,54 +985,47 @@ clean:
 }
 
 int gs_worker_reconnecter(
-	sp<GsWorkerData> WorkerDataRecv,
-	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreWorker> StoreWorker)
+	GsWorkerData *WorkerDataRecv,
+	GsWorkerData *WorkerDataSend,
+	GsStoreWorker *StoreWorker)
 {
 	int r = 0;
 
-	ClntStateReconnect StateReconnect = {};
-
 	GsExtraWorker *ExtraWorker = NULL;
-
-	uint32_t WantReconnect = true;
 
 	GS_LOG(I, S, "entering reconnect-service cycle");
 
-	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
-		GS_GOTO_CLEAN();
-
 	while (true) {
 
-		/* NOTE: no_clean */
-		if (!!(r = gs_worker_reconnect_expend(
-			WorkerDataRecv.get(),
-			&ExtraWorker,
-			&StateReconnect,
-			&WantReconnect)))
-		{
-			GS_ERR_NO_CLEAN(1);
-		}
+		if (!!(r = gs_worker_reconnect(WorkerDataRecv, &ExtraWorker)))
+			GS_GOTO_CLEAN();
 
-		/* NOTE: special error handling */
 		r = StoreWorker->cb_crank_t(
-			WorkerDataRecv.get(),
-			WorkerDataSend.get(),
-			StoreWorker.get(),
+			WorkerDataRecv,
+			WorkerDataSend,
+			StoreWorker,
 			ExtraWorker);
 
 		if (!!r && r == GS_ERRCODE_RECONNECT) {
 			GS_LOG(E, S, "worker reconnect attempt");
-			WantReconnect = true;
 			continue;
 		}
+		if (!!r && r == GS_ERRCODE_EXIT) {
+			GS_LOG(E, S, "worker exit attempt");
+			if (!!(r = gs_worker_exit(WorkerDataSend, StoreWorker)))
+				GS_GOTO_CLEAN();
+			GS_ERR_NO_CLEAN(0);
+		}
 		if (!!r)
-			GS_ERR_NO_CLEAN(r);
+			GS_GOTO_CLEAN();
 	}
 
 noclean:
 
 clean:
+	// FIXME: cb_destroy_t return value
+	if (ExtraWorker)
+		ExtraWorker->cb_destroy_t(ExtraWorker);
 
 	return r;
 }
@@ -1033,7 +1037,6 @@ void gs_worker_thread_func(
 	const char *optExtraThreadName)
 {
 	int r = 0;
-	int err2 = 0;
 
 	std::string ThreadName("work_");
 
@@ -1044,33 +1047,21 @@ void gs_worker_thread_func(
 
 	log_guard_t log(GS_LOG_GET(ThreadName.c_str()));
 
-	r = gs_worker_reconnecter(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker);
-
-	if (!!r && r == GS_ERRCODE_EXIT) {
-		
-		struct GsWorkerRequestData RequestExit = {};
-
-		if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
-			GS_ERR_CLEAN(r);
-
-		if (!!(r = gs_worker_request_data_type_exit_make(&RequestExit)))
-			GS_ERR_CLEAN(r);
-
-		if (!!(r = gs_worker_request_enqueue(WorkerDataSend.get(), &RequestExit)))
-			GS_ERR_CLEAN(r);
-
-		GS_ERR_CLEAN(r);
-	}
-	if (!!r) {
-		GS_ASSERT(0);
+	if (!!(r = gs_worker_reconnecter(
+		WorkerDataRecv.get(),
+		WorkerDataSend.get(),
+		StoreWorker.get())))
+	{
+		GS_GOTO_CLEAN();
 	}
 
 clean:
 
 	GS_LOG(I, S, "thread exiting");
+
+	if (!!r) {
+		GS_ASSERT(0);
+	}
 
 	/* NOTE: void return */
 }
@@ -1080,7 +1071,8 @@ int gs_net_full_create_connection(
 	sp<GsExtraHostCreate> pExtraHostCreate,
 	sp<GsStoreNtwk>       pStoreNtwk,
 	sp<GsStoreWorker>     pStoreWorker,
-	sp<GsFullConnection> *oConnection)
+	sp<GsFullConnection> *oConnection,
+	const char *optExtraThreadName)
 {
 	int r = 0;
 
@@ -1109,7 +1101,7 @@ int gs_net_full_create_connection(
 			WorkerDataRecv,
 			WorkerDataSend,
 			pStoreWorker,
-			"clnt"),
+			optExtraThreadName),
 		gs_sp_thread_detaching_deleter);
 
 	ClientNtwkThread = sp<std::thread>(new std::thread(
@@ -1118,7 +1110,7 @@ int gs_net_full_create_connection(
 			WorkerDataSend,
 			pStoreNtwk,
 			pExtraHostCreate,
-			"clnt"),
+			optExtraThreadName),
 		gs_sp_thread_detaching_deleter);
 
 	Connection = sp<GsFullConnection>(new GsFullConnection);

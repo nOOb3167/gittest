@@ -336,7 +336,8 @@ int gs_net_full_create_connection_server(
 		pExtraHostCreate,
 		pStoreNtwk,
 		pStoreWorker,
-		&ConnectionServer)))
+		&ConnectionServer,
+		"serv")))
 	{
 		GS_GOTO_CLEAN();
 	}
