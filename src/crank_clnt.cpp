@@ -920,7 +920,7 @@ int gs_extra_host_create_cb_create_t_client(
 
 	ConnectionSurrogate.mHost = host;
 	ConnectionSurrogate.mPeer = peer;
-	ConnectionSurrogate.mIsPrincipalClientConnection = false;
+	ConnectionSurrogate.mIsPrincipalClientConnection = true;
 
 	// FIXME: pretty ugly initialization of GsConnectionSurrogate
 	if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(

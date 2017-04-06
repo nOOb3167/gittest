@@ -107,6 +107,13 @@ struct GsConnectionSurrogate {
 };
 
 /** manual-init struct
+	value struct
+*/
+struct GsEventSurrogate {
+	ENetEvent event;
+};
+
+/** manual-init struct
     value struct
 
     FIXME: think about using a shared pointer
@@ -367,6 +374,24 @@ int gs_aux_aux_aux_connection_register_transfer_ownership(
 int gs_aux_aux_aux_cb_last_chance_t(
 	struct ENetIntr *Intr,
 	struct ENetIntrToken *IntrToken);
+int gs_ntwk_host_service_worker_disconnect(
+	struct GsHostSurrogate *ReferenceHostSurrogate,
+	struct GsWorkerRequestData *RequestSend,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
+int gs_ntwk_host_service_worker_packet(
+	struct GsHostSurrogate *ReferenceHostSurrogate,
+	struct GsWorkerRequestData *RequestSend,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
+int gs_ntwk_host_service_sends(
+	struct GsWorkerData *WorkerDataSend,
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
+int gs_ntwk_host_service_event(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	int errService,
+	GsEventSurrogate *Event);
 int gs_ntwk_host_service(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,

@@ -611,6 +611,267 @@ int gs_aux_aux_aux_cb_last_chance_t(
 	return 0;
 }
 
+int gs_ntwk_host_service_worker_disconnect(
+	struct GsHostSurrogate *ReferenceHostSurrogate,
+	struct GsWorkerRequestData *RequestSend,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+{
+	int r = 0;
+
+	struct GsConnectionSurrogate Con = {};
+	uint32_t ConIsPresent = false;
+
+	if (!!(r = gs_connection_surrogate_map_get_try(
+		ioConnectionSurrogateMap,
+		RequestSend->mId,
+		&Con,
+		&ConIsPresent)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!ConIsPresent)
+		GS_ERR_NO_CLEAN_L(0, W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend->mId);
+
+	if (Con.mHost != ReferenceHostSurrogate->mHost)
+		GS_ERR_NO_CLEAN_L(0, W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend->mId);
+
+	if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, RequestSend->mId)))
+		GS_GOTO_CLEAN();
+
+	enet_peer_disconnect(Con.mPeer, 0);
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_ntwk_host_service_worker_packet(
+	struct GsHostSurrogate *ReferenceHostSurrogate,
+	struct GsWorkerRequestData *RequestSend,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+{
+	int r = 0;
+
+	gs_connection_surrogate_id_t IdOfSend = RequestSend->mId;
+
+	struct GsConnectionSurrogate Con = {};
+	uint32_t ConIsPresent = false;
+
+	if (!!(r = gs_connection_surrogate_map_get_try(
+		ioConnectionSurrogateMap,
+		IdOfSend,
+		&Con,
+		&ConIsPresent)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	/* if a reconnection occurred, outstanding send requests would have missing send IDs */
+	if (! ConIsPresent)
+		GS_ERR_NO_CLEAN_L(0, W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
+
+	/* did not remove a surrogate ID soon enough? */
+	/* FIXME: racing against worker, right?
+			just before reconnect, worker may have queued some requests against the current host.
+			after reconnect, the queued requests get processed (ex here), and the host mismatches. */
+	if (Con.mHost != ReferenceHostSurrogate->mHost)
+		GS_ERR_NO_CLEAN_L(0, W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
+
+	if (!!(r = gs_connection_surrogate_packet_send(
+		&Con,
+		RequestSend->mPacket)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_ntwk_host_service_sends(
+	struct GsWorkerData *WorkerDataSend,
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+{
+	int r = 0;
+
+	std::deque<GsWorkerRequestData> RequestSend;
+
+	if (!!(r = gs_worker_request_dequeue_all_opt_cpp(WorkerDataSend, &RequestSend)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < RequestSend.size(); i++)
+	{
+		switch (RequestSend[i].type)
+		{
+		case GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT:
+		{
+			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT");
+
+			GS_ERR_CLEAN(GS_ERRCODE_EXIT);
+		}
+		break;
+
+		case GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT:
+		{
+			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT");
+
+			if (!!(r = gs_ntwk_host_service_worker_disconnect(
+				HostSurrogate,
+				&RequestSend[i],
+				ioConnectionSurrogateMap)))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		case GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET:
+		{
+			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET");
+
+			if (!!(r = gs_ntwk_host_service_worker_packet(
+				HostSurrogate,
+				&RequestSend[i],
+				ioConnectionSurrogateMap)))
+			{
+				GS_GOTO_CLEAN();
+			}
+		}
+		break;
+
+		default:
+			GS_ASSERT(0);
+			break;
+		}
+	}
+
+	/* absolutely no reason to flush if nothing was sent */
+	// FIXME: flush only if any GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET were serviced
+
+	if (RequestSend.size())
+		enet_host_flush(HostSurrogate->mHost);
+
+clean:
+
+	return r;
+}
+
+int gs_ntwk_host_service_event(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	int errService,
+	GsEventSurrogate *Event)
+{
+	int r = 0;
+
+	if (errService == 0)
+		{ r = 0; goto clean; } // not GS_ERR_NO_CLEAN(0) due to high call volume
+
+	switch (Event->event.type)
+	{
+		
+	case ENET_EVENT_TYPE_CONNECT:
+	{
+		GS_LOG(I, S, "ENET_EVENT_TYPE_CONNECT");
+
+		gs_connection_surrogate_id_t AssignedId = 0;
+
+		GsConnectionSurrogate ConnectionSurrogate = {};
+
+		ConnectionSurrogate.mHost = HostSurrogate->mHost;
+		ConnectionSurrogate.mPeer = Event->event.peer;
+		ConnectionSurrogate.mIsPrincipalClientConnection = false;
+
+		if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
+			ConnectionSurrogate,
+			ioConnectionSurrogateMap,
+			&AssignedId)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+		GS_LOG(I, PF, "%llu connected [from %x:%u]",
+			(unsigned long long)AssignedId,
+			Event->event.peer->address.host,
+			Event->event.peer->address.port);
+	}
+	break;
+
+	case ENET_EVENT_TYPE_DISCONNECT:
+	{
+		gs_connection_surrogate_id_t Id = 0;
+
+		GS_LOG(I, S, "ENET_EVENT_TYPE_DISCONNECT");
+
+		/* get the id, then just dispose of the structure */
+		{
+			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, Event->event.peer->data);
+			Id = ctxstruct->m0Id;
+			// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
+			delete ctxstruct;
+		}
+
+		if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, Id)))
+			GS_GOTO_CLEAN();
+
+		GS_LOG(I, PF, "%llu disconnected",
+			(unsigned long long)Id);
+	}
+	break;
+
+	case ENET_EVENT_TYPE_RECEIVE:
+	{
+		gs_connection_surrogate_id_t IdOfRecv = 0;
+		GsPacketSurrogate PacketSurrogate = {};
+		GsPacket *Packet = {};
+		GsWorkerRequestData RequestRecv = {};
+
+		PacketSurrogate.mPacket = Event->event.packet;
+
+		GS_LOG(I, S, "ENET_EVENT_TYPE_RECEIVE");
+
+		GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, Event->event.peer->data);
+
+		IdOfRecv = ctxstruct->m0Id;
+
+		if (!!(r = gs_packet_create(&Packet, &PacketSurrogate)))
+			GS_GOTO_CLEAN();
+
+		{
+			GsFrameType FoundFrameType = {};
+			uint32_t Offset = 0;
+
+			if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, Offset, &Offset, &FoundFrameType)))
+				GS_GOTO_CLEAN();
+
+			GS_LOG(I, PF, "packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+		}
+
+		if (!!(r = gs_worker_request_data_type_packet_make(Packet, ctxstruct->m0Id, &RequestRecv)))
+			GS_GOTO_CLEAN();
+
+		if (!!(r = gs_worker_request_enqueue(WorkerDataRecv, &RequestRecv)))
+			GS_GOTO_CLEAN();
+	}
+	break;
+
+	}
+
+noclean:
+
+clean:
+
+	return r;
+}
+
 int gs_ntwk_host_service(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -622,7 +883,7 @@ int gs_ntwk_host_service(
 
 	int errService = 0;
 
-	ENetEvent event = {};
+	GsEventSurrogate Event = {};
 
 	ENetIntrNtwk Intr = {};
 	Intr.base.cb_last_chance = gs_aux_aux_aux_cb_last_chance_t;
@@ -630,203 +891,27 @@ int gs_ntwk_host_service(
 
 	while (0 <= (errService = enet_host_service_interruptible(
 		HostSurrogate->mHost,
-		&event,
+		&Event.event,
 		GS_TIMEOUT_1SEC,
 		StoreNtwk->mIntrTokenSurrogate.mIntrToken,
 		&Intr.base)))
 	{
-		/* two part reaction to a service call completing:
-		*    service sends
-		*    service event (if any) */
-
-		/* service sends */
-
+		if (!!(r = gs_ntwk_host_service_sends(
+			WorkerDataSend,
+			HostSurrogate,
+			ioConnectionSurrogateMap)))
 		{
-			std::deque<GsWorkerRequestData> RequestSend;
-
-			if (!!(r = gs_worker_request_dequeue_all_opt_cpp(WorkerDataSend, &RequestSend)))
-				GS_GOTO_CLEAN();
-
-			for (uint32_t i = 0; i < RequestSend.size(); i++)
-			{
-				{
-					if (RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT)
-						GS_ERR_CLEAN(GS_ERRCODE_EXIT);
-				}
-
-				do {
-					if (RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT) {
-						GS_LOG(I, S, "(from worker) ENET_EVENT_TYPE_DISCONNECT (from worker)");
-
-						struct GsConnectionSurrogate ConnectionSurrogateDisconnect = {};
-						uint32_t ConnectionSurrogateDisconnectIsPresent = false;
-
-						if (!!(r = gs_connection_surrogate_map_get_try(
-							ioConnectionSurrogateMap,
-							RequestSend[i].mId,
-							&ConnectionSurrogateDisconnect,
-							&ConnectionSurrogateDisconnectIsPresent)))
-						{
-							GS_GOTO_CLEAN();
-						}
-
-						if (!ConnectionSurrogateDisconnectIsPresent) {
-							GS_LOG(W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend[i].mId);
-							continue;
-						}
-
-						if (ConnectionSurrogateDisconnect.mHost != HostSurrogate->mHost) {
-							GS_LOG(W, PF, "suppressing disconnect for GsConnectionSurrogate [%llu]", (unsigned long long) RequestSend[i].mId);
-							continue;
-						}
-
-						if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, RequestSend[i].mId)))
-							GS_GOTO_CLEAN();
-
-						enet_peer_disconnect(ConnectionSurrogateDisconnect.mPeer, 0);
-					}
-				} while (0);
-
-				gs_connection_surrogate_id_t IdOfSend = RequestSend[i].mId;
-
-				struct GsConnectionSurrogate ConnectionSurrogateSend = {};
-				uint32_t ConnectionSurrogateSendIsPresent = false;
-
-				GS_LOG(I, S, "processing send");
-
-				GS_ASSERT(RequestSend[i].type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET);
-
-				if (!!(r = gs_connection_surrogate_map_get_try(
-					ioConnectionSurrogateMap,
-					IdOfSend,
-					&ConnectionSurrogateSend,
-					&ConnectionSurrogateSendIsPresent)))
-				{
-					GS_GOTO_CLEAN();
-				}
-
-				/* if a reconnection occurred, outstanding send requests would have missing send IDs */
-				if (! ConnectionSurrogateSendIsPresent) {
-					GS_LOG(W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
-					continue;
-				}
-
-				/* did not remove a surrogate ID soon enough? */
-				/* FIXME: racing against worker, right?
-				     just before reconnect, worker may have queued some requests against the current host.
-					 after reconnect, the queued requests get processed (ex here), and the host mismatches. */
-				if (ConnectionSurrogateSend.mHost != HostSurrogate->mHost) {
-					GS_LOG(W, PF, "suppressing packet for GsConnectionSurrogate [%llu]", (unsigned long long) IdOfSend);
-					continue;
-				}
-
-				if (!!(r = gs_connection_surrogate_packet_send(
-					&ConnectionSurrogateSend,
-					RequestSend[i].mPacket)))
-				{
-					GS_GOTO_CLEAN();
-				}
-			}
-
-			/* absolutely no reason to flush if nothing was sent */
-
-			if (RequestSend.size())
-				enet_host_flush(HostSurrogate->mHost);
+			GS_GOTO_CLEAN();
 		}
 
-		/* service event */
-		
-		if (errService == 0)
-			continue;
-
-		switch (event.type)
+		if (!!(r = gs_ntwk_host_service_event(
+			WorkerDataRecv,
+			HostSurrogate,
+			ioConnectionSurrogateMap,
+			errService,
+			&Event)))
 		{
-		
-		case ENET_EVENT_TYPE_CONNECT:
-		{
-			GS_LOG(I, S, "ENET_EVENT_TYPE_CONNECT");
-
-			gs_connection_surrogate_id_t AssignedId = 0;
-
-			GsConnectionSurrogate ConnectionSurrogate = {};
-
-			ConnectionSurrogate.mHost = HostSurrogate->mHost;
-			ConnectionSurrogate.mPeer = event.peer;
-			ConnectionSurrogate.mIsPrincipalClientConnection = false;
-
-			if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
-				ConnectionSurrogate,
-				ioConnectionSurrogateMap,
-				&AssignedId)))
-			{
-				GS_GOTO_CLEAN();
-			}
-
-			GS_LOG(I, PF, "%llu connected [from %x:%u]",
-				(unsigned long long)AssignedId,
-				event.peer->address.host,
-				event.peer->address.port);
-		}
-		break;
-
-		case ENET_EVENT_TYPE_DISCONNECT:
-		{
-			gs_connection_surrogate_id_t Id = 0;
-
-			GS_LOG(I, S, "ENET_EVENT_TYPE_DISCONNECT");
-
-			/* get the id, then just dispose of the structure */
-			{
-				GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, event.peer->data);
-				Id = ctxstruct->m0Id;
-				// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
-				delete ctxstruct;
-			}
-
-			if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, Id)))
-				GS_GOTO_CLEAN();
-
-			GS_LOG(I, PF, "%llu disconnected",
-				(unsigned long long)Id);
-		}
-		break;
-
-		case ENET_EVENT_TYPE_RECEIVE:
-		{
-			gs_connection_surrogate_id_t IdOfRecv = 0;
-			GsPacketSurrogate PacketSurrogate = {};
-			GsPacket *Packet = {};
-			GsWorkerRequestData RequestRecv = {};
-
-			PacketSurrogate.mPacket = event.packet;
-
-			GS_LOG(I, S, "ENET_EVENT_TYPE_RECEIVE");
-
-			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, event.peer->data);
-
-			IdOfRecv = ctxstruct->m0Id;
-
-			if (!!(r = gs_packet_create(&Packet, &PacketSurrogate)))
-				GS_GOTO_CLEAN();
-
-			{
-				GsFrameType FoundFrameType = {};
-				uint32_t Offset = 0;
-
-				if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, Offset, &Offset, &FoundFrameType)))
-					GS_GOTO_CLEAN();
-
-				GS_LOG(I, PF, "packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
-			}
-
-			if (!!(r = gs_worker_request_data_type_packet_make(Packet, ctxstruct->m0Id, &RequestRecv)))
-				GS_GOTO_CLEAN();
-
-			if (!!(r = gs_worker_request_enqueue(WorkerDataRecv, &RequestRecv)))
-				GS_GOTO_CLEAN();
-		}
-		break;
-
+			GS_GOTO_CLEAN();
 		}
 	}
 
