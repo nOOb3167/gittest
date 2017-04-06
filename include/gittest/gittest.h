@@ -102,6 +102,15 @@ int clnt_commit_ensure_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_
 int clnt_commit_setref(git_repository *RepositoryT, const char *RefName, git_oid *CommitOid);
 int aux_repository_open(const char *RepoOpenPath, git_repository **oRepository);
 int aux_repository_discover_open(const char *RepoDiscoverPath, git_repository **oRepository);
+int aux_checkout(
+	git_repository *Repository,
+	git_oid *TreeOid,
+	const char *CheckoutPathBuf, size_t LenCheckoutPath,
+	const char *ExpectedContainsBuf, size_t LenExpectedContains);
+int aux_repository_checkout(
+	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMasterUpdateCheckoutPathBuf, size_t LenRepoMasterUpdateCheckoutPath);
 
 int stuff(
 	const char *RefName, size_t LenRefName,

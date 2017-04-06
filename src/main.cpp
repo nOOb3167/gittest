@@ -1100,6 +1100,86 @@ clean:
 	return r;
 }
 
+int aux_checkout(
+	git_repository *Repository,
+	git_oid *TreeOid,
+	const char *CheckoutPathBuf, size_t LenCheckoutPath,
+	const char *ExpectedContainsBuf, size_t LenExpectedContains)
+{
+	int r = 0;
+
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+
+	git_object *TreeObject = NULL;
+
+	if (!!(r = gs_buf_ensure_haszero(CheckoutPathBuf, LenCheckoutPath + 1)))
+		goto clean;
+
+	if (!!(r = gs_buf_ensure_haszero(ExpectedContainsBuf, LenExpectedContains + 1)))
+		goto clean;
+
+	if (strstr(CheckoutPathBuf, ExpectedContainsBuf) == NULL)
+		{ r = 1; goto clean; }
+
+	opts.checkout_strategy = 0;
+	opts.checkout_strategy |= GIT_CHECKOUT_FORCE;
+	// FIXME: want this flag bug bugs have potential to cause more damage - enable after enough testing
+	//opts.checkout_strategy |= GIT_CHECKOUT_REMOVE_UNTRACKED;
+
+	opts.disable_filters = 1;
+	opts.target_directory = CheckoutPathBuf;
+
+	if (!!(r = git_object_lookup(&TreeObject, Repository, TreeOid, GIT_OBJ_TREE)))
+		goto clean;
+
+	if (!!(r = git_checkout_tree(Repository, TreeObject, &opts)))
+		goto clean;
+
+clean :
+	if (TreeObject)
+		git_object_free(TreeObject);
+
+	return r;
+}
+
+int aux_repository_checkout(
+	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMasterUpdateCheckoutPathBuf, size_t LenRepoMasterUpdateCheckoutPath)
+{
+	int r = 0;
+
+	git_repository *Repository = NULL;
+
+	git_oid CommitHeadOid = {};
+	git_oid TreeHeadOid = {};
+
+	if (!!(r = gs_buf_ensure_haszero(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoMasterUpdatePathBuf, &Repository)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_oid_latest_commit_tree(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: hardcoded path check value (/data/)
+	if (!!(r = aux_checkout(
+		Repository,
+		&TreeHeadOid,
+		RepoMasterUpdateCheckoutPathBuf, LenRepoMasterUpdateCheckoutPath,
+		"/data/", strlen("/data/"))))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+	if (Repository)
+		git_repository_free(Repository);
+
+	return r;
+}
+
 int stuff(
 	const char *RefName, size_t LenRefName,
 	const char *RepoOpenPath, size_t LenRepoOpenPath,

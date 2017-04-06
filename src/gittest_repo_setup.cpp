@@ -318,8 +318,7 @@ int main(int argc, char **argv) {
 
 clean:
 	/* always dump logs. not much to do about errors here though */
-	const char *suff = !!r ? "_err" : "_ok";
-	gs_log_crash_handler_dump_global_log_list_suffix(suff, strlen(suff));
+	gs_log_crash_handler_dump_global_log_list_suffix("_log", strlen("_log"));
 
 	if (!!r)
 		return EXIT_FAILURE;

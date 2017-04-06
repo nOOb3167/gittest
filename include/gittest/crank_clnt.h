@@ -23,6 +23,7 @@
 		GS_CLNT_STATE_CODE_DECL(NEED_TREELIST),              \
 		GS_CLNT_STATE_CODE_DECL(NEED_BLOBLIST),              \
 		GS_CLNT_STATE_CODE_DECL(NEED_WRITTEN_BLOB_AND_TREE), \
+		GS_CLNT_STATE_CODE_DECL(NEED_UPDATED_REF),           \
 		GS_CLNT_STATE_CODE_DECL(NEED_NOTHING),               \
 	    };                                                       \
 	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
@@ -32,13 +33,19 @@
 		if ((VARNAME)[i].mCodeNum != i) \
 			GS_ERR_CLEAN_L(1, E, S, "state code array non-contiguous");
 
+/** @sa
+       ::GS_CLNT_STATE_CODE_DEFINE_ARRAY
+	   ::clnt_state_code
+	   ::clnt_state_crank2
+*/
 enum gs_clnt_state_code_t {
 	GS_CLNT_STATE_CODE_NEED_REPOSITORY = 0,
 	GS_CLNT_STATE_CODE_NEED_TREE_HEAD = 1,
 	GS_CLNT_STATE_CODE_NEED_TREELIST = 2,
 	GS_CLNT_STATE_CODE_NEED_BLOBLIST = 3,
 	GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE = 4,
-	GS_CLNT_STATE_CODE_NEED_NOTHING = 5,
+	GS_CLNT_STATE_CODE_NEED_UPDATED_REF = 5,
+	GS_CLNT_STATE_CODE_NEED_NOTHING = 6,
 	GS_CLNT_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
 };
 
@@ -60,6 +67,8 @@ struct ClntState {
 
 	sp<std::vector<git_oid> > mWrittenBlob;
 	sp<std::vector<git_oid> > mWrittenTree;
+
+	sp<git_oid> mUpdatedRefOid;
 
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
@@ -190,6 +199,14 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob,
 	std::vector<git_oid> *oWrittenTree);
+int clnt_state_need_updated_ref_setup2(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	ClntState *State);
+int clnt_state_need_updated_ref_noown2(
+	git_repository *RepositoryT,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	git_oid *TreeHeadOid,
+	git_oid *oUpdatedRefOid);
 int clnt_state_crank2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,

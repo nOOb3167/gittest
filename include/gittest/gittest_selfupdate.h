@@ -56,6 +56,7 @@ struct GsAuxConfigCommonVars {
 	char *RepoMainPathBuf; size_t LenRepoMainPath;
 	char *RepoSelfUpdatePathBuf; size_t LenRepoSelfUpdatePath;
 	char *RepoMasterUpdatePathBuf; size_t LenRepoMasterUpdatePath;
+	char *RepoMasterUpdateCheckoutPathBuf; size_t LenRepoMasterUpdateCheckoutPath;
 
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
@@ -98,6 +99,9 @@ int gs_build_child_filename(
 	const char *ExpectedExtension, size_t LenExpectedExtension,
 	const char *ExtraSuffix, size_t LenExtraSuffix,
 	char *ioChildFileNameBuf, size_t ChildFileNameSize, size_t *oLenChildFileName);
+
+int gs_selfupdate_crash_handler_dump_global_log_list(
+	const char *ArgStrBuf, size_t LenArgStr);
 
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit);
 

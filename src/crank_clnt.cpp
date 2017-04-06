@@ -52,6 +52,8 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 		{ Code = GS_CLNT_STATE_CODE_NEED_BLOBLIST; goto need_bloblist; }
 	if (! State->mWrittenBlob || ! State->mWrittenTree)
 		{ Code = GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE; goto need_written_blob_and_tree; }
+	if (! State->mUpdatedRefOid)
+		{ Code = GS_CLNT_STATE_CODE_NEED_UPDATED_REF; goto need_updated_ref; }
 	if (true)
 		{ Code = GS_CLNT_STATE_CODE_NEED_NOTHING; goto need_nothing; }
 
@@ -68,6 +70,9 @@ need_bloblist:
 	if (State->mWrittenBlob || State->mWrittenTree)
 		GS_ERR_CLEAN(1);
 need_written_blob_and_tree:
+	if (State->mUpdatedRefOid)
+		GS_ERR_CLEAN(1);
+need_updated_ref:
 need_nothing:
 
 	if (oCode)
@@ -471,7 +476,7 @@ int clnt_state_need_written_blob_and_tree_setup2(
 		GS_GOTO_CLEAN();
 	}
 
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_NOTHING, a,
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_UPDATED_REF, a,
 		{ a.mWrittenBlob = WrittenBlob;
 		  a.mWrittenTree = WrittenTree; });
 
@@ -557,6 +562,61 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	{
 		GS_GOTO_CLEAN();
 	}
+
+clean:
+
+	return r;
+}
+
+int clnt_state_need_updated_ref_setup2(
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	ClntState *State)
+{
+	int r = 0;
+
+	sp<git_oid> UpdatedRefOid(new git_oid());
+
+	git_repository * const RepositoryT = *State->mRepositoryT;
+	git_oid * const TreeHeadOid = State->mTreeHeadOid.get();
+
+	if (!!(r = clnt_state_need_updated_ref_noown2(
+		RepositoryT,
+		RefNameMainBuf, LenRefNameMain,
+		TreeHeadOid,
+		UpdatedRefOid.get())))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_NOTHING, a,
+	{ a.mUpdatedRefOid = UpdatedRefOid; });
+
+clean:
+
+	return r;
+}
+
+int clnt_state_need_updated_ref_noown2(
+	git_repository *RepositoryT,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	git_oid *TreeHeadOid,
+	git_oid *oUpdatedRefOid)
+{
+	int r = 0;
+
+	git_oid CommitOid = {};
+
+	if (!!(r = gs_buf_ensure_haszero(RefNameMainBuf, LenRefNameMain + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, TreeHeadOid, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_setref(RepositoryT, RefNameMainBuf, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	if (oUpdatedRefOid)
+		git_oid_cpy(oUpdatedRefOid, &CommitOid);
 
 clean:
 
@@ -650,6 +710,16 @@ int clnt_state_crank2(
 		}
 	}
 	break;
+
+	case GS_CLNT_STATE_CODE_NEED_UPDATED_REF:
+	{
+		if (!!(r = clnt_state_need_updated_ref_setup2(
+			RefNameMainBuf, LenRefNameMain,
+			State)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{

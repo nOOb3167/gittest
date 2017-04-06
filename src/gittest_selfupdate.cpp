@@ -160,6 +160,7 @@ int aux_config_get_common_vars(
 	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMainPath);
 	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoSelfUpdatePath);
 	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdatePath);
+	GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdateCheckoutPath);
 
 	if (oCommonVars)
 		*oCommonVars = CommonVars;
@@ -252,6 +253,31 @@ clean:
 	return r;
 }
 
+int gs_selfupdate_crash_handler_dump_global_log_list(
+	const char *ArgStrBuf, size_t LenArgStr)
+{
+	bool argstrok = false;
+	const char *argprefix = "";
+	const char *rsuffix = "_log";
+
+	size_t lencombined = 0;
+	char combinedbuf[512] = {};
+
+	/* default suspected malformed ArgStr */
+	argstrok = (!gs_buf_ensure_haszero(ArgStrBuf, LenArgStr + 1)) &&
+		(LenArgStr >= 2 && ArgStrBuf[0] == '-' && ArgStrBuf[1] == '-');
+	argprefix = argstrok ? &ArgStrBuf[2] : "unk";
+
+	lencombined = 1 + strlen(argprefix) + strlen(rsuffix);
+
+	memset(combinedbuf, '_', 1);
+	memmove(combinedbuf + 1, argprefix, strlen(argprefix));
+	memmove(combinedbuf + 1 + strlen(argprefix), rsuffix, strlen(rsuffix));
+	memset(combinedbuf + lencombined, '\0', 1);
+
+	return gs_log_crash_handler_dump_global_log_list_suffix(combinedbuf, lencombined);
+}
+
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
@@ -342,6 +368,16 @@ int aux_selfupdate_main_mode_main() {
 
 	GS_LOG(I, S, "connection exit success");
 
+	if (!!(r = aux_repository_checkout(
+		CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		CommonVars.RepoMasterUpdateCheckoutPathBuf, CommonVars.LenRepoMasterUpdateCheckoutPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	GS_LOG(I, S, "checkout success");
+
 clean:
 
 	return r;
@@ -349,6 +385,8 @@ clean:
 
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
+
+	const char *argstr = "";
 
 	uint32_t HaveUpdateShouldQuit = 0;
 
@@ -362,6 +400,8 @@ int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *
 
 	if (argc < 3)
 		GS_ERR_CLEAN_L(1, I, PF, "args ([argc=%d])", argc);
+
+	argstr = argv[2];
 
 	if (strcmp(argv[2], GS_SELFUPDATE_ARG_PARENT) == 0)
 	{
@@ -421,8 +461,7 @@ noclean:
 
 clean:
 	/* always dump logs. not much to do about errors here though */
-	const char *suff = !!r ? "_err" : "_ok";
-	gs_log_crash_handler_dump_global_log_list_suffix(suff, strlen(suff));
+	gs_selfupdate_crash_handler_dump_global_log_list(argstr, strlen(argstr));
 
 	return r;
 }
