@@ -319,19 +319,6 @@ int gs_worker_request_data_type_reconnect_prepare_make(
 	return 0;
 }
 
-int gs_worker_request_data_type_exit_make(
-	struct GsWorkerRequestData *outValWorkerRequest)
-{
-	struct GsWorkerRequestData W = {};
-
-	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT;
-
-	if (outValWorkerRequest)
-		*outValWorkerRequest = W;
-
-	return 0;
-}
-
 int gs_worker_request_data_type_reconnect_reconnect_make(
 	struct GsExtraWorker *ExtraWorker,
 	struct GsWorkerRequestData *outValWorkerRequest)
@@ -340,6 +327,19 @@ int gs_worker_request_data_type_reconnect_reconnect_make(
 
 	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT;
 	W.mExtraWorker = ExtraWorker;
+
+	if (outValWorkerRequest)
+		*outValWorkerRequest = W;
+
+	return 0;
+}
+
+int gs_worker_request_data_type_exit_make(
+	struct GsWorkerRequestData *outValWorkerRequest)
+{
+	struct GsWorkerRequestData W = {};
+
+	W.type = GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT;
 
 	if (outValWorkerRequest)
 		*outValWorkerRequest = W;
