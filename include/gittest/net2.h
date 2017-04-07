@@ -58,14 +58,35 @@ GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;)
 struct GsExtraWorker;
 struct GsWorkerData;
 
-/** @sa
+/** Design:
+	Entries enter this structure on connection (ENet ENET_EVENT_TYPE_CONNECT).
+	Entries leave this structure on disconnection (ENet ENET_EVENT_TYPE_DISCONNECT).
+	Throughout operation, IDs are dealt out (even to other threads eg worker).
+	There may be attempted ID uses after an entry has already left the structure.
+	Design operations (especially the query/get kind) to handle missing entries.
+
+	@sa
        ::gs_connection_surrogate_map_create
+	   ::gs_connection_surrogate_map_clear
+	   ::gs_connection_surrogate_map_insert_id
+	   ::gs_connection_surrogate_map_insert
+	   ::gs_connection_surrogate_map_get_try
+	   ::gs_connection_surrogate_map_get
+	   ::gs_connection_surrogate_map_erase
 */
 struct GsConnectionSurrogateMap {
 	std::atomic<uint64_t> mAtomicCount;
 	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
 };
 
+/** Wrapper for a count.
+	Semantically the number of reconnections remaining.
+
+    @sa
+	   ::clnt_state_reconnect_make_default
+	   ::clnt_state_reconnect_have_remaining
+	   ::clnt_state_reconnect_expend
+*/
 struct ClntStateReconnect {
 	uint32_t NumReconnections;
 	uint32_t NumReconnectionsLeft;
