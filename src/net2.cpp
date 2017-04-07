@@ -159,9 +159,11 @@ int gs_connection_surrogate_map_erase(
 		ioConnectionSurrogateMap->mConnectionSurrogateMap->find(ConnectionSurrogateId);
 
 	if (it == ioConnectionSurrogateMap->mConnectionSurrogateMap->end())
-		GS_ERR_CLEAN_L(1, E, S, "removal prevented (is an element missing, and why?)");
+		GS_ERR_NO_CLEAN_L(0, E, S, "removal suppressed (is an element missing, and why?)");
 	else
 		ioConnectionSurrogateMap->mConnectionSurrogateMap->erase(it);
+
+noclean:
 
 clean:
 
