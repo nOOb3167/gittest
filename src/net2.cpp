@@ -19,7 +19,8 @@ static void gs_sp_thread_detaching_deleter(std::thread *t)
 	delete t;
 }
 
-int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSurrogateMap)
+int gs_connection_surrogate_map_create(
+	struct GsConnectionSurrogateMap **oConnectionSurrogateMap)
 {
 	GsConnectionSurrogateMap *ConnectionSurrogateMap = new GsConnectionSurrogateMap();
 	
@@ -33,14 +34,14 @@ int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSur
 }
 
 int gs_connection_surrogate_map_clear(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap)
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	ioConnectionSurrogateMap->mConnectionSurrogateMap->clear();
 	return 0;
 }
 
 int gs_connection_surrogate_map_insert_id(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
 	const struct GsConnectionSurrogate valConnectionSurrogate)
 {
@@ -58,7 +59,7 @@ clean:
 }
 
 int gs_connection_surrogate_map_insert(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	const struct GsConnectionSurrogate valConnectionSurrogate,
 	gs_connection_surrogate_id_t *oConnectionSurrogateId)
 {
@@ -78,7 +79,7 @@ clean:
 }
 
 int gs_connection_surrogate_map_get_try(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
 	struct GsConnectionSurrogate *oConnectionSurrogate,
 	uint32_t *oIsPresent)
@@ -108,7 +109,7 @@ clean:
 }
 
 int gs_connection_surrogate_map_get(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId,
 	struct GsConnectionSurrogate *oConnectionSurrogate)
 {
@@ -134,7 +135,7 @@ clean:
 }
 
 int gs_connection_surrogate_map_erase(
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId)
 {
 	int r = 0;
@@ -154,7 +155,7 @@ clean:
 	return r;
 }
 
-int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
+int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect) {
 	ClntStateReconnect StateReconnect;
 	StateReconnect.NumReconnections = GS_CONNECT_NUMRECONNECT;
 	StateReconnect.NumReconnectionsLeft = StateReconnect.NumReconnections;
@@ -163,11 +164,11 @@ int clnt_state_reconnect_make_default(ClntStateReconnect *oStateReconnect) {
 	return 0;
 }
 
-bool clnt_state_reconnect_have_remaining(ClntStateReconnect *StateReconnect) {
+bool clnt_state_reconnect_have_remaining(struct ClntStateReconnect *StateReconnect) {
 	return StateReconnect->NumReconnectionsLeft >= 1;
 }
 
-int clnt_state_reconnect_expend(ClntStateReconnect *ioStateReconnect) {
+int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect) {
 	int r = 0;
 
 	if (! clnt_state_reconnect_have_remaining(ioStateReconnect))
@@ -182,8 +183,8 @@ clean:
 
 /** Send Packet (remember enet_peer_send required an ownership release) */
 int gs_connection_surrogate_packet_send(
-	GsConnectionSurrogate *ConnectionSurrogate,
-	GsPacket *ioPacket)
+	struct GsConnectionSurrogate *ConnectionSurrogate,
+	struct GsPacket *ioPacket)
 {
 	int r = 0;
 
@@ -440,8 +441,8 @@ int gs_worker_request_dequeue_all_opt_cpp(
 }
 
 int gs_worker_packet_enqueue(
-	GsWorkerData *pThis,
-	GsIntrTokenSurrogate *IntrToken,
+	struct GsWorkerData *pThis,
+	struct GsIntrTokenSurrogate *IntrToken,
 	gs_connection_surrogate_id_t Id,
 	const char *Data, uint32_t DataSize)
 {
@@ -481,8 +482,8 @@ clean:
 	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
 */
 int gs_worker_packet_dequeue(
-	GsWorkerData *pThis,
-	GsPacket **oPacket,
+	struct GsWorkerData *pThis,
+	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId)
 {
 	int r = 0;
@@ -524,10 +525,10 @@ clean:
 	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
 */
 int gs_worker_packet_dequeue_timeout_reconnects(
-	GsWorkerData *pThis,
-	GsWorkerData *WorkerDataSend,
+	struct GsWorkerData *pThis,
+	struct GsWorkerData *WorkerDataSend,
 	uint32_t TimeoutMs,
-	GsPacket **oPacket,
+	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId)
 {
 	int r = 0;
@@ -569,11 +570,11 @@ clean:
 }
 
 int gs_ntwk_reconnect_expend(
-	GsExtraHostCreate *ExtraHostCreate,
-	GsWorkerData *WorkerDataRecv,
-	ClntStateReconnect *ioStateReconnect,
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	GsHostSurrogate *ioHostSurrogate,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsWorkerData *WorkerDataRecv,
+	struct ClntStateReconnect *ioStateReconnect,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsHostSurrogate *ioHostSurrogate,
 	uint32_t *ioWantReconnect)
 {
 	int r = 0;
@@ -619,7 +620,7 @@ clean:
    @param valConnectionSurrogate copied / copy-constructed (for shared_ptr use)
 */
 int gs_aux_aux_aux_connection_register_transfer_ownership(
-	GsConnectionSurrogate valConnectionSurrogate,
+	struct GsConnectionSurrogate valConnectionSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t *oAssignedId)
 {
@@ -834,7 +835,7 @@ int gs_ntwk_host_service_event(
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	int errService,
-	GsEventSurrogate *Event)
+	struct GsEventSurrogate *Event)
 {
 	int r = 0;
 
@@ -1188,9 +1189,9 @@ clean:
 }
 
 int gs_worker_reconnecter(
-	GsWorkerData *WorkerDataRecv,
-	GsWorkerData *WorkerDataSend,
-	GsStoreWorker *StoreWorker)
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker)
 {
 	int r = 0;
 
