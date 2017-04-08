@@ -1,15 +1,9 @@
 #ifndef _GITTEST_FRAME_H_
 #define _GITTEST_FRAME_H_
 
-#include <cstdint>
+#include <stdint.h>
 
-#include <string>
-#include <vector>
-
-#include <git2.h>
-
-#include <gittest/misc.h>
-#include <gittest/cbuf.h>
+#include <gittest/bypart.h>
 
 #define GS_FRAME_HEADER_STR_LEN 40
 #define GS_FRAME_HEADER_NUM_LEN 4
@@ -55,55 +49,17 @@
 	};                                                       \
 	size_t Len ## VARNAME = sizeof (VARNAME) / sizeof *(VARNAME);
 
-#define GS_STRIDED_PIDX(S, IDX) ((S).mDataStart + (S).mDataOffset + (S).mEltStride * (IDX))
-
-#define GS_BYPART_DATA_DECL(SUBNAME, MEMBERS) \
-	struct GsBypartCbData ## SUBNAME { uint32_t Tripwire; MEMBERS }
-
-#define GS_BYPART_DATA_VAR(SUBNAME, VARNAME) \
-	GsBypartCbData ## SUBNAME VARNAME;       \
-	(VARNAME).Tripwire = GS_BYPART_TRIPWIRE_ ## SUBNAME;
-
-#define GS_BYPART_DATA_INIT(SUBNAME, VARNAME, ...) \
-	GS_BYPART_DATA_INIT_ ## SUBNAME (VARNAME, __VA_ARGS__)
-
-#define GS_BYPART_DATA_VAR_CTX_NONUCF(SUBNAME, VARNAME, CTXNAME)                 \
-	GsBypartCbData ## SUBNAME * VARNAME = (GsBypartCbData ## SUBNAME *) CTXNAME; \
-	{                                                                            \
-		if ((VARNAME)->Tripwire != GS_BYPART_TRIPWIRE_ ## SUBNAME)               \
-			{ r = 1; goto clean; }                                               \
-	}
-
-#define GS_BYPART_DATA_VAR_AUX_TRIPWIRE_CHECK_NONUCF(SUBNAME, PVAR) \
-	if ((PVAR)->Tripwire != GS_BYPART_TRIPWIRE_ ## SUBNAME)         \
-		{ r = 1; goto clean; }                                      \
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-struct GsStrided {
-	uint8_t *mDataStart;
-	uint32_t mDataOffset;
-	uint32_t mEltNum;
-	uint32_t mEltSize;
-	uint32_t mEltStride;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
+/** value-struct
+*/
 struct GsFrameType {
 	char mTypeName[GS_FRAME_HEADER_STR_LEN];
 	uint32_t mTypeNum;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
-
-int gs_strided_for_struct_member(
-	uint8_t *DataStart, uint32_t DataStartOffset, uint32_t OffsetOfMember,
-	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
-	GsStrided *oStrided);
 
 GsFrameType aux_frametype_make(const char *NameString, uint32_t NameNum);
 
@@ -211,19 +167,6 @@ int aux_frame_full_write_response_latest_selfupdate_blob(
 
 #ifdef __cplusplus
 }
-#endif /* __cplusplus */
-
-#ifdef __cplusplus
-
-/* GsBypartCbDataString */
-GS_BYPART_DATA_DECL(String, std::string *m0Buffer;);
-#define GS_BYPART_TRIPWIRE_String 0x23132359
-#define GS_BYPART_DATA_INIT_String(VARNAME, PBUFFER) (VARNAME).m0Buffer = PBUFFER;
-int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
-int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
-
-int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
-
 #endif /* __cplusplus */
 
 #endif /* _GITTEST_FRAME_H_ */

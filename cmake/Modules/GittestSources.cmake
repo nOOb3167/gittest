@@ -268,6 +268,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/cbuf.h
     include/gittest/log.h
     include/gittest/misc.h
+    include/gittest/bypart.h
   )
   SET(GITTEST_LIB_HEADERS_NIX
     include/gittest/misc_nix.h
@@ -278,6 +279,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/log.cpp
     src/misc.cpp
     src/main.cpp
+    src/bypart.cpp
   )
   SET(GITTEST_LIB_SOURCES_WIN
     src/log_win.cpp

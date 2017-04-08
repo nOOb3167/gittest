@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include <gittest/bypart.h>
+
 #ifdef __cplusplus
 #include <memory>
 #include <functional>
@@ -20,10 +22,6 @@ struct cbuf {
 	int64_t s;
 	int64_t e;
 };
-
-typedef int(*gs_bypart_cb_t) (void *ctx, const char *d, int64_t l);
-typedef gs_bypart_cb_t gd_byfull_cb_t;
-typedef int(*gs_bysize_cb_t) (void *ctx, int64_t l, uint8_t **od);
 
 int  cbuf_setup(uint64_t sz, cbuf *oc);
 void cbuf_reset(cbuf *c);

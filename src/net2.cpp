@@ -19,22 +19,6 @@ static void gs_sp_thread_detaching_deleter(std::thread *t)
 	delete t;
 }
 
-int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l) {
-	int r = 0;
-
-	git_oid Oid = {};
-	GS_BYPART_DATA_VAR_CTX_NONUCF(OidVector, Data, ctx);
-
-	if (!!(r = aux_frame_read_oid((uint8_t *)d, (uint32_t)l, 0, NULL, (uint8_t *)Oid.id, GIT_OID_RAWSZ)))
-		GS_GOTO_CLEAN();
-
-	Data->m0OidVec->push_back(Oid);
-
-clean:
-
-	return r;
-}
-
 int gs_connection_surrogate_map_create(GsConnectionSurrogateMap **oConnectionSurrogateMap)
 {
 	GsConnectionSurrogateMap *ConnectionSurrogateMap = new GsConnectionSurrogateMap();

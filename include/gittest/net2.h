@@ -40,20 +40,10 @@
 #define GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC        0x503C3260
 #define GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C3261
 
-/* GsBypartCbDataOidVector */
-GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
-#define GS_BYPART_TRIPWIRE_OidVector 0x23132358
-#define GS_BYPART_DATA_INIT_OidVector(VARNAME, POIDVEC) (VARNAME).m0OidVec = POIDVEC;
-int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l);
-
 struct GsConnectionSurrogate;
 
 typedef uint64_t gs_connection_surrogate_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
-
-GS_BYPART_DATA_DECL(GsConnectionSurrogateId, gs_connection_surrogate_id_t m0Id;);
-#define GS_BYPART_TRIPWIRE_GsConnectionSurrogateId 0x68347232
-#define GS_BYPART_DATA_INIT_GsConnectionSurrogateId(VARNAME, ID) (VARNAME).m0Id = ID;
 
 struct GsExtraWorker;
 struct GsWorkerData;
