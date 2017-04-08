@@ -412,6 +412,23 @@ clean:
 	return 0;
 }
 
+/** @retval GS_ERRCODE_TIMEOUT on timeout */
+int gs_worker_request_dequeue_timeout(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs)
+{
+	std::chrono::milliseconds To = std::chrono::milliseconds(TimeoutMs);
+	{
+		std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+		if (! pThis->mWorkerDataCond->wait_for(lock, To, [&]() { return !pThis->mWorkerQueue->empty(); }))
+			return GS_ERRCODE_TIMEOUT;
+		*oValRequestData = pThis->mWorkerQueue->front();
+		pThis->mWorkerQueue->pop_front();
+	}
+	return 0;
+}
+
 int gs_worker_request_dequeue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData)
@@ -475,7 +492,10 @@ clean:
 	return r;
 }
 
-/* @retval: GS_ERRCODE_RECONNECT if reconnect request dequeued */
+/** Principal blocking read facility for blocking-type worker.
+
+	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
+*/
 int gs_worker_packet_dequeue(
 	GsWorkerData *pThis,
 	GsPacket **oPacket,
@@ -505,6 +525,58 @@ int gs_worker_packet_dequeue(
 		*oPacket = Request.mPacket;
 
 	if (oId)
+		*oId = Request.mId;
+
+clean:
+
+	return r;
+}
+
+/** Principal read facility for blocking-type worker.
+
+	Queue WorkerDataSend message GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE on timeout.
+
+	@retval: GS_ERRCODE_TIMEOUT   if timeout attempting to dequeue
+	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
+*/
+int gs_worker_packet_dequeue_timeout_reconnects(
+	GsWorkerData *pThis,
+	GsWorkerData *WorkerDataSend,
+	uint32_t TimeoutMs,
+	GsPacket **oPacket,
+	gs_connection_surrogate_id_t *oId)
+{
+	int r = 0;
+
+	GsWorkerRequestData Request = {};
+
+	r = gs_worker_request_dequeue_timeout(pThis, &Request, TimeoutMs);
+	if (!!r && r == GS_ERRCODE_TIMEOUT) {
+		GsWorkerRequestData RequestReconnectPrepare = {};
+		if (!!(r = gs_worker_request_data_type_reconnect_prepare_make(&RequestReconnectPrepare)))
+			GS_GOTO_CLEAN();
+		if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &RequestReconnectPrepare)))
+			GS_GOTO_CLEAN();
+
+		GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+	}
+	if (!!r)
+		GS_GOTO_CLEAN();
+
+	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
+		Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
+	{
+		GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+	}
+
+	if (Request.type != GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET)
+		GS_ERR_CLEAN(1);
+
+noclean:
+	if (oPacket && Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET)
+		*oPacket = Request.mPacket;
+
+	if (oId && Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET)
 		*oId = Request.mId;
 
 clean:
@@ -720,6 +792,14 @@ int gs_ntwk_host_service_sends(
 		}
 		break;
 
+		case GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE:
+		{
+			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE");
+
+			GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
+		}
+		break;
+
 		case GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT:
 		{
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT");
@@ -890,6 +970,8 @@ int gs_ntwk_host_service(
 	ENetIntrNtwk Intr = {};
 	Intr.base.cb_last_chance = gs_aux_aux_aux_cb_last_chance_t;
 	Intr.WorkerDataSend = WorkerDataSend;
+
+	GS_LOG(I, S, "host service interruptible");
 
 	while (0 <= (errService = enet_host_service_interruptible(
 		HostSurrogate->mHost,

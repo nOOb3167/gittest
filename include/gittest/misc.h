@@ -47,6 +47,7 @@
 /* should not clash with other error codes etc - just used random.org */
 #define GS_ERRCODE_RECONNECT 0x7BDD6EAF
 #define GS_ERRCODE_EXIT      0x7BDD6EB0
+#define GS_ERRCODE_TIMEOUT   0x7BDD6EB1
 
 #define GS_AUX_MARKER_STRUCT_IS_COPYABLE /* dummy (marker / documentation purpose) */
 

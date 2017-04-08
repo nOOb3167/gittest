@@ -364,6 +364,10 @@ int gs_worker_request_enqueue(
 int gs_worker_request_enqueue_double_notify(
 	struct GsWorkerData *pThis,
 	struct GsExtraWorker *ExtraWorker);
+int gs_worker_request_dequeue_timeout(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs);
 int gs_worker_request_dequeue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData);
@@ -381,6 +385,12 @@ int gs_worker_packet_dequeue(
 	GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId);
 
+int gs_worker_packet_dequeue_timeout_reconnects(
+	GsWorkerData *pThis,
+	GsWorkerData *WorkerDataSend,
+	uint32_t TimeoutMs,
+	GsPacket **oPacket,
+	gs_connection_surrogate_id_t *oId);
 int gs_ntwk_reconnect_expend(
 	GsExtraHostCreate *ExtraHostCreate,
 	GsWorkerData *WorkerDataRecv,

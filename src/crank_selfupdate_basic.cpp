@@ -72,8 +72,10 @@ int crank_selfupdate_basic(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue(
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
 		&PacketBlobOid,
 		NULL)))
 	{
@@ -113,8 +115,10 @@ int crank_selfupdate_basic(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue(
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
 		&PacketBlob,
 		NULL)))
 	{

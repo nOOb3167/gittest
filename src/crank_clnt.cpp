@@ -207,7 +207,7 @@ int clnt_state_need_tree_head_noown2(
 	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &Packet, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Packet, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE))))
@@ -299,7 +299,7 @@ int clnt_state_need_treelist_noown2(
 	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &Packet, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Packet, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
@@ -406,7 +406,7 @@ int clnt_state_need_bloblist_noown2(
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &PacketTree, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &PacketTree, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
@@ -527,7 +527,7 @@ int clnt_state_need_written_blob_and_tree_noown2(
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &PacketBlob, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &PacketBlob, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
