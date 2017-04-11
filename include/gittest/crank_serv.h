@@ -56,7 +56,7 @@ int gs_net_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	sp<GsFullConnection> *oConnectionServer);
+	struct GsFullConnection **oConnectionServer);
 
 int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,

@@ -199,7 +199,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 {
 	int r = 0;
 
-	sp<GsFullConnection> ConnectionSelfUpdateBasic;
+	struct GsFullConnection *ConnectionSelfUpdateBasic = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
@@ -209,10 +209,6 @@ int gs_net_full_create_connection_selfupdate_basic(
 	GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = new GsExtraHostCreateSelfUpdateBasic();
 	GsStoreNtwkSelfUpdateBasic       *StoreNtwk       = new GsStoreNtwkSelfUpdateBasic();
 	GsStoreWorkerSelfUpdateBasic     *StoreWorker     = new GsStoreWorkerSelfUpdateBasic();
-
-	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
-	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
-	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
@@ -244,18 +240,17 @@ int gs_net_full_create_connection_selfupdate_basic(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		pExtraHostCreate,
-		pStoreNtwk,
-		pStoreWorker,
+		CtrlCon,
+		&ExtraHostCreate->base,
+		&StoreNtwk->base,
+		&StoreWorker->base,
 		&ConnectionSelfUpdateBasic,
 		"selfup")))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	GS_SP_SET_RAW_NULLING(ConnectionSelfUpdateBasic->mCtrlCon, CtrlCon, GsCtrlCon);
-
-	if (!!(r = gs_ctrl_con_wait_exited(ConnectionSelfUpdateBasic->mCtrlCon.get())))
+	if (!!(r = gs_ctrl_con_wait_exited(ConnectionSelfUpdateBasic->mCtrlCon)))
 		GS_GOTO_CLEAN();
 
 	if (oHaveUpdate)
@@ -265,6 +260,13 @@ int gs_net_full_create_connection_selfupdate_basic(
 		*oBufferUpdate = StoreWorker->resultBufferUpdate;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&StoreWorker);
+		GS_DELETE(&StoreNtwk);
+		GS_DELETE(&ExtraHostCreate);
+		gs_ctrl_con_destroy(CtrlCon);
+		GS_DELETE(&ConnectionSelfUpdateBasic);
+	}
 
 	return r;
 }

@@ -745,11 +745,11 @@ int gs_net_full_create_connection_client(
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnection> *oConnectionClient)
+	struct GsFullConnection **oConnectionClient)
 {
 	int r = 0;
 
-	sp<GsFullConnection> ConnectionClient;
+	GsFullConnection *ConnectionClient = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
@@ -761,10 +761,6 @@ int gs_net_full_create_connection_client(
 	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
 	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
 	GsStoreWorkerClient     *StoreWorker     = new GsStoreWorkerClient();
-
-	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
-	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
-	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
@@ -800,21 +796,27 @@ int gs_net_full_create_connection_client(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		pExtraHostCreate,
-		pStoreNtwk,
-		pStoreWorker,
+		CtrlCon,
+		&ExtraHostCreate->base,
+		&StoreNtwk->base,
+		&StoreWorker->base,
 		&ConnectionClient,
 		"clnt")))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	GS_SP_SET_RAW_NULLING(ConnectionClient->mCtrlCon, CtrlCon, GsCtrlCon);
-
 	if (oConnectionClient)
 		*oConnectionClient = ConnectionClient;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&StoreWorker);
+		GS_DELETE(&StoreNtwk);
+		GS_DELETE(&ExtraHostCreate);
+		gs_ctrl_con_destroy(CtrlCon);
+		GS_DELETE(&ConnectionClient);
+	}
 
 	return r;
 }

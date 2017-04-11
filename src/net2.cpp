@@ -252,6 +252,11 @@ int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft)
 	return 0;
 }
 
+void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon)
+{
+	delete oCtrlCon;
+}
+
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon)
 {
 	bool WantNotify = false;
@@ -995,8 +1000,8 @@ clean:
 int gs_ntwk_reconnecter(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreNtwk> StoreNtwk,
-	sp<GsExtraHostCreate> ExtraHostCreate)
+	struct GsStoreNtwk *StoreNtwk,
+	struct GsExtraHostCreate *ExtraHostCreate)
 {
 	int r = 0;
 
@@ -1024,7 +1029,7 @@ int gs_ntwk_reconnecter(
 
 		/* NOTE: no_clean */
 		if (!!(r = gs_ntwk_reconnect_expend(
-			ExtraHostCreate.get(),
+			ExtraHostCreate,
 			WorkerDataRecv.get(),
 			&StateReconnect,
 			ConnectionSurrogateMap.get(),
@@ -1038,7 +1043,7 @@ int gs_ntwk_reconnecter(
 		r = gs_ntwk_host_service(
 			WorkerDataRecv.get(),
 			WorkerDataSend.get(),
-			StoreNtwk.get(),
+			StoreNtwk,
 			&HostSurrogate,
 			ConnectionSurrogateMap.get());
 
@@ -1061,8 +1066,8 @@ clean:
 void gs_ntwk_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreNtwk> StoreNtwk,
-	sp<GsExtraHostCreate> ExtraHostCreate,
+	struct GsStoreNtwk *StoreNtwk,
+	struct GsExtraHostCreate *ExtraHostCreate,
 	const char *optExtraThreadName)
 {
 	int r = 0;
@@ -1237,7 +1242,7 @@ clean:
 void gs_worker_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreWorker> StoreWorker,
+	struct GsStoreWorker *StoreWorker,
 	const char *optExtraThreadName)
 {
 	int r = 0;
@@ -1254,7 +1259,7 @@ void gs_worker_thread_func(
 	if (!!(r = gs_worker_reconnecter(
 		WorkerDataRecv.get(),
 		WorkerDataSend.get(),
-		StoreWorker.get())))
+		StoreWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -1272,15 +1277,16 @@ clean:
 
 int gs_net_full_create_connection(
 	uint32_t ServPort,
-	sp<GsExtraHostCreate> pExtraHostCreate,
-	sp<GsStoreNtwk>       pStoreNtwk,
-	sp<GsStoreWorker>     pStoreWorker,
-	sp<GsFullConnection> *oConnection,
+	struct GsCtrlCon *CtrlCon,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsStoreNtwk       *StoreNtwk,
+	struct GsStoreWorker     *StoreWorker,
+	struct GsFullConnection **oConnection,
 	const char *optExtraThreadName)
 {
 	int r = 0;
 
-	sp<GsFullConnection> Connection;
+	struct GsFullConnection *Connection = NULL;
 
 	GsWorkerData *rawWorkerDataRecv = NULL;
 	GsWorkerData *rawWorkerDataSend = NULL;
@@ -1304,7 +1310,7 @@ int gs_net_full_create_connection(
 			gs_worker_thread_func,
 			WorkerDataRecv,
 			WorkerDataSend,
-			pStoreWorker,
+			StoreWorker,
 			optExtraThreadName),
 		gs_sp_thread_detaching_deleter);
 
@@ -1312,20 +1318,24 @@ int gs_net_full_create_connection(
 			gs_ntwk_thread_func,
 			WorkerDataRecv,
 			WorkerDataSend,
-			pStoreNtwk,
-			pExtraHostCreate,
+			StoreNtwk,
+			ExtraHostCreate,
 			optExtraThreadName),
 		gs_sp_thread_detaching_deleter);
 
-	Connection = sp<GsFullConnection>(new GsFullConnection);
+	Connection = new GsFullConnection();
 	Connection->ThreadNtwk = ClientNtwkThread;
 	Connection->ThreadWorker = ClientWorkerThread;
-	Connection->ThreadNtwkExtraHostCreate = pExtraHostCreate;
+	Connection->ThreadNtwkExtraHostCreate = ExtraHostCreate;
+	Connection->mCtrlCon = CtrlCon;
 
 	if (oConnection)
 		*oConnection = Connection;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&Connection);
+	}
 
 	return r;
 }

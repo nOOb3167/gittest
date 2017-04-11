@@ -3,6 +3,14 @@
 
 #include <gittest/misc.h>
 
+void gs_aux_delete_nulling(void **ptr)
+{
+	if (*ptr) {
+		delete *ptr;
+		*ptr = NULL;
+	}
+}
+
 int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,
 	const char *ExpectedSuffix, size_t LenExpectedSuffix,

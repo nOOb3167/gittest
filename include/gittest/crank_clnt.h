@@ -221,7 +221,7 @@ int gs_net_full_create_connection_client(
 	const char *ServHostNameBuf, size_t LenServHostName,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	sp<GsFullConnection> *oConnectionClient);
+	struct GsFullConnection **oConnectionClient);
 
 int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,

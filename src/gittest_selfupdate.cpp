@@ -342,7 +342,7 @@ int aux_selfupdate_main_mode_main() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	sp<GsFullConnection> FcsClnt;
+	struct GsFullConnection *FcsClnt = NULL;
 
 	if (!!(r = aux_config_read_default_everything(&KeyVal)))
 		GS_GOTO_CLEAN();
@@ -363,7 +363,7 @@ int aux_selfupdate_main_mode_main() {
 
 	GS_LOG(I, S, "connection exit waiting");
 
-	if (!!(r = gs_ctrl_con_wait_exited(FcsClnt->mCtrlCon.get())))
+	if (!!(r = gs_ctrl_con_wait_exited(FcsClnt->mCtrlCon)))
 		GS_GOTO_CLEAN();
 
 	GS_LOG(I, S, "connection exit success");
@@ -379,6 +379,9 @@ int aux_selfupdate_main_mode_main() {
 	GS_LOG(I, S, "checkout success");
 
 clean:
+	if (!!r) {
+		GS_DELETE(&FcsClnt);
+	}
 
 	return r;
 }

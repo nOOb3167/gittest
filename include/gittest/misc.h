@@ -25,6 +25,8 @@
 #define GS_THREAD_LOCAL_DESIGNATOR __thread
 #endif
 
+#define GS_DELETE(PTR_PTR_ALLOCATED_WITH_NEW) do { gs_aux_delete_nulling((void **) (PTR_PTR_ALLOCATED_WITH_NEW)); } while (0)
+
 #define GS_DEBUG_BREAK() gs_debug_break()
 
 #define GS_ASSERT(x) \
@@ -65,6 +67,8 @@ typedef ::std::map<::std::string, ::std::string> confmap_t;
 // FIXME: evil? two character identifier inside header..
 template<typename T>
 using sp = ::std::shared_ptr<T>;
+
+void gs_aux_delete_nulling(void **ptr);
 
 int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,

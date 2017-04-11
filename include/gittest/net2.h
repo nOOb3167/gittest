@@ -287,8 +287,8 @@ struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
-	sp<GsExtraHostCreate> ThreadNtwkExtraHostCreate;
-	sp<GsCtrlCon> mCtrlCon;
+	struct GsExtraHostCreate *ThreadNtwkExtraHostCreate;
+	struct GsCtrlCon *mCtrlCon;
 };
 
 int gs_connection_surrogate_map_create(
@@ -331,6 +331,7 @@ int gs_packet_create(
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
 
 int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
+void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 
@@ -423,13 +424,13 @@ int gs_ntwk_host_service(
 int gs_ntwk_reconnecter(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreNtwk> StoreNtwk,
-	sp<GsExtraHostCreate> ExtraHostCreate);
+	struct GsStoreNtwk *StoreNtwk,
+	struct GsExtraHostCreate *ExtraHostCreate);
 void gs_ntwk_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreNtwk> StoreNtwk,
-	sp<GsExtraHostCreate> ExtraHostCreate,
+	struct GsStoreNtwk *StoreNtwk,
+	struct GsExtraHostCreate *ExtraHostCreate,
 	const char *optExtraThreadName);
 
 int gs_worker_exit(
@@ -448,15 +449,16 @@ int gs_worker_reconnecter(
 void gs_worker_thread_func(
 	sp<GsWorkerData> WorkerDataRecv,
 	sp<GsWorkerData> WorkerDataSend,
-	sp<GsStoreWorker> StoreWorker,
+	struct GsStoreWorker *StoreWorker,
 	const char *optExtraThreadName);
 
 int gs_net_full_create_connection(
 	uint32_t ServPort,
-	sp<GsExtraHostCreate> pExtraHostCreate,
-	sp<GsStoreNtwk>       pStoreNtwk,
-	sp<GsStoreWorker>     pStoreWorker,
-	sp<GsFullConnection> *oConnection,
+	struct GsCtrlCon *CtrlCon,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsStoreNtwk       *StoreNtwk,
+	struct GsStoreWorker     *StoreWorker,
+	struct GsFullConnection **oConnection,
 	const char *optExtraThreadName);
 
 #endif /* _GITTEST_NET2_H_ */

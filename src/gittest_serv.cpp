@@ -19,7 +19,7 @@ int startserv() {
 
 	GsAuxConfigCommonVars CommonVars = {};
 
-	sp<GsFullConnection> FcsServ;
+	struct GsFullConnection *FcsServ = NULL;
 
 	log_guard_t log(GS_LOG_GET("serv"));
 
@@ -40,10 +40,20 @@ int startserv() {
 		GS_GOTO_CLEAN();
 	}
 
+	GS_LOG(I, S, "connection exit waiting");
+
+	if (!!(r = gs_ctrl_con_wait_exited(FcsServ->mCtrlCon)))
+		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "connection exit success");
+
 	for (;;)
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 clean:
+	if (!!r) {
+		GS_DELETE(&FcsServ);
+	}
 
 	return r;
 }

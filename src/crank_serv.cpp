@@ -288,22 +288,20 @@ int gs_net_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	sp<GsFullConnection> *oConnectionServer)
+	struct GsFullConnection **oConnectionServer)
 {
 	int r = 0;
 
-	sp<GsFullConnection> ConnectionServer;
+	struct GsFullConnection *ConnectionServer = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
 
+	GsCtrlCon               *CtrlCon = NULL;
+
 	GsExtraHostCreateServer *ExtraHostCreate = new GsExtraHostCreateServer();
 	GsStoreNtwkServer       *StoreNtwk       = new GsStoreNtwkServer();
 	GsStoreWorkerServer     *StoreWorker     = new GsStoreWorkerServer();
-
-	sp<GsExtraHostCreate> pExtraHostCreate(&ExtraHostCreate->base);
-	sp<GsStoreNtwk>       pStoreNtwk(&StoreNtwk->base);
-	sp<GsStoreWorker>     pStoreWorker(&StoreWorker->base);
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
@@ -311,16 +309,20 @@ int gs_net_full_create_connection_server(
 	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
+	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
+		GS_GOTO_CLEAN();
+
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SERVER_MAGIC;
 	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_server;
 	ExtraHostCreate->mServPort = ServPort;
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_SERVER_MAGIC;
 	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = NULL; // FIXME: implement
+	StoreNtwk->base.mCtrlCon = CtrlCon;
 
 	StoreWorker->base.magic = GS_STORE_WORKER_SERVER_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
+	StoreWorker->base.mCtrlCon = CtrlCon;
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;
 	StoreWorker->mRefNameSelfUpdateBuf = RefNameSelfUpdateBuf;
@@ -333,9 +335,10 @@ int gs_net_full_create_connection_server(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		pExtraHostCreate,
-		pStoreNtwk,
-		pStoreWorker,
+		CtrlCon,
+		&ExtraHostCreate->base,
+		&StoreNtwk->base,
+		&StoreWorker->base,
 		&ConnectionServer,
 		"serv")))
 	{
@@ -346,6 +349,13 @@ int gs_net_full_create_connection_server(
 		*oConnectionServer = ConnectionServer;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&StoreWorker);
+		GS_DELETE(&StoreNtwk);
+		GS_DELETE(&ExtraHostCreate);
+		gs_ctrl_con_destroy(CtrlCon);
+		GS_DELETE(&ConnectionServer);
+	}
 
 	return r;
 }
