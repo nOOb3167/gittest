@@ -11,6 +11,13 @@ void gs_aux_delete_nulling(void **ptr)
 	}
 }
 
+void * gs_aux_argown(void **ptr)
+{
+	void *ret = *ptr;
+	*ptr = NULL;
+	return ret;
+}
+
 int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,
 	const char *ExpectedSuffix, size_t LenExpectedSuffix,

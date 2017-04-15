@@ -191,6 +191,7 @@ struct GsWorkerRequestData
 
 /** @sa
        ::gs_worker_data_create
+	   ::gs_worker_data_destroy
 	   ::gs_worker_request_isempty
        ::gs_worker_request_enqueue
 	   ::gs_worker_request_enqueue_double_notify
@@ -284,6 +285,7 @@ struct GsStoreWorker
 	   ::gs_ctrl_con_wait_exited
        ::gs_sp_thread_detaching_deleter
 	   ::std::thread::detach
+	   ::gs_full_connection_create
 	   ::gs_full_connection_destroy
 */
 struct GsFullConnection
@@ -332,6 +334,7 @@ int gs_packet_create(
 	struct GsPacketSurrogate *valPacketSurrogate);
 
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
+void gs_worker_data_destroy(struct GsWorkerData *WorkerData);
 
 int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
 void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon);
@@ -427,13 +430,13 @@ int gs_ntwk_host_service(
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_reconnecter(
-	sp<GsWorkerData> WorkerDataRecv,
-	sp<GsWorkerData> WorkerDataSend,
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate);
 void gs_ntwk_thread_func(
-	sp<GsWorkerData> WorkerDataRecv,
-	sp<GsWorkerData> WorkerDataSend,
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate,
 	const char *optExtraThreadName);
@@ -452,8 +455,8 @@ int gs_worker_reconnecter(
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker);
 void gs_worker_thread_func(
-	sp<GsWorkerData> WorkerDataRecv,
-	sp<GsWorkerData> WorkerDataSend,
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
 	const char *optExtraThreadName);
 
@@ -466,6 +469,12 @@ int gs_net_full_create_connection(
 	struct GsFullConnection **oConnection,
 	const char *optExtraThreadName);
 
+int gs_full_connection_create(
+	sp<std::thread> ThreadNtwk,
+	sp<std::thread> ThreadWorker,
+	struct GsExtraHostCreate *ThreadNtwkExtraHostCreate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsFullConnection **oConnection);
 void gs_full_connection_destroy(struct GsFullConnection *Connection);
 
 #endif /* _GITTEST_NET2_H_ */

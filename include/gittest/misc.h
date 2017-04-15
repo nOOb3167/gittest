@@ -26,6 +26,7 @@
 #endif
 
 #define GS_DELETE(PTR_PTR_ALLOCATED_WITH_NEW) do { gs_aux_delete_nulling((void **) (PTR_PTR_ALLOCATED_WITH_NEW)); } while (0)
+#define GS_ARGOWN(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
 
 #define GS_DEBUG_BREAK() gs_debug_break()
 
@@ -69,6 +70,7 @@ template<typename T>
 using sp = ::std::shared_ptr<T>;
 
 void gs_aux_delete_nulling(void **ptr);
+void * gs_aux_argown(void **ptr);
 
 int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,
