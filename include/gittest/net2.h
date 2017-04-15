@@ -337,7 +337,7 @@ int gs_worker_data_create(struct GsWorkerData **oWorkerData);
 void gs_worker_data_destroy(struct GsWorkerData *WorkerData);
 
 int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
-void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon);
+int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 
@@ -475,6 +475,6 @@ int gs_full_connection_create(
 	struct GsExtraHostCreate *ThreadNtwkExtraHostCreate,
 	struct GsCtrlCon *CtrlCon,
 	struct GsFullConnection **oConnection);
-void gs_full_connection_destroy(struct GsFullConnection *Connection);
+int gs_full_connection_destroy(struct GsFullConnection *Connection);
 
 #endif /* _GITTEST_NET2_H_ */

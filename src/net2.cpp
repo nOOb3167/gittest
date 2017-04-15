@@ -257,9 +257,14 @@ int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft)
 	return 0;
 }
 
-void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon)
+int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon)
 {
-	delete oCtrlCon;
+	if (!CtrlCon)
+		return 0;
+
+	delete CtrlCon;
+
+	return 0;
 }
 
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon)
@@ -1341,8 +1346,8 @@ int gs_net_full_create_connection(
 	if (!!(r = gs_full_connection_create(
 		ClientNtwkThread,
 		ClientWorkerThread,
-		ExtraHostCreate,
-		CtrlCon,
+		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
+		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
 		&Connection)))
 	{
 		GS_GOTO_CLEAN();
@@ -1353,18 +1358,20 @@ int gs_net_full_create_connection(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&Connection);
+		GS_DELETE_F(Connection, gs_full_connection_destroy);
 		GS_DELETE(&WorkerDataSend);
 		GS_DELETE(&WorkerDataRecv);
-
-		gs_ctrl_con_destroy(CtrlCon);
-		if (!!ExtraHostCreate->cb_destroy_t(ExtraHostCreate))
-			GS_ASSERT(0);
+		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
+		GS_DELETE_VF(ExtraHostCreate, cb_destroy_t);
 	}
 
 	return r;
 }
 
+/**
+   @param ThreadNtwkExtraHostCreate owned
+   @param CtrlCon owned
+*/
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
 	sp<std::thread> ThreadWorker,
@@ -1386,15 +1393,19 @@ int gs_full_connection_create(
 
 clean:
 	if (!!r) {
-		gs_full_connection_destroy(Connection);
+		GS_DELETE_F(Connection, gs_full_connection_destroy);
 	}
 
 	return r;
 }
 
-void gs_full_connection_destroy(struct GsFullConnection *Connection)
+int gs_full_connection_destroy(struct GsFullConnection *Connection)
 {
-	if (!!Connection->ThreadNtwkExtraHostCreate->cb_destroy_t(Connection->ThreadNtwkExtraHostCreate))
-		GS_ASSERT(0);
-	gs_ctrl_con_destroy(Connection->mCtrlCon);
+	if (!Connection)
+		return 0;
+
+	GS_DELETE_VF(Connection->ThreadNtwkExtraHostCreate, cb_destroy_t);
+	GS_DELETE_F(Connection->mCtrlCon, gs_ctrl_con_destroy);
+
+	return 0;
 }

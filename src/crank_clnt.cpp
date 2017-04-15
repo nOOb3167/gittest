@@ -904,11 +904,9 @@ clean:
 	if (!!r) {
 		GS_DELETE(&StoreWorker);
 		GS_DELETE(&StoreNtwk);
-
-		if (!!(ExtraHostCreate->base.cb_destroy_t(&ExtraHostCreate->base)))
-			GS_ASSERT(0);
-		gs_ctrl_con_destroy(CtrlCon);
-		gs_full_connection_destroy(ConnectionClient);
+		GS_DELETE_VF((&ExtraHostCreate->base), cb_destroy_t);
+		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
+		GS_DELETE_F(ConnectionClient, gs_full_connection_destroy);
 	}
 
 	return r;
