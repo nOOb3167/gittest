@@ -73,6 +73,10 @@ struct ClntState {
 	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
 };
 
+/** @sa
+       ::gs_extra_host_create_client_create
+*/
+
 struct GsExtraHostCreateClient
 {
 	struct GsExtraHostCreate base;
@@ -88,19 +92,23 @@ struct GsExtraWorkerClient
 	gs_connection_surrogate_id_t mId;
 };
 
+/** @sa
+       ::gs_store_ntwk_client_create
+*/
 struct GsStoreNtwkClient
 {
 	struct GsStoreNtwk base;
 };
 
+/** @sa
+       ::gs_store_worker_client_create
+*/
 struct GsStoreWorkerClient
 {
 	struct GsStoreWorker base;
 
 	const char *mRefNameMainBuf; size_t mLenRefNameMain;
 	const char *mRepoMainPathBuf; size_t mLenRepoMainPath;
-
-	struct GsIntrTokenSurrogate mIntrToken;
 
 	sp<ClntState> mClntState;
 };
@@ -215,6 +223,21 @@ int clnt_state_crank2(
 	ClntState *State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath);
+
+int gs_extra_host_create_client_create(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsExtraHostCreateClient **oExtraHostCreate);
+int gs_store_ntwk_client_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsStoreNtwkClient **oStoreNtwk);
+int gs_store_worker_client_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	struct GsStoreWorkerClient **oStoreWorker);
 
 int gs_net_full_create_connection_client(
 	uint32_t ServPort,

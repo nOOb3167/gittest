@@ -6,6 +6,9 @@
 
 #include <gittest/net2.h>
 
+/** @sa
+       ::gs_extra_host_create_selfupdate_basic_create
+*/
 struct GsExtraHostCreateSelfUpdateBasic
 {
 	struct GsExtraHostCreate base;
@@ -21,22 +24,42 @@ struct GsExtraWorkerSelfUpdateBasic
 	gs_connection_surrogate_id_t mId;
 };
 
+/** @sa
+       ::gs_store_ntwk_selfupdate_basic_create
+*/
 struct GsStoreNtwkSelfUpdateBasic
 {
 	struct GsStoreNtwk base;
 };
 
+/** @sa
+       ::gs_store_worker_selfupdate_basic_create
+*/
 struct GsStoreWorkerSelfUpdateBasic
 {
 	struct GsStoreWorker base;
 
 	const char *FileNameAbsoluteSelfUpdateBuf; size_t LenFileNameAbsoluteSelfUpdate;
 
-	struct GsIntrTokenSurrogate mIntrToken;
-
 	uint32_t    resultHaveUpdate;
 	std::string resultBufferUpdate;
 };
+
+int gs_extra_host_create_selfupdate_basic_create(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsExtraHostCreateSelfUpdateBasic **oExtraHostCreate);
+
+int gs_store_ntwk_selfupdate_basic_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsStoreNtwkSelfUpdateBasic **oStoreNtwk);
+
+int gs_store_worker_selfupdate_basic_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker);
 
 int crank_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,

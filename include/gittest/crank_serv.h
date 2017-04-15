@@ -3,6 +3,9 @@
 
 #include <gittest/net2.h>
 
+/** @sa
+       ::gs_extra_host_create_server_create
+*/
 struct GsExtraHostCreateServer
 {
 	struct GsExtraHostCreate base;
@@ -15,11 +18,17 @@ struct GsExtraWorkerServer
 	struct GsExtraWorker base;
 };
 
+/** @sa
+       ::gs_store_ntwk_server_create
+*/
 struct GsStoreNtwkServer
 {
 	struct GsStoreNtwk base;
 };
 
+/** @sa
+       ::gs_store_worker_server_create
+*/
 struct GsStoreWorkerServer
 {
 	struct GsStoreWorker base;
@@ -28,9 +37,23 @@ struct GsStoreWorkerServer
 	const char *mRefNameSelfUpdateBuf; size_t mLenRefNameSelfUpdate;
 	const char *mRepoMainPathBuf; size_t mLenRepoMainPath;
 	const char *mRepoSelfUpdatePathBuf; size_t mLenRepoSelfUpdatePath;
-
-	struct GsIntrTokenSurrogate mIntrToken;
 };
+
+int gs_extra_host_create_server_create(
+	uint32_t ServPort,
+	struct GsExtraHostCreateServer **oExtraHostCreate);
+int gs_store_ntwk_server_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsStoreNtwkServer **oStoreNtwk);
+int gs_store_worker_server_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	struct GsStoreWorkerServer **oStoreWorker);
 
 int serv_state_service_request_blobs2(
 	struct GsWorkerData *WorkerDataSend,

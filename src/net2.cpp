@@ -281,6 +281,18 @@ int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
 	return 0;
 }
 
+int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate)
+{
+	int r = 0;
+
+	// FIXME: delete
+	GS_DELETE(&ExtraHostCreate);
+
+clean:
+
+	return r;
+}
+
 int gs_worker_request_data_type_packet_make(
 	struct GsPacket *Packet,
 	gs_connection_surrogate_id_t Id,
@@ -967,7 +979,7 @@ int gs_ntwk_host_service(
 		HostSurrogate->mHost,
 		&Event.event,
 		GS_TIMEOUT_1SEC,
-		StoreNtwk->mIntrTokenSurrogate.mIntrToken,
+		StoreNtwk->mIntrToken.mIntrToken,
 		&Intr.base)))
 	{
 		if (!!(r = gs_ntwk_host_service_sends(
@@ -1338,4 +1350,9 @@ clean:
 	}
 
 	return r;
+}
+
+void gs_full_connection_destroy(struct GsFullConnection *Connection)
+{
+	GS_ASSERT(0);
 }

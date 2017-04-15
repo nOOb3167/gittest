@@ -226,7 +226,7 @@ struct GsExtraHostCreate
 		struct GsHostSurrogate *ioHostSurrogate,
 		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 		struct GsExtraWorker **oExtraWorker);
-	// FIXME also destroy
+	int(*cb_destroy_t)(struct GsExtraHostCreate *ExtraHostCreate);
 };
 
 struct GsExtraWorker
@@ -245,7 +245,7 @@ struct GsStoreNtwk
 {
 	uint32_t magic;
 
-	struct GsIntrTokenSurrogate mIntrTokenSurrogate;
+	struct GsIntrTokenSurrogate mIntrToken;
 
 	struct GsCtrlCon *mCtrlCon;
 };
@@ -253,6 +253,8 @@ struct GsStoreNtwk
 struct GsStoreWorker
 {
 	uint32_t magic;
+
+	struct GsIntrTokenSurrogate mIntrToken;
 
 	struct GsCtrlCon *mCtrlCon;
 
@@ -282,6 +284,7 @@ struct GsStoreWorker
 	   ::gs_ctrl_con_wait_exited
        ::gs_sp_thread_detaching_deleter
 	   ::std::thread::detach
+	   ::gs_full_connection_destroy
 */
 struct GsFullConnection
 {
@@ -334,6 +337,8 @@ int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
 void gs_ctrl_con_destroy(struct GsCtrlCon *oCtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
+
+int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate);
 
 int gs_worker_request_data_type_packet_make(
 	struct GsPacket *Packet,
@@ -460,5 +465,7 @@ int gs_net_full_create_connection(
 	struct GsStoreWorker     *StoreWorker,
 	struct GsFullConnection **oConnection,
 	const char *optExtraThreadName);
+
+void gs_full_connection_destroy(struct GsFullConnection *Connection);
 
 #endif /* _GITTEST_NET2_H_ */

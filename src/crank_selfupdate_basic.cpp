@@ -16,6 +16,89 @@
 
 #include <gittest/crank_selfupdate_basic.h>
 
+int gs_extra_host_create_selfupdate_basic_create(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsExtraHostCreateSelfUpdateBasic **oExtraHostCreate)
+{
+	int r = 0;
+
+	struct GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = new GsExtraHostCreateSelfUpdateBasic();
+
+	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC;
+	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_selfupdate_basic;
+	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
+
+	ExtraHostCreate->mServPort = ServPort;
+	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
+	ExtraHostCreate->mLenServHostName = LenServHostName;
+
+	if (oExtraHostCreate)
+		*oExtraHostCreate = ExtraHostCreate;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&ExtraHostCreate);
+	}
+
+	return r;
+}
+
+int gs_store_ntwk_selfupdate_basic_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsStoreNtwkSelfUpdateBasic **oStoreNtwk)
+{
+	int r = 0;
+
+	struct GsStoreNtwkSelfUpdateBasic *StoreNtwk = new GsStoreNtwkSelfUpdateBasic();
+
+	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
+	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
+	StoreNtwk->base.mCtrlCon = CtrlCon;
+
+	if (oStoreNtwk)
+		*oStoreNtwk = StoreNtwk;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&StoreNtwk);
+	}
+
+	return r;
+}
+
+int gs_store_worker_selfupdate_basic_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker)
+{
+	int r = 0;
+
+	struct GsStoreWorkerSelfUpdateBasic *StoreWorker = new GsStoreWorkerSelfUpdateBasic();
+
+	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
+	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
+	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
+	StoreWorker->base.mCtrlCon = CtrlCon;
+	
+	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
+	StoreWorker->LenFileNameAbsoluteSelfUpdate = LenFileNameAbsoluteSelfUpdate;
+	StoreWorker->resultHaveUpdate = false;
+	StoreWorker->resultBufferUpdate = std::string();
+
+	if (oStoreWorker)
+		*oStoreWorker = StoreWorker;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&StoreWorker);
+	}
+
+	return r;
+}
+
 int crank_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -202,41 +285,47 @@ int gs_net_full_create_connection_selfupdate_basic(
 	struct GsFullConnection *ConnectionSelfUpdateBasic = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
-	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
+	GsIntrTokenSurrogate      IntrToken = {};
 
 	GsCtrlCon                        *CtrlCon = NULL;
 
-	GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = new GsExtraHostCreateSelfUpdateBasic();
-	GsStoreNtwkSelfUpdateBasic       *StoreNtwk       = new GsStoreNtwkSelfUpdateBasic();
-	GsStoreWorkerSelfUpdateBasic     *StoreWorker     = new GsStoreWorkerSelfUpdateBasic();
+	GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = NULL;
+	GsStoreNtwkSelfUpdateBasic       *StoreNtwk       = NULL;
+	GsStoreWorkerSelfUpdateBasic     *StoreWorker     = NULL;
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
 
-	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
+	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
 	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
 		GS_GOTO_CLEAN();
 
-	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC;
-	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_selfupdate_basic;
-	ExtraHostCreate->mServPort = ServPort;
-	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
-	ExtraHostCreate->mLenServHostName = LenServHostName;
+	if (!!(r = gs_extra_host_create_selfupdate_basic_create(
+		ServPort,
+		ServHostNameBuf, LenServHostName,
+		&ExtraHostCreate)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
-	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
-	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = CtrlCon;
+	if (!!(r = gs_store_ntwk_selfupdate_basic_create(
+		IntrToken,
+		CtrlCon,
+		&StoreNtwk)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
-	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
-	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
-	StoreWorker->base.mCtrlCon = CtrlCon;
-	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
-	StoreWorker->LenFileNameAbsoluteSelfUpdate = LenFileNameAbsoluteSelfUpdate;
-	StoreWorker->resultHaveUpdate = false;
-	StoreWorker->resultBufferUpdate = std::string();
-	StoreWorker->mIntrToken = IntrTokenSurrogate;
+	if (!!(r = gs_store_worker_selfupdate_basic_create(
+		IntrToken,
+		CtrlCon,
+		FileNameAbsoluteSelfUpdateBuf, LenFileNameAbsoluteSelfUpdate,
+		&StoreWorker)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
@@ -263,7 +352,8 @@ clean:
 	if (!!r) {
 		GS_DELETE(&StoreWorker);
 		GS_DELETE(&StoreNtwk);
-		GS_DELETE(&ExtraHostCreate);
+		if (ExtraHostCreate)
+			ExtraHostCreate->base.cb_destroy_t(&ExtraHostCreate->base);
 		gs_ctrl_con_destroy(CtrlCon);
 		GS_DELETE(&ConnectionSelfUpdateBasic);
 	}
@@ -296,7 +386,7 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 		WorkerDataRecv,
 		WorkerDataSend,
 		pExtraWorker->mId,
-		&pStoreWorker->mIntrToken,
+		&pStoreWorker->base.mIntrToken,
 		pStoreWorker->FileNameAbsoluteSelfUpdateBuf, pStoreWorker->LenFileNameAbsoluteSelfUpdate,
 		&HaveUpdate,
 		&BufferUpdate)))

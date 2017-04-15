@@ -740,6 +740,96 @@ clean:
 	return r;
 }
 
+int gs_extra_host_create_client_create(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsExtraHostCreateClient **oExtraHostCreate)
+{
+	int r = 0;
+
+	struct GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
+
+	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
+	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_client;
+	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
+
+	ExtraHostCreate->mServPort = ServPort;
+	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
+	ExtraHostCreate->mLenServHostName = LenServHostName;
+
+	if (oExtraHostCreate)
+		*oExtraHostCreate = ExtraHostCreate;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&ExtraHostCreate);
+	}
+
+	return r;
+}
+
+int gs_store_ntwk_client_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsStoreNtwkClient **oStoreNtwk)
+{
+	int r = 0;
+
+	struct GsStoreNtwkClient *StoreNtwk = new GsStoreNtwkClient();
+
+	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
+	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
+	StoreNtwk->base.mCtrlCon = CtrlCon;
+
+	if (oStoreNtwk)
+		*oStoreNtwk = StoreNtwk;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&StoreNtwk);
+	}
+
+	return r;
+}
+
+int gs_store_worker_client_create(
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	struct GsStoreWorkerClient **oStoreWorker)
+{
+	int r = 0;
+
+	struct GsStoreWorkerClient *StoreWorker = new GsStoreWorkerClient();
+
+	sp<ClntState> State(new ClntState());
+
+	if (!!(r = clnt_state_make_default(State.get())))
+		GS_GOTO_CLEAN();
+
+	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
+	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
+	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
+	StoreWorker->base.mCtrlCon = CtrlCon;
+	
+	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
+	StoreWorker->mLenRefNameMain = LenRefNameMain;
+	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
+	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
+	StoreWorker->mClntState = State;
+
+	if (oStoreWorker)
+		*oStoreWorker = StoreWorker;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&StoreWorker);
+	}
+
+	return r;
+}
+
 int gs_net_full_create_connection_client(
 	uint32_t ServPort,
 	const char *ServHostNameBuf, size_t LenServHostName,
@@ -752,47 +842,48 @@ int gs_net_full_create_connection_client(
 	GsFullConnection *ConnectionClient = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
-	GsIntrTokenSurrogate      IntrTokenSurrogate = {};
-
-	sp<ClntState> State(new ClntState());
+	GsIntrTokenSurrogate      IntrToken = {};
 
 	GsCtrlCon               *CtrlCon = NULL;
 
-	GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
-	GsStoreNtwkClient       *StoreNtwk       = new GsStoreNtwkClient();
-	GsStoreWorkerClient     *StoreWorker     = new GsStoreWorkerClient();
+	GsExtraHostCreateClient *ExtraHostCreate = NULL;
+	GsStoreNtwkClient       *StoreNtwk       = NULL;
+	GsStoreWorkerClient     *StoreWorker     = NULL;
 
 	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
 		GS_GOTO_CLEAN();
 
-	if (!(IntrTokenSurrogate.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
+	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
-
-	if (!!(r = clnt_state_make_default(State.get())))
-		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
 		GS_GOTO_CLEAN();
 
-	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
-	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_client;
-	ExtraHostCreate->mServPort = ServPort;
-	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
-	ExtraHostCreate->mLenServHostName = LenServHostName;
+	if (!!(r = gs_extra_host_create_client_create(
+		ServPort,
+		ServHostNameBuf, LenServHostName,
+		&ExtraHostCreate)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
-	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
-	StoreNtwk->base.mIntrTokenSurrogate = IntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = CtrlCon;
+	if (!!(r = gs_store_ntwk_client_create(
+		IntrToken,
+		CtrlCon,
+		&StoreNtwk)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
-	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
-	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
-	StoreWorker->base.mCtrlCon = CtrlCon;
-	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
-	StoreWorker->mLenRefNameMain = LenRefNameMain;
-	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
-	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
-	StoreWorker->mIntrToken = IntrTokenSurrogate;
-	StoreWorker->mClntState = State;
+	if (!!(r = gs_store_worker_client_create(
+		IntrToken,
+		CtrlCon,
+		RefNameMainBuf, LenRefNameMain,
+		RepoMainPathBuf, LenRepoMainPath,
+		&StoreWorker)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
@@ -844,7 +935,7 @@ int gs_store_worker_cb_crank_t_client(
 			WorkerDataRecv,
 			WorkerDataSend,
 			pExtraWorker->mId,
-			&pStoreWorker->mIntrToken,
+			&pStoreWorker->base.mIntrToken,
 			pStoreWorker->mClntState.get(),
 			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
 			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath)))
