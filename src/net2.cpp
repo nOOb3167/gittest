@@ -10,7 +10,7 @@
 	whom are to be detached before destruction.
 
     @sa
-	   ::GsFullConnection
+	   GsFullConnection
 */
 static void gs_sp_thread_detaching_deleter(std::thread *t)
 {
