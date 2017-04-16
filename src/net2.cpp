@@ -292,6 +292,21 @@ int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
 	return 0;
 }
 
+int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate)
+{
+	int r = 0;
+
+	if (ioHostSurrogate->mHost)
+		enet_host_destroy(ioHostSurrogate->mHost);
+	ioHostSurrogate->mHost = NULL;
+
+clean:
+
+	return r;
+}
+
 int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate)
 {
 	int r = 0;
@@ -612,6 +627,15 @@ int gs_ntwk_reconnect_expend(
 	if (*ioWantReconnect) {
 
 		GsExtraWorker *ExtraWorker = NULL;
+
+		GS_LOG(I, S, "reconnection wanted - disconnecting");
+
+		if (!!(r = ExtraHostCreate->cb_destroy_host_t(
+			ExtraHostCreate,
+			ioHostSurrogate)))
+		{
+			GS_GOTO_CLEAN();
+		}
 
 		GS_LOG(I, S, "reconnection wanted - performing");
 

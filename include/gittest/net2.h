@@ -232,6 +232,9 @@ struct GsExtraHostCreate
 		struct GsHostSurrogate *ioHostSurrogate,
 		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 		struct GsExtraWorker **oExtraWorker);
+	int(*cb_destroy_host_t)(
+		struct GsExtraHostCreate *ExtraHostCreate,
+		struct GsHostSurrogate *ioHostSurrogate);
 	int(*cb_destroy_t)(struct GsExtraHostCreate *ExtraHostCreate);
 };
 
@@ -361,6 +364,9 @@ int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 
+int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate);
 int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate);
 
 int gs_worker_request_data_type_packet_make(

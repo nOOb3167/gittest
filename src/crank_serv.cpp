@@ -19,6 +19,7 @@ int gs_extra_host_create_server_create(
 
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SERVER_MAGIC;
 	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_server;
+	ExtraHostCreate->base.cb_destroy_host_t = gs_extra_host_create_cb_destroy_host_t_enet_host_destroy;
 	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
 
 	ExtraHostCreate->mServPort = ServPort;

@@ -75,6 +75,7 @@ struct ClntState {
 
 /** @sa
        ::gs_extra_host_create_client_create
+	   ::gs_extra_host_create_cb_destroy_host_t_enet_host_destroy
 	   ::gs_extra_host_create_cb_destroy_t_delete
 */
 
