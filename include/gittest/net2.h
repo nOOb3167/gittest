@@ -246,18 +246,16 @@ struct GsStoreNtwk
 {
 	uint32_t magic;
 
-	struct GsIntrTokenSurrogate mIntrToken;
-
-	struct GsCtrlCon *mCtrlCon;
+	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
+	struct GsCtrlCon *mCtrlCon;             /**< notowned */
 };
 
 struct GsStoreWorker
 {
 	uint32_t magic;
 
-	struct GsIntrTokenSurrogate mIntrToken;
-
-	struct GsCtrlCon *mCtrlCon;
+	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
+	struct GsCtrlCon *mCtrlCon;             /**< notowned */
 
 	int(*cb_crank_t)(
 		struct GsWorkerData *WorkerDataRecv,
@@ -292,8 +290,8 @@ struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
-	struct GsExtraHostCreate *ThreadNtwkExtraHostCreate;
-	struct GsCtrlCon *mCtrlCon;
+	struct GsExtraHostCreate *mExtraHostCreate;          /**< owned */
+	struct GsCtrlCon *mCtrlCon;                          /**< owned */
 };
 
 int gs_connection_surrogate_map_create(
@@ -334,7 +332,7 @@ int gs_packet_create(
 	struct GsPacketSurrogate *valPacketSurrogate);
 
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
-void gs_worker_data_destroy(struct GsWorkerData *WorkerData);
+int gs_worker_data_destroy(struct GsWorkerData *WorkerData);
 
 int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
 int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon);

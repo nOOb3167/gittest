@@ -238,9 +238,10 @@ int gs_worker_data_create(struct GsWorkerData **oWorkerData)
 	return 0;
 }
 
-void gs_worker_data_destroy(struct GsWorkerData *WorkerData)
+int gs_worker_data_destroy(struct GsWorkerData *WorkerData)
 {
 	GS_DELETE(&WorkerData);
+	return 0;
 }
 
 int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft)
@@ -1359,8 +1360,8 @@ int gs_net_full_create_connection(
 clean:
 	if (!!r) {
 		GS_DELETE_F(Connection, gs_full_connection_destroy);
-		GS_DELETE(&WorkerDataSend);
-		GS_DELETE(&WorkerDataRecv);
+		GS_DELETE_F(WorkerDataSend, gs_worker_data_destroy);
+		GS_DELETE_F(WorkerDataRecv, gs_worker_data_destroy);
 		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
 		GS_DELETE_VF(ExtraHostCreate, cb_destroy_t);
 	}
@@ -1385,7 +1386,7 @@ int gs_full_connection_create(
 
 	Connection->ThreadNtwk = ThreadNtwk;
 	Connection->ThreadWorker = ThreadWorker;
-	Connection->ThreadNtwkExtraHostCreate = ThreadNtwkExtraHostCreate;
+	Connection->mExtraHostCreate = ThreadNtwkExtraHostCreate;
 	Connection->mCtrlCon = CtrlCon;
 
 	if (oConnection)
@@ -1404,7 +1405,7 @@ int gs_full_connection_destroy(struct GsFullConnection *Connection)
 	if (!Connection)
 		return 0;
 
-	GS_DELETE_VF(Connection->ThreadNtwkExtraHostCreate, cb_destroy_t);
+	GS_DELETE_VF(Connection->mExtraHostCreate, cb_destroy_t);
 	GS_DELETE_F(Connection->mCtrlCon, gs_ctrl_con_destroy);
 
 	return 0;
