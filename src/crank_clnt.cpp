@@ -839,7 +839,7 @@ int gs_net_full_create_connection_client(
 {
 	int r = 0;
 
-	GsFullConnection *ConnectionClient = NULL;
+	struct GsFullConnection *ConnectionClient = NULL;
 
 	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
 	GsIntrTokenSurrogate      IntrToken = {};

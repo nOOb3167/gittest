@@ -428,8 +428,8 @@ int gs_net_full_create_connection_server(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		CtrlCon,
-		&ExtraHostCreate->base,
+		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
+		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
 		&StoreNtwk->base,
 		&StoreWorker->base,
 		&ConnectionServer,
@@ -445,9 +445,9 @@ clean:
 	if (!!r) {
 		GS_DELETE(&StoreWorker);
 		GS_DELETE(&StoreNtwk);
-		GS_DELETE(&ExtraHostCreate);
-		gs_ctrl_con_destroy(CtrlCon);
-		GS_DELETE(&ConnectionServer);
+		GS_DELETE_VF((&ExtraHostCreate->base), cb_destroy_t);
+		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
+		GS_DELETE_F(ConnectionServer, gs_full_connection_destroy);
 	}
 
 	return r;
