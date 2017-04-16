@@ -3,7 +3,8 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_WIN)
   
   # search for all needed packages
   
-    FIND_PACKAGE(LibGit2 REQUIRED)
+  FIND_PACKAGE(SQLITE3 REQUIRED)
+  FIND_PACKAGE(LibGit2 REQUIRED)
   ## ZLIB is a dependency of LibGit2
   ##   if LibGit2 does not find ZLIB it will use bundled (happens on windows/MSVC)
   IF (NOT GITTEST_COMPILER_MSVC)
@@ -15,11 +16,13 @@ FUNCTION (GITTEST_DEPS_SET_DEP_VARS_WIN)
   # set output variables
   
   SET(GITTEST_DEP_INCLUDE_DIRS
+    ${SQLITE3_INCLUDE_DIR}
     ${LIBGIT2_INCLUDE_DIR}
     ${ENET_INCLUDE_DIR}
     ${ZLIB_INCLUDE_DIR}
   PARENT_SCOPE)
   SET (GITTEST_DEP_LIBRARIES
+    ${SQLITE3_LIBRARIES}
     ${LIBGIT2_LIBRARIES}
     ${ENET_LIBRARIES}
     # ZLIB must be on the link list AFTER LibGit2 to resolve symbols
