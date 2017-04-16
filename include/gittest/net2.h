@@ -218,6 +218,11 @@ struct GsCtrlCon
 	sp<std::condition_variable> mCtrlConCondExited;
 };
 
+/** @sa
+       GsExtraHostCreateClient
+	   GsExtraHostCreateServer
+	   GsExtraHostCreateSelfUpdateBasic
+*/
 struct GsExtraHostCreate
 {
 	uint32_t magic;
@@ -230,38 +235,51 @@ struct GsExtraHostCreate
 	int(*cb_destroy_t)(struct GsExtraHostCreate *ExtraHostCreate);
 };
 
+/** @sa
+       GsExtraWorkerClient
+	   GsExtraWorkerServer
+	   GsExtraWorkerSelfUpdateBasic
+*/
 struct GsExtraWorker
 {
 	uint32_t magic;
 
-	// FIXME: cb_create_t should be a freestanding function - can't have
-	//   derived struct specifics like gs_connection_surrogate_id..
-	int(*cb_create_t)(
-		struct GsExtraWorker **oExtraWorker,
-		gs_connection_surrogate_id_t Id);
 	int(*cb_destroy_t)(struct GsExtraWorker *ExtraWorker);
 };
 
+/** @sa
+       GsExtraWorkerClient
+	   GsExtraWorkerServer
+	   GsExtraWorkerSelfUpdateBasic
+*/
 struct GsStoreNtwk
 {
 	uint32_t magic;
 
+	int(*cb_destroy_t)(struct GsStoreNtwk *StoreNtwk);
+
 	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
 	struct GsCtrlCon *mCtrlCon;             /**< notowned */
 };
 
+/** @sa
+       GsExtraWorkerClient
+	   GsExtraWorkerServer
+	   GsExtraWorkerSelfUpdateBasic
+*/
 struct GsStoreWorker
 {
 	uint32_t magic;
-
-	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
-	struct GsCtrlCon *mCtrlCon;             /**< notowned */
 
 	int(*cb_crank_t)(
 		struct GsWorkerData *WorkerDataRecv,
 		struct GsWorkerData *WorkerDataSend,
 		struct GsStoreWorker *StoreWorker,
 		struct GsExtraWorker *ExtraWorker);
+	int(*cb_destroy_t)(struct GsStoreWorker *StoreWorker);
+
+	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
+	struct GsCtrlCon *mCtrlCon;             /**< notowned */
 };
 
 /**
@@ -290,7 +308,11 @@ struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	sp<std::thread> ThreadWorker;
+	struct GsWorkerData *mWorkerDataRecv;                /**< owned */
+	struct GsWorkerData *mWorkerDataSend;                /**< owned */
 	struct GsExtraHostCreate *mExtraHostCreate;          /**< owned */
+	struct GsStoreNtwk       *mStoreNtwk;                /**< owned */
+	struct GsStoreWorker     *mStoreWorker;              /**< owned */
 	struct GsCtrlCon *mCtrlCon;                          /**< owned */
 };
 
@@ -470,8 +492,12 @@ int gs_net_full_create_connection(
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
 	sp<std::thread> ThreadWorker,
-	struct GsExtraHostCreate *ThreadNtwkExtraHostCreate,
-	struct GsCtrlCon *CtrlCon,
+	struct GsWorkerData *WorkerDataRecv, /**< owned */
+	struct GsWorkerData *WorkerDataSend, /**< owned */
+	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
+	struct GsStoreNtwk       *StoreNtwk,      /**< owned */
+	struct GsStoreWorker     *StoreWorker,    /**< owned */
+	struct GsCtrlCon *CtrlCon, /**< owned */
 	struct GsFullConnection **oConnection);
 int gs_full_connection_destroy(struct GsFullConnection *Connection);
 

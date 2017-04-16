@@ -778,6 +778,7 @@ int gs_store_ntwk_client_create(
 	struct GsStoreNtwkClient *StoreNtwk = new GsStoreNtwkClient();
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
+	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_client;
 	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
 	StoreNtwk->base.mCtrlCon = CtrlCon;
 
@@ -790,6 +791,20 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_store_ntwk_cb_destroy_t_client(struct GsStoreNtwk *StoreNtwk)
+{
+	struct GsStoreNtwkClient *pThis = (struct GsStoreNtwkClient *) StoreNtwk;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_CLIENT_MAGIC);
+
+	GS_DELETE(&StoreNtwk);
+
+	return 0;
 }
 
 int gs_store_worker_client_create(
@@ -810,6 +825,7 @@ int gs_store_worker_client_create(
 
 	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
+	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_client;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
 	
@@ -828,6 +844,20 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_store_worker_cb_destroy_t_client(struct GsStoreWorker *StoreWorker)
+{
+	struct GsStoreWorkerClient *pThis = (struct GsStoreWorkerClient *) StoreWorker;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_CLIENT_MAGIC);
+
+	GS_DELETE(&StoreWorker);
+
+	return 0;
 }
 
 int gs_net_full_create_connection_client(
@@ -889,8 +919,8 @@ int gs_net_full_create_connection_client(
 		ServPort,
 		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
-		&StoreNtwk->base,
-		&StoreWorker->base,
+		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
+		GS_ARGOWN(&StoreWorker, struct GsStoreWorker),
 		&ConnectionClient,
 		"clnt")))
 	{
@@ -902,9 +932,9 @@ int gs_net_full_create_connection_client(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&StoreWorker);
-		GS_DELETE(&StoreNtwk);
-		GS_DELETE_VF((&ExtraHostCreate->base), cb_destroy_t);
+		GS_DELETE_VF(&StoreWorker->base, cb_destroy_t);
+		GS_DELETE_VF(&StoreNtwk->base, cb_destroy_t);
+		GS_DELETE_VF(&ExtraHostCreate->base, cb_destroy_t);
 		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
 		GS_DELETE_F(ConnectionClient, gs_full_connection_destroy);
 	}
@@ -1024,7 +1054,7 @@ int gs_extra_host_create_cb_create_t_client(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_extra_worker_cb_create_t_client(&ExtraWorker, AssignedId)))
+	if (!!(r = gs_extra_worker_client_create(&ExtraWorker, AssignedId)))
 		GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
@@ -1038,7 +1068,7 @@ clean:
 	return r;
 }
 
-int gs_extra_worker_cb_create_t_client(
+int gs_extra_worker_client_create(
 	struct GsExtraWorker **oExtraWorker,
 	gs_connection_surrogate_id_t Id)
 {
@@ -1046,7 +1076,6 @@ int gs_extra_worker_cb_create_t_client(
 
 	pThis->base.magic = GS_EXTRA_WORKER_CLIENT_MAGIC;
 
-	pThis->base.cb_create_t = gs_extra_worker_cb_create_t_client;
 	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_client;
 
 	pThis->mId = Id;
@@ -1059,10 +1088,14 @@ int gs_extra_worker_cb_create_t_client(
 
 int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker)
 {
-	if (ExtraWorker->magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
-		return -1;
+	struct GsExtraWorkerClient *pThis = (struct GsExtraWorkerClient *) ExtraWorker;
 
-	delete ExtraWorker;
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(ExtraWorker->magic == GS_EXTRA_WORKER_CLIENT_MAGIC);
+
+	GS_DELETE(&ExtraWorker);
 
 	return 0;
 }

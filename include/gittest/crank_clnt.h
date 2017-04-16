@@ -75,6 +75,7 @@ struct ClntState {
 
 /** @sa
        ::gs_extra_host_create_client_create
+	   ::gs_extra_host_create_cb_destroy_t_delete
 */
 
 struct GsExtraHostCreateClient
@@ -85,6 +86,10 @@ struct GsExtraHostCreateClient
 	const char *mServHostNameBuf; size_t mLenServHostName;
 };
 
+/** @sa
+       ::gs_extra_worker_client_create
+	   ::gs_extra_worker_cb_destroy_t_client
+*/
 struct GsExtraWorkerClient
 {
 	struct GsExtraWorker base;
@@ -94,6 +99,7 @@ struct GsExtraWorkerClient
 
 /** @sa
        ::gs_store_ntwk_client_create
+	   ::gs_store_ntwk_cb_destroy_t_client
 */
 struct GsStoreNtwkClient
 {
@@ -102,6 +108,7 @@ struct GsStoreNtwkClient
 
 /** @sa
        ::gs_store_worker_client_create
+	   ::gs_store_worker_cb_destroy_t_client
 */
 struct GsStoreWorkerClient
 {
@@ -232,12 +239,14 @@ int gs_store_ntwk_client_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
 	struct GsStoreNtwkClient **oStoreNtwk);
+int gs_store_ntwk_cb_destroy_t_client(struct GsStoreNtwk *StoreNtwk);
 int gs_store_worker_client_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	struct GsStoreWorkerClient **oStoreWorker);
+int gs_store_worker_cb_destroy_t_client(struct GsStoreWorker *StoreWorker);
 
 int gs_net_full_create_connection_client(
 	uint32_t ServPort,
@@ -258,7 +267,7 @@ int gs_extra_host_create_cb_create_t_client(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	GsExtraWorker **oExtraWorker);
 
-int gs_extra_worker_cb_create_t_client(
+int gs_extra_worker_client_create(
 	struct GsExtraWorker **oExtraWorker,
 	gs_connection_surrogate_id_t Id);
 int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker);

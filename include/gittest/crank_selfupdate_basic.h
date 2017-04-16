@@ -8,6 +8,7 @@
 
 /** @sa
        ::gs_extra_host_create_selfupdate_basic_create
+	   ::gs_extra_host_create_cb_destroy_t_delete
 */
 struct GsExtraHostCreateSelfUpdateBasic
 {
@@ -17,6 +18,10 @@ struct GsExtraHostCreateSelfUpdateBasic
 	const char *mServHostNameBuf; size_t mLenServHostName;
 };
 
+/** @sa
+       ::gs_extra_worker_selfupdate_basic_create
+	   ::gs_extra_worker_cb_destroy_t_selfupdate_basic
+*/
 struct GsExtraWorkerSelfUpdateBasic
 {
 	struct GsExtraWorker base;
@@ -26,6 +31,7 @@ struct GsExtraWorkerSelfUpdateBasic
 
 /** @sa
        ::gs_store_ntwk_selfupdate_basic_create
+	   ::gs_store_ntwk_cb_destroy_t_selfupdate_basic
 */
 struct GsStoreNtwkSelfUpdateBasic
 {
@@ -34,6 +40,7 @@ struct GsStoreNtwkSelfUpdateBasic
 
 /** @sa
        ::gs_store_worker_selfupdate_basic_create
+	   ::gs_store_worker_cb_destroy_t_selfupdate_basic
 */
 struct GsStoreWorkerSelfUpdateBasic
 {
@@ -54,12 +61,14 @@ int gs_store_ntwk_selfupdate_basic_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
 	struct GsStoreNtwkSelfUpdateBasic **oStoreNtwk);
+int gs_store_ntwk_cb_destroy_t_selfupdate_basic(struct GsStoreNtwk *StoreNtwk);
 
 int gs_store_worker_selfupdate_basic_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
 	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
 	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker);
+int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWorker);
 
 int crank_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
@@ -89,7 +98,7 @@ int gs_extra_host_create_cb_create_t_selfupdate_basic(
 	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	GsExtraWorker **oExtraWorker);
 
-int gs_extra_worker_cb_create_t_selfupdate_basic(
+int gs_extra_worker_selfupdate_basic_create(
 	struct GsExtraWorker **oExtraWorker,
 	gs_connection_surrogate_id_t Id);
 

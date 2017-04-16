@@ -54,6 +54,7 @@ int gs_store_ntwk_selfupdate_basic_create(
 	struct GsStoreNtwkSelfUpdateBasic *StoreNtwk = new GsStoreNtwkSelfUpdateBasic();
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
+	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_selfupdate_basic;
 	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
 	StoreNtwk->base.mCtrlCon = CtrlCon;
 
@@ -68,6 +69,20 @@ clean:
 	return r;
 }
 
+int gs_store_ntwk_cb_destroy_t_selfupdate_basic(struct GsStoreNtwk *StoreNtwk)
+{
+	struct GsStoreNtwkSelfUpdateBasic *pThis = (struct GsStoreNtwkSelfUpdateBasic *) StoreNtwk;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC);
+
+	GS_DELETE(&StoreNtwk);
+
+	return 0;
+}
+
 int gs_store_worker_selfupdate_basic_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
@@ -80,6 +95,7 @@ int gs_store_worker_selfupdate_basic_create(
 
 	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
+	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_selfupdate_basic;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
 	
@@ -97,6 +113,20 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWorker)
+{
+	struct GsStoreWorkerSelfUpdateBasic *pThis = (struct GsStoreWorkerSelfUpdateBasic *) StoreWorker;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC);
+
+	GS_DELETE(&StoreWorker);
+
+	return 0;
 }
 
 int crank_selfupdate_basic(
@@ -477,7 +507,7 @@ int gs_extra_host_create_cb_create_t_selfupdate_basic(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_extra_worker_cb_create_t_selfupdate_basic(&ExtraWorker, AssignedId)))
+	if (!!(r = gs_extra_worker_selfupdate_basic_create(&ExtraWorker, AssignedId)))
 		GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
@@ -491,15 +521,13 @@ clean:
 	return r;
 }
 
-int gs_extra_worker_cb_create_t_selfupdate_basic(
+int gs_extra_worker_selfupdate_basic_create(
 	struct GsExtraWorker **oExtraWorker,
 	gs_connection_surrogate_id_t Id)
 {
 	struct GsExtraWorkerSelfUpdateBasic * pThis = new GsExtraWorkerSelfUpdateBasic();
 
 	pThis->base.magic = GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC;
-
-	pThis->base.cb_create_t = gs_extra_worker_cb_create_t_selfupdate_basic;
 	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_selfupdate_basic;
 
 	pThis->mId = Id;
@@ -512,10 +540,14 @@ int gs_extra_worker_cb_create_t_selfupdate_basic(
 
 int gs_extra_worker_cb_destroy_t_selfupdate_basic(struct GsExtraWorker *ExtraWorker)
 {
-	if (ExtraWorker->magic != GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC)
-		return -1;
+	struct GsExtraWorkerSelfUpdateBasic *pThis = (struct GsExtraWorkerSelfUpdateBasic *) ExtraWorker;
 
-	delete ExtraWorker;
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC);
+
+	GS_DELETE(&ExtraWorker);
 
 	return 0;
 }

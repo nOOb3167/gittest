@@ -44,6 +44,7 @@ int gs_store_ntwk_server_create(
 	struct GsStoreNtwkServer *StoreNtwk = new GsStoreNtwkServer();
 
 	StoreNtwk->base.magic = GS_STORE_NTWK_SERVER_MAGIC;
+	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_server;
 	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
 	StoreNtwk->base.mCtrlCon = CtrlCon;
 
@@ -56,6 +57,20 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_store_ntwk_cb_destroy_t_server(struct GsStoreNtwk *StoreNtwk)
+{
+	struct GsStoreNtwkServer *pThis = (struct GsStoreNtwkServer *) StoreNtwk;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_SERVER_MAGIC);
+
+	GS_DELETE(&StoreNtwk);
+
+	return 0;
 }
 
 int gs_store_worker_server_create(
@@ -73,6 +88,7 @@ int gs_store_worker_server_create(
 
 	StoreWorker->base.magic = GS_STORE_WORKER_SERVER_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
+	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_server;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
 	
@@ -94,6 +110,20 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_store_worker_cb_destroy_t_server(struct GsStoreWorker *StoreWorker)
+{
+	struct GsStoreWorkerServer *pThis = (struct GsStoreWorkerServer *) StoreWorker;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_SERVER_MAGIC);
+
+	GS_DELETE(&StoreWorker);
+
+	return 0;
 }
 
 int serv_state_service_request_blobs2(
@@ -522,8 +552,7 @@ int gs_extra_host_create_cb_create_t_server(
 	if (!(host = enet_host_create_interruptible(&addr, 128, 1, 0, 0, &FlagsHost)))
 		GS_ERR_CLEAN(1);
 
-	// FIXME: dummy zero Id
-	if (!!(r = gs_extra_worker_cb_create_t_server(&ExtraWorker, 0)))
+	if (!!(r = gs_extra_worker_server_create(&ExtraWorker)))
 		GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
@@ -537,17 +566,13 @@ clean:
 	return r;
 }
 
-/** @param Id ignored - refactor (remove struct specific params aka make function freestanding)
-*/
-int gs_extra_worker_cb_create_t_server(
-	struct GsExtraWorker **oExtraWorker,
-	gs_connection_surrogate_id_t Id)
+int gs_extra_worker_server_create(
+	struct GsExtraWorker **oExtraWorker)
 {
 	struct GsExtraWorkerServer * pThis = new GsExtraWorkerServer();
 
 	pThis->base.magic = GS_EXTRA_WORKER_SERVER_MAGIC;
 
-	pThis->base.cb_create_t = gs_extra_worker_cb_create_t_server;
 	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_server;
 
 	if (oExtraWorker)
