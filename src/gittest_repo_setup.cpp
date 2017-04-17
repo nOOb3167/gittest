@@ -11,6 +11,8 @@
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>
 
+#include <sqlite3.h>
+
 #define GS_REPO_SETUP_ARG_UPDATEMODE            "--gsreposetup"
 #define GS_REPO_SETUP_ARG_COMMIT_SELFUPDATE     "--xcommit_selfupdate"
 #define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
@@ -280,6 +282,20 @@ clean:
 	return r;
 }
 
+int sqlitestuff() {
+	int r = 0;
+
+	struct GsLogUnified *LogUnified = NULL;
+
+	if (!!(r = gs_log_unified_create(&LogUnified)))
+		GS_GOTO_CLEAN();
+
+clean:
+	GS_DELETE_F(LogUnified, gs_log_unified_destroy);
+
+	return r;
+}
+
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -302,7 +318,10 @@ int main(int argc, char **argv) {
 		GS_GOTO_CLEAN();
 
 	{
-		log_guard_t log(GS_LOG_GET("repo_setup"));			
+		log_guard_t log(GS_LOG_GET("repo_setup"));
+
+		if (!!(r = sqlitestuff()))
+			GS_GOTO_CLEAN();
 			
 		if (!!(r = gs_repo_setup_main(
 			argc, argv,

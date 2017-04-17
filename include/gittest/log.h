@@ -23,7 +23,7 @@
 #define GS_LOG_STR_EXTRA_EXTENSION ".txt"
 #define GS_LOG_STR_EXPECTED_SUFFIX  GS_LOG_STR_EXTRA_SUFFIX GS_LOG_STR_EXTRA_EXTENSION
 
-#define GS_LOG_DEFAULT_SIZE 4 * 1024 /* 4KB */
+#define GS_LOG_DEFAULT_SIZE 64 * 1024 /* 64KB */
 
 #define GS_LOG_ADD(PLOG) { if (!!gs_log_list_add_log(GS_LOG_LIST_GLOBAL_NAME, GS_LOG_BASE_CAST((PLOG)))) { GS_ERR_CLEAN(1); } }
 #define GS_LOG_GET(PREFIX) gs_log_list_get_log_ret(GS_LOG_LIST_GLOBAL_NAME, (PREFIX))
@@ -40,6 +40,11 @@ extern "C" {
 
 
 typedef uint32_t gs_tripwire_t;
+
+struct GsLogUnified;
+
+int gs_log_unified_create(struct GsLogUnified **oLogUnified);
+int gs_log_unified_destroy(struct GsLogUnified *LogUnified);
 
 struct GsVersion;
 struct GsLogList;

@@ -277,6 +277,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   SET(GITTEST_LIB_SOURCES
     src/cbuf.cpp
     src/log.cpp
+    src/log_unified.cpp
     src/misc.cpp
     src/main.cpp
     src/bypart.cpp
