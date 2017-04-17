@@ -43,14 +43,22 @@ typedef uint32_t gs_tripwire_t;
 
 struct GsLogUnified;
 
-int gs_log_unified_create(struct GsLogUnified **oLogUnified);
-int gs_log_unified_destroy(struct GsLogUnified *LogUnified);
-
 struct GsVersion;
 struct GsLogList;
 struct GsLogTls;
 struct GsLogBase;
 struct GsLog;
+
+int gs_log_unified_create(struct GsLogUnified **oLogUnified);
+int gs_log_unified_destroy(struct GsLogUnified *LogUnified);
+int gs_log_unified_message_log(
+	GsLogUnified *LogUnified,
+	const char *Prefix,
+	uint32_t Level,
+	const char *MsgBuf,
+	uint32_t MsgSize,
+	const char *CppFile,
+	int CppLine);
 
 /* public structure - reset with gs_log_dump_reset */
 struct GsLogDump {

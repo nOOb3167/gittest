@@ -1,6 +1,7 @@
 #include <stddef.h>
 
 #include <mutex>
+#include <sstream>
 
 #include <sqlite3.h>
 
@@ -12,6 +13,7 @@
 /** @sa
        ::gs_log_unified_create
 	   ::gs_log_unified_destroy
+	   ::gs_log_unified_message_log
 */
 struct GsLogUnified {
 	std::mutex mMutexData;
@@ -74,7 +76,7 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 		GS_GOTO_CLEAN();
 	}
 
-	/* create table */
+	/* create table (esp before preparing statements using it) */
 
 	if (SQLITE_DONE != (r = sqlite3_step(SqliteStmtTableCreate)))
 		GS_GOTO_CLEAN();
@@ -91,18 +93,8 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 		&SqliteStmtLogInsert,
 		NULL)))
 	{
-		const char *qqmore = sqlite3_errmsg(Sqlite);
 		GS_GOTO_CLEAN();
 	}
-
-	if (SQLITE_OK != (r = sqlite3_bind_text(SqliteStmtLogInsert, 1, "hello", -1, SQLITE_TRANSIENT)))
-		GS_GOTO_CLEAN();
-	if (SQLITE_DONE != (r = sqlite3_step(SqliteStmtLogInsert)))
-		GS_GOTO_CLEAN();
-	if (SQLITE_OK != (r = sqlite3_clear_bindings(SqliteStmtLogInsert)))
-		GS_GOTO_CLEAN();
-	if (SQLITE_OK != (r = sqlite3_reset(SqliteStmtLogInsert)))
-		GS_GOTO_CLEAN();
 
 	LogUnified->mSqlite = Sqlite;
 	LogUnified->mSqliteStmtTableCreate = SqliteStmtTableCreate;
@@ -149,4 +141,38 @@ int gs_log_unified_destroy(struct GsLogUnified *LogUnified)
 	GS_DELETE(&LogUnified);
 
 	return 0;
+}
+
+int gs_log_unified_message_log(
+	GsLogUnified *LogUnified,
+	const char *Prefix,
+	uint32_t Level,
+	const char *MsgBuf,
+	uint32_t MsgSize,
+	const char *CppFile,
+	int CppLine)
+{
+	int r = 0;
+
+	std::stringstream ss;
+	ss << "[" + std::string(Prefix) + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]" << std::endl;
+
+	const std::string &ssstr = ss.str();
+
+	{
+		std::lock_guard<std::mutex> lock(LogUnified->mMutexData);
+
+		if (SQLITE_OK != (r = sqlite3_bind_text(LogUnified->mSqliteStmtLogInsert, 1, ssstr.c_str(), -1, SQLITE_TRANSIENT)))
+			GS_GOTO_CLEAN();
+		if (SQLITE_DONE != (r = sqlite3_step(LogUnified->mSqliteStmtLogInsert)))
+			GS_GOTO_CLEAN();
+		if (SQLITE_OK != (r = sqlite3_clear_bindings(LogUnified->mSqliteStmtLogInsert)))
+			GS_GOTO_CLEAN();
+		if (SQLITE_OK != (r = sqlite3_reset(LogUnified->mSqliteStmtLogInsert)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
 }

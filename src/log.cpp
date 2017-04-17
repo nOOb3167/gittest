@@ -287,6 +287,11 @@ clean:
 
 void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
 	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog->mLogUnifiedOpt)
+		gs_log_unified_message_log(
+			lg->mpCurrentLog->mLogUnifiedOpt,
+			lg->mpCurrentLog->mPrefix.c_str(),
+			Level, MsgBuf, MsgSize, CppFile, CppLine);
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
@@ -297,6 +302,11 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
 	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog->mLogUnifiedOpt)
+		gs_log_unified_message_log(
+			lg->mpCurrentLog->mLogUnifiedOpt,
+			lg->mpCurrentLog->mPrefix.c_str(),
+			Level, MsgBuf, MsgSize, CppFile, CppLine);
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, MsgBuf, MsgSize, CppFile, CppLine);
 }
@@ -321,6 +331,11 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
 	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog->mLogUnifiedOpt)
+		gs_log_unified_message_log(
+			lg->mpCurrentLog->mLogUnifiedOpt,
+			lg->mpCurrentLog->mPrefix.c_str(),
+			Level, buf, MsgSize, CppFile, CppLine);
 	if (lg->mpCurrentLog)
 		lg->mpCurrentLog->mFuncMessageLog(lg->mpCurrentLog, Level, buf, MsgSize, CppFile, CppLine);
 }
