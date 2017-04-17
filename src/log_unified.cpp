@@ -1,8 +1,12 @@
+#include <stddef.h>
+
 #include <mutex>
 
 #include <sqlite3.h>
 
 #include <gittest/misc.h>
+#include <gittest/gittest_selfupdate.h>
+
 #include <gittest/log.h>
 
 /** @sa
@@ -23,12 +27,26 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 
 	struct GsLogUnified *LogUnified = new GsLogUnified();
 
+	const char DbFileNameBuf[] = "gittest_unified_log.sqlite";
+	size_t LenDbPath = 0;
+	char DbPathBuf[512] = {0};
+
 	sqlite3 *Sqlite = NULL;
 	sqlite3_stmt *SqliteStmtTableCreate = NULL;
 	sqlite3_stmt *SqliteStmtLogInsert = NULL;
 
+	if (!!(r = gs_build_path_interpret_relative_current_executable(
+		DbFileNameBuf, sizeof DbFileNameBuf,
+		DbPathBuf, sizeof DbPathBuf, &LenDbPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_buf_ensure_haszero(DbPathBuf, LenDbPath + 1)))
+		GS_GOTO_CLEAN();
+
 	if (SQLITE_OK != (r = sqlite3_open_v2(
-		"../data/wtf.sqlite",
+		DbPathBuf,
 		&Sqlite,
 		SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
 		NULL)))
@@ -36,8 +54,8 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 		GS_GOTO_CLEAN();
 	}
 
-	// FIXME: hardcoded 2 minute
-	if (SQLITE_OK != (r = sqlite3_busy_timeout(Sqlite, 120000)))
+	// FIXME: hardcoded 4 minute timeout
+	if (SQLITE_OK != (r = sqlite3_busy_timeout(Sqlite, 240000)))
 		GS_GOTO_CLEAN();
 
 	// https://sqlite.org/autoinc.html
