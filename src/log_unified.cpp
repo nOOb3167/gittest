@@ -58,6 +58,10 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 	if (SQLITE_OK != (r = sqlite3_busy_timeout(Sqlite, 240000)))
 		GS_GOTO_CLEAN();
 
+	// FIXME: sqlite disable sync because why not
+	if (SQLITE_OK != (r = sqlite3_exec(Sqlite, "PRAGMA synchronous=OFF;", NULL, NULL, NULL)))
+		GS_GOTO_CLEAN();
+
 	// https://sqlite.org/autoinc.html
 	//   sqlite autoincrement can be achieved by inserting NULL into INTEGER PRIMARY KEY
 	if (SQLITE_OK != (r = sqlite3_prepare_v2(
@@ -104,8 +108,7 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 	LogUnified->mSqliteStmtTableCreate = SqliteStmtTableCreate;
 	LogUnified->mSqliteStmtLogInsert = SqliteStmtLogInsert;
 
-	LogUnified->mMutexData.lock();
-	LogUnified->mMutexData.unlock();
+	{ std::lock_guard<std::mutex> lock(LogUnified->mMutexData); }
 
 	if (oLogUnified)
 		*oLogUnified = LogUnified;

@@ -88,6 +88,7 @@ void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, si
 
 int gs_log_list_create(GsLogList **oLogList);
 int gs_log_list_free(GsLogList *LogList);
+int gs_log_list_set_log_unified(GsLogList *LogList, struct GsLogUnified *LogUnified);
 int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);

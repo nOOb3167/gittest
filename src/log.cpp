@@ -52,6 +52,8 @@ struct GsLogList {
 	sp<std::mutex> mMutexData;
 	sp<GsLogList> mSelf;
 	sp<gs_log_map_t> mLogs;
+
+	struct GsLogUnified *mLogUnifiedOpt;  /**< owned */
 };
 
 struct GsLogTls {
@@ -70,6 +72,7 @@ struct GsLogBase {
 	sp<std::mutex> mMutexData;
 	std::string mPrefix;
 	GsLogBase *mPreviousLog;
+	struct GsLogUnified *mLogUnifiedOpt;  /**< notowned */
 
 	gs_log_base_func_message_log_t mFuncMessageLog;
 	gs_log_base_func_dump_t mFuncDump;
@@ -109,6 +112,7 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 	Klass->mMutexData = Mutex;
 	Klass->mPrefix = std::string(Prefix);
 	Klass->mPreviousLog = NULL;
+	Klass->mLogUnifiedOpt = NULL;
 
 	/* virtual functions */
 
@@ -380,16 +384,30 @@ int gs_log_list_create(GsLogList **oLogList) {
 
 	sp<std::mutex> Mutex(new std::mutex);
 
+	struct GsLogUnified *LogUnified = NULL;
+
 	gs_log_version_make_compiled(&LogList->mVersion);
 
 	LogList->mMutexData = Mutex;
 	LogList->mSelf = LogList;
 	LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
+	LogList->mLogUnifiedOpt = NULL;
 
-	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	/* create unified log */
+	// FIXME: is this the right place to decide unified log creation?
 
-	if (oLogList)
-		*oLogList = LogList.get();
+	if (!!(r = gs_log_unified_create(&LogUnified)))
+		goto clean;
+
+	if (!!(r = gs_log_list_set_log_unified(LogList.get(), LogUnified)))
+		goto clean;
+
+	{
+		std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+
+		if (oLogList)
+			*oLogList = LogList.get();
+	}
 
 clean:
 
@@ -414,12 +432,35 @@ int gs_log_list_free(GsLogList *LogList) {
 	int r = 0;
 
 	/* NOTE: special deletion protocol - managed by shared_ptr technically */
-	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+
 	{
+		std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
 			goto clean;
 
-		LogList->mSelf = sp<GsLogList>();
+		GS_DELETE_F(LogList->mLogUnifiedOpt, gs_log_unified_destroy);
+		LogList->mLogUnifiedOpt = NULL;
+	}
+
+	LogList->mSelf = sp<GsLogList>();
+
+clean:
+
+	return r;
+}
+
+int gs_log_list_set_log_unified(GsLogList *LogList, struct GsLogUnified *LogUnified)
+{
+	int r = 0;
+
+	{
+		std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+
+		if (LogList->mLogUnifiedOpt)
+			{ r = 1; goto clean; }
+
+		LogList->mLogUnifiedOpt = LogUnified;
 	}
 
 clean:
@@ -427,11 +468,14 @@ clean:
 	return r;
 }
 
+/** add GsLog to GsLogList and bind GsLogUnified */
 int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
 	int r = 0;
 
-	std::lock_guard<std::mutex> lock(*LogList->mMutexData);
 	{
+		std::lock_guard<std::mutex> lock1(*LogList->mMutexData);
+		std::lock_guard<std::mutex> lock2(*Log->mMutexData);
+
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
 			goto clean;
 
@@ -440,6 +484,8 @@ int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log) {
 
 		if (LogList->mLogs->find(Log->mPrefix) != LogList->mLogs->end())
 			{ r = 1; goto clean; }
+
+		Log->mLogUnifiedOpt = LogList->mLogUnifiedOpt;
 
 		(*LogList->mLogs)[Log->mPrefix] = Log;
 	}
