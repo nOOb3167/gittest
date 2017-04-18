@@ -151,3 +151,17 @@ clean:
 
 	return r;
 }
+
+int gs_path_kludge_filenameize(char *ioPathBuf, size_t *oLenPath)
+{
+	char *sep = strrchr(ioPathBuf, '/');
+	sep = sep ? sep : strrchr(ioPathBuf, '\\');
+	if (sep) {
+		sep++; /* skip separator */
+		size_t len = ioPathBuf + strlen(ioPathBuf) - sep;
+		memmove(ioPathBuf, sep, len);
+		memset(ioPathBuf + len, '\0', 1);
+	}
+	*oLenPath = strlen(ioPathBuf);
+	return 0;
+}

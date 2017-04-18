@@ -21,6 +21,8 @@ struct GsLogUnified {
 	sqlite3 *mSqlite;
 	sqlite3_stmt *mSqliteStmtTableCreate;
 	sqlite3_stmt *mSqliteStmtLogInsert;
+
+	char mCurExeNameBuf[512]; size_t mLenCurExeName;
 };
 
 int gs_log_unified_create(struct GsLogUnified **oLogUnified)
@@ -96,9 +98,15 @@ int gs_log_unified_create(struct GsLogUnified **oLogUnified)
 		GS_GOTO_CLEAN();
 	}
 
+
 	LogUnified->mSqlite = Sqlite;
 	LogUnified->mSqliteStmtTableCreate = SqliteStmtTableCreate;
 	LogUnified->mSqliteStmtLogInsert = SqliteStmtLogInsert;
+	if (!!(r = gs_get_current_executable_filename(LogUnified->mCurExeNameBuf, 512, &LogUnified->mLenCurExeName)))
+		GS_GOTO_CLEAN();
+	if (!!(r = gs_path_kludge_filenameize(LogUnified->mCurExeNameBuf, &LogUnified->mLenCurExeName)))
+		GS_GOTO_CLEAN();
+
 
 	{ std::lock_guard<std::mutex> lock(LogUnified->mMutexData); }
 
@@ -155,7 +163,11 @@ int gs_log_unified_message_log(
 	int r = 0;
 
 	std::stringstream ss;
-	ss << "[" + std::string(Prefix) + "] [" << CppFile << ":" << CppLine << "]: [" << std::string(MsgBuf, MsgSize) << "]" << std::endl;
+	ss  << "[" + std::string(LogUnified->mCurExeNameBuf, LogUnified->mLenCurExeName) + "] "
+		<< "[" + std::string(Prefix) + "] "
+		<< "[" << CppFile << ":" << CppLine << "]: "
+		<< "[" << std::string(MsgBuf, MsgSize) << "]"
+		<< std::endl;
 
 	const std::string &ssstr = ss.str();
 

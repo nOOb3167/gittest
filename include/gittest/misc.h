@@ -108,4 +108,6 @@ int gs_path_append_abs_rel(
 	const char *RelativeBuf, size_t LenRelative,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
 
+int gs_path_kludge_filenameize(char *ioPathBuf, size_t *ioLenPath);
+
 #endif /* _GITTEST_MISC_H_ */
