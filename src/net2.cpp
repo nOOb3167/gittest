@@ -19,6 +19,171 @@ static void gs_sp_thread_detaching_deleter(std::thread *t)
 	delete t;
 }
 
+int gs_affinity_queue_create(
+	size_t NumWorkers,
+	struct GsAffinityQueue **oAffinityQueue)
+{
+	int r = 0;
+
+	struct GsAffinityQueue *AffinityQueue = new GsAffinityQueue();
+
+	for (size_t i = 0; i < NumWorkers; i++)
+		AffinityQueue->mAffinityList.push_back(i);
+
+	if (oAffinityQueue)
+		*oAffinityQueue = AffinityQueue;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue)
+{
+	GS_DELETE(&AffinityQueue);
+	return 0;
+}
+
+int gs_affinity_queue_worker_acquire_ready(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_connection_surrogate_id_t ConnectionId,
+	gs_worker_id_t *oWorkerIdReady)
+{
+	int r = 0;
+
+	gs_worker_id_t WorkerIdReady = 0;
+
+	{
+		std::lock_guard<std::mutex> lock(AffinityQueue->mMutexData);
+
+		auto it = AffinityQueue->mAffinityList.begin();
+
+		for (auto it = AffinityQueue->mAffinityList.begin(); it != AffinityQueue->mAffinityList.end(); it++) {
+			gs_worker_id_t WorkerId = *it;
+			auto it2 = AffinityQueue->mAffinityMap.find(ConnectionId);
+			if (it2 != AffinityQueue->mAffinityMap.end()) {
+				/* acquire to worker currently already holding lease for ConnectionId */
+				WorkerIdReady = it2->second;
+			}
+			else {
+				/* acquire to worker any */
+				WorkerIdReady = AffinityQueue->mAffinityList.front();
+				// move to back of list as a form of load balancing
+				AffinityQueue->mAffinityList.pop_front();
+				AffinityQueue->mAffinityList.push_back(WorkerIdReady);
+			}
+		}
+	}
+
+	if (oWorkerIdReady)
+		*oWorkerIdReady = WorkerIdReady;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_worker_acquire_lease(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	gs_connection_surrogate_id_t ConnectionId)
+{
+	int r = 0;
+
+	{
+		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+
+		/* lease might already exist (someone else is servicing) - wait */
+
+		AffinityQueue->mCondDataLeaseReleased.wait(lock,
+			[&]() { return AffinityQueue->mAffinityMap.find(ConnectionId) == AffinityQueue->mAffinityMap.end(); });
+
+		AffinityQueue->mAffinityMap[ConnectionId] = WorkerId;
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_worker_release_lease(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t ExpectedWorkerId,
+	gs_connection_surrogate_id_t ConnectionId)
+{
+	int r = 0;
+
+	bool WasALeaseReleased = false;
+
+	{
+		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+
+		auto it = AffinityQueue->mAffinityMap.find(ConnectionId);
+
+		if (it != AffinityQueue->mAffinityMap.end() &&
+			it->second == ExpectedWorkerId)
+		{
+			AffinityQueue->mAffinityMap.erase(it);
+			WasALeaseReleased = true;
+		}
+	}
+
+	if (WasALeaseReleased)
+		AffinityQueue->mCondDataLeaseReleased.notify_all();
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_request_dequeue_coupled(
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerData *WorkerData,
+	gs_worker_id_t WorkerId,
+	struct GsWorkerRequestData *oValRequest)
+{
+	int r = 0;
+
+	GsWorkerRequestData Request = {};
+
+	if (!!(r = gs_worker_request_dequeue(WorkerData, &Request)))
+		GS_GOTO_CLEAN();
+
+	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET) {
+		if (!!(r = gs_affinity_queue_worker_acquire_lease(AffinityQueue, WorkerId, Request.mId)))
+			GS_GOTO_CLEAN();
+	}
+
+	if (oValRequest)
+		*oValRequest = Request;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_request_finish(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t ExpectedWorkerId,
+	struct GsWorkerRequestData valRequest)
+{
+	int r = 0;
+
+	if (valRequest.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET) {
+		if (!!(r = gs_affinity_queue_worker_release_lease(
+			AffinityQueue,
+			ExpectedWorkerId,
+			valRequest.mId)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_connection_surrogate_map_create(
 	struct GsConnectionSurrogateMap **oConnectionSurrogateMap)
 {

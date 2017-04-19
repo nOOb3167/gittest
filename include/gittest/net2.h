@@ -10,6 +10,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <map>
+#include <list>
 
 #include <enet/enet.h>
 
@@ -45,8 +47,19 @@ struct GsConnectionSurrogate;
 typedef uint64_t gs_connection_surrogate_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
 
+typedef uint64_t gs_worker_id_t;
+typedef ::std::map<gs_connection_surrogate_id_t, gs_worker_id_t> gs_affinity_map_t;
+typedef ::std::list<gs_worker_id_t> gs_affinity_list_t;
+
 struct GsExtraWorker;
 struct GsWorkerData;
+
+struct GsAffinityQueue {
+	std::mutex mMutexData;
+	std::condition_variable mCondDataLeaseReleased;
+	gs_affinity_map_t mAffinityMap;
+	gs_affinity_list_t mAffinityList;
+};
 
 /** Design:
 	Entries enter this structure on connection (ENet ENET_EVENT_TYPE_CONNECT).
@@ -318,6 +331,32 @@ struct GsFullConnection
 	struct GsStoreWorker     *mStoreWorker;              /**< owned */
 	struct GsCtrlCon *mCtrlCon;                          /**< owned */
 };
+
+int gs_affinity_queue_create(
+	size_t NumWorkers,
+	struct GsAffinityQueue **oAffinityQueue);
+int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue);
+int gs_affinity_queue_worker_acquire_ready(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_connection_surrogate_id_t ConnectionId,
+	gs_worker_id_t *oWorkerIdReady);
+int gs_affinity_queue_worker_acquire_lease(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	gs_connection_surrogate_id_t ConnectionId);
+int gs_affinity_queue_worker_release_lease(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t ExpectedWorkerId,
+	gs_connection_surrogate_id_t ConnectionId);
+int gs_affinity_queue_request_dequeue_coupled(
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerData *WorkerData,
+	gs_worker_id_t WorkerId,
+	struct GsWorkerRequestData *oValRequest);
+int gs_affinity_queue_request_finish(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t ExpectedWorkerId,
+	struct GsWorkerRequestData valRequest);
 
 int gs_connection_surrogate_map_create(
 	struct GsConnectionSurrogateMap **oConnectionSurrogateMap);
