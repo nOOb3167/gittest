@@ -1279,18 +1279,13 @@ void gs_ntwk_thread_func(
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate,
-	const char *optExtraThreadName)
+	const char *ExtraThreadName)
 {
 	int r = 0;
 
-	std::string ThreadName("ntwk_");
+	gs_current_thread_name_set_cstr_2("ntwk_", ExtraThreadName);
 
-	if (optExtraThreadName)
-		ThreadName.append(optExtraThreadName);
-
-	gs_current_thread_name_set_cstr(ThreadName.c_str());
-
-	log_guard_t log(GS_LOG_GET(ThreadName.c_str()));
+	log_guard_t log(GS_LOG_GET_2("ntwk_", ExtraThreadName));
 
 	r = gs_ntwk_reconnecter(
 		WorkerDataRecv,
@@ -1308,7 +1303,7 @@ void gs_ntwk_thread_func(
 	if (!!r) {
 		//GS_ASSERT(0);
 		// FIXME:
-		gs_log_crash_handler_dump_global_log_list_suffix(ThreadName.c_str(), ThreadName.size());
+		gs_log_crash_handler_dump_global_log_list_suffix_2("ntwk_", ExtraThreadName);
 	}
 
 clean:
@@ -1394,7 +1389,7 @@ int gs_worker_reconnect(
 
 	// FIXME: cb_destroy_t return value
 	if (ioExtraWorker && (*ioExtraWorker))
-		(*ioExtraWorker)->cb_destroy_t(*ioExtraWorker);
+		GS_DELETE_VF(*ioExtraWorker, cb_destroy_t);
 
 	if (ioExtraWorker)
 		*ioExtraWorker = Reconnect.mExtraWorker;
@@ -1404,14 +1399,19 @@ clean:
 	return r;
 }
 
-int gs_worker_reconnecter(
+void gs_worker_thread_func(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker)
+	struct GsStoreWorker *StoreWorker,
+	const char *ExtraThreadName)
 {
 	int r = 0;
 
 	GsExtraWorker *ExtraWorker = NULL;
+
+	gs_current_thread_name_set_cstr_2("work_", ExtraThreadName);
+
+	log_guard_t log(GS_LOG_GET_2("work_", ExtraThreadName));
 
 	GS_LOG(I, S, "entering reconnect-service cycle");
 
@@ -1426,64 +1426,31 @@ int gs_worker_reconnecter(
 			StoreWorker,
 			ExtraWorker);
 
-		if (!!r && r == GS_ERRCODE_RECONNECT) {
+		if (r == GS_ERRCODE_RECONNECT) {
 			GS_LOG(E, S, "worker reconnect attempt");
 			continue;
 		}
-		if (!!r && r == GS_ERRCODE_EXIT) {
+		else if (r == GS_ERRCODE_EXIT) {
 			GS_LOG(E, S, "worker exit attempt");
 			if (!!(r = gs_worker_exit(WorkerDataSend, StoreWorker)))
 				GS_GOTO_CLEAN();
 			GS_ERR_NO_CLEAN(0);
 		}
-		if (!!r)
+		else if (!!r) {
 			GS_GOTO_CLEAN();
+		}
 	}
 
 noclean:
 
 clean:
-	// FIXME: cb_destroy_t return value
-	if (ExtraWorker)
-		ExtraWorker->cb_destroy_t(ExtraWorker);
-
-	return r;
-}
-
-void gs_worker_thread_func(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	const char *optExtraThreadName)
-{
-	int r = 0;
-
-	std::string ThreadName("work_");
-
-	if (optExtraThreadName)
-		ThreadName.append(optExtraThreadName);
-
-	gs_current_thread_name_set_cstr(ThreadName.c_str());
-
-	log_guard_t log(GS_LOG_GET(ThreadName.c_str()));
-
-	if (!!(r = gs_worker_reconnecter(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-clean:
+	GS_DELETE_VF(ExtraWorker, cb_destroy_t);
 
 	GS_LOG(I, S, "thread exiting");
 
 	if (!!r) {
 		GS_ASSERT(0);
 	}
-
-	/* NOTE: void return */
 }
 
 int gs_net_full_create_connection(
@@ -1493,15 +1460,15 @@ int gs_net_full_create_connection(
 	struct GsStoreNtwk       *StoreNtwk, /**< owned */
 	struct GsStoreWorker     *StoreWorker, /**< owned */
 	struct GsFullConnection **oConnection,
-	const char *optExtraThreadName)
+	const char *ExtraThreadName)
 {
 	int r = 0;
 
 	struct GsWorkerData *WorkerDataRecv = NULL;
 	struct GsWorkerData *WorkerDataSend = NULL;
 
-	sp<std::thread> ClientWorkerThread;
-	sp<std::thread> ClientNtwkThread;
+	std::vector<sp<std::thread> > WorkerThread;
+	sp<std::thread> NtwkThread;
 
 	struct GsFullConnection *Connection = NULL;
 
@@ -1511,26 +1478,32 @@ int gs_net_full_create_connection(
 	if (!!(r = gs_worker_data_create(&WorkerDataSend)))
 		GS_GOTO_CLEAN();
 
-	ClientWorkerThread = sp<std::thread>(new std::thread(
-			gs_worker_thread_func,
-			WorkerDataRecv,
-			WorkerDataSend,
-			StoreWorker,
-			optExtraThreadName),
-		gs_sp_thread_detaching_deleter);
+	for (size_t i = 0; i < GS_MAGIC_NUM_WORKER_THREADS; i++) {
+		gs_worker_id_t WorkerId = i;
+		WorkerThread.push_back(
+			sp<std::thread>(
+				new std::thread(
+					gs_worker_thread_func,
+					WorkerDataRecv,
+					WorkerDataSend,
+					StoreWorker,
+					ExtraThreadName),
+				gs_sp_thread_detaching_deleter));
+	}
 
-	ClientNtwkThread = sp<std::thread>(new std::thread(
+	NtwkThread = sp<std::thread>(
+		new std::thread(
 			gs_ntwk_thread_func,
 			WorkerDataRecv,
 			WorkerDataSend,
 			StoreNtwk,
 			ExtraHostCreate,
-			optExtraThreadName),
+			ExtraThreadName),
 		gs_sp_thread_detaching_deleter);
 
 	if (!!(r = gs_full_connection_create(
-		ClientNtwkThread,
-		ClientWorkerThread,
+		NtwkThread,
+		WorkerThread,
 		GS_ARGOWN(&WorkerDataRecv, struct GsWorkerData),
 		GS_ARGOWN(&WorkerDataSend, struct GsWorkerData),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
@@ -1561,7 +1534,7 @@ clean:
 
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
-	sp<std::thread> ThreadWorker,
+	std::vector<sp<std::thread> > ThreadWorker,
 	struct GsWorkerData *WorkerDataRecv, /**< owned */
 	struct GsWorkerData *WorkerDataSend, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
@@ -1569,13 +1542,14 @@ int gs_full_connection_create(
 	struct GsStoreWorker     *StoreWorker,    /**< owned */
 	struct GsCtrlCon *CtrlCon, /**< owned */
 	struct GsFullConnection **oConnection)
+
 {
 	int r = 0;
 
 	struct GsFullConnection *Connection = new GsFullConnection();
 
 	Connection->ThreadNtwk = ThreadNtwk;
-	Connection->ThreadWorker = ThreadWorker;
+	Connection->mThreadWorker = ThreadWorker;
 	Connection->mWorkerDataRecv = WorkerDataRecv;
 	Connection->mWorkerDataSend = WorkerDataSend;
 	Connection->mExtraHostCreate = ExtraHostCreate;

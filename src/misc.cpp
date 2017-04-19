@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <cstring>
 
+#include <string>
+
 #include <gittest/misc.h>
 
 void gs_aux_delete_nulling(void **ptr)
@@ -130,4 +132,16 @@ void gs_current_thread_name_set_cstr(
 		GS_ASSERT(0);
 
 	gs_current_thread_name_set(NameCStr, strlen(NameCStr));
+}
+
+void gs_current_thread_name_set_cstr_2(
+	const char *BaseNameCStr,
+	const char *optExtraNameCStr)
+{
+	std::string ThreadName(BaseNameCStr);
+
+	if (optExtraNameCStr)
+		ThreadName.append(optExtraNameCStr);
+
+	gs_current_thread_name_set_cstr(ThreadName.c_str());
 }

@@ -94,6 +94,9 @@ int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t
 
 void gs_current_thread_name_set_cstr(
 	const char *NameCStr);
+void gs_current_thread_name_set_cstr_2(
+	const char *BaseNameCStr,
+	const char *optExtraNameCStr);
 
 void gs_current_thread_name_set(
 	const char *NameBuf,

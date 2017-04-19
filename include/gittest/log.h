@@ -27,6 +27,7 @@
 
 #define GS_LOG_ADD(PLOG) { if (!!gs_log_list_add_log(GS_LOG_LIST_GLOBAL_NAME, GS_LOG_BASE_CAST((PLOG)))) { GS_ERR_CLEAN(1); } }
 #define GS_LOG_GET(PREFIX) gs_log_list_get_log_ret(GS_LOG_LIST_GLOBAL_NAME, (PREFIX))
+#define GS_LOG_GET_2(PREFIX1, OPT_PREFIX2) gs_log_list_get_log_ret_2(GS_LOG_LIST_GLOBAL_NAME, (PREFIX1), (OPT_PREFIX2))
 
 /* global log list: user should define, signature 'GsLogList *', initialized eg by 'gs_log_list_global_create' */
 #define GS_LOG_LIST_GLOBAL_NAME g_gs_log_list_global
@@ -100,6 +101,7 @@ int gs_log_list_set_log_unified(GsLogList *LogList, struct GsLogUnified *LogUnif
 int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
 int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
 GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
+GsLogBase * gs_log_list_get_log_ret_2(GsLogList *LogList, const char *Prefix1, const char *optPrefix2);
 int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
 int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
 
@@ -109,6 +111,8 @@ int gs_log_dump_construct_header_(
 	const char *PrefixBuf, size_t PrefixSize,
 	char *ioHeaderBuf, size_t HeaderSize, size_t *oLenHeader);
 
+int gs_log_crash_handler_dump_global_log_list_suffix_2(
+	const char *SuffixBuf1, const char *SuffixBuf2);
 int gs_log_crash_handler_dump_global_log_list_suffix(
 	const char *SuffixBuf, size_t LenSuffix);
 int gs_log_crash_handler_dump_global_log_list();

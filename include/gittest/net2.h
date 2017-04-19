@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <vector>
 #include <deque>
 #include <map>
 #include <list>
@@ -16,6 +17,8 @@
 #include <enet/enet.h>
 
 #include <gittest/frame.h>
+
+#define GS_MAGIC_NUM_WORKER_THREADS 1
 
 #define GS_PORT 3756
 
@@ -323,7 +326,8 @@ struct GsStoreWorker
 struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
-	sp<std::thread> ThreadWorker;
+	std::vector<sp<std::thread> > mThreadWorker;         /**< owned */
+	struct GsAffinityQueue *mAffinityQueue;              /**< owned */
 	struct GsWorkerData *mWorkerDataRecv;                /**< owned */
 	struct GsWorkerData *mWorkerDataSend;                /**< owned */
 	struct GsExtraHostCreate *mExtraHostCreate;          /**< owned */
@@ -504,7 +508,7 @@ void gs_ntwk_thread_func(
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate,
-	const char *optExtraThreadName);
+	const char *ExtraThreadName);
 
 int gs_worker_exit(
 	struct GsWorkerData *WorkerDataSend,
@@ -515,15 +519,11 @@ int gs_worker_dequeue_handling_double_notify(
 int gs_worker_reconnect(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsExtraWorker **oExtraWorker);
-int gs_worker_reconnecter(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker);
 void gs_worker_thread_func(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	const char *optExtraThreadName);
+	const char *ExtraThreadName);
 
 int gs_net_full_create_connection(
 	uint32_t ServPort,
@@ -532,11 +532,11 @@ int gs_net_full_create_connection(
 	struct GsStoreNtwk       *StoreNtwk,
 	struct GsStoreWorker     *StoreWorker,
 	struct GsFullConnection **oConnection,
-	const char *optExtraThreadName);
+	const char *ExtraThreadName);
 
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
-	sp<std::thread> ThreadWorker,
+	std::vector<sp<std::thread> > ThreadWorker,
 	struct GsWorkerData *WorkerDataRecv, /**< owned */
 	struct GsWorkerData *WorkerDataSend, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */

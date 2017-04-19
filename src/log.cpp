@@ -552,6 +552,21 @@ GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix) {
 	return Log;
 }
 
+GsLogBase * gs_log_list_get_log_ret_2(GsLogList *LogList, const char *Prefix1, const char *optPrefix2)
+{
+	GsLogBase *Log = NULL;
+
+	std::string Name(Prefix1);
+
+	if (optPrefix2)
+		Name.append(optPrefix2);
+
+	if (!!gs_log_list_get_log(LogList, Name.c_str(), &Log))
+		return NULL;
+
+	return Log;
+}
+
 /* lowlevel - see comment */
 int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb) {
 	int r = 0;
@@ -684,4 +699,15 @@ int gs_log_dump_construct_header_(
 clean:
 
 	return r;
+}
+
+int gs_log_crash_handler_dump_global_log_list_suffix_2(
+	const char *SuffixBuf1, const char *SuffixBuf2)
+{
+	std::string ThreadName(SuffixBuf1);
+
+	if (SuffixBuf2)
+		ThreadName.append(SuffixBuf2);
+
+	return gs_log_crash_handler_dump_global_log_list_suffix(ThreadName.c_str(), ThreadName.size());
 }
