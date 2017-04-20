@@ -1321,13 +1321,13 @@ int gs_worker_exit(
 
 	struct GsWorkerRequestData RequestExit = {};
 
-	if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
-		GS_ERR_CLEAN(r);
-
 	if (!!(r = gs_worker_request_data_type_exit_make(&RequestExit)))
 		GS_ERR_CLEAN(r);
 
 	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &RequestExit)))
+		GS_ERR_CLEAN(r);
+
+	if (!!(r = gs_ctrl_con_signal_exited(StoreWorker->mCtrlCon)))
 		GS_ERR_CLEAN(r);
 
 clean:
