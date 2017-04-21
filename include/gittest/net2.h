@@ -214,6 +214,7 @@ struct GsWorkerRequestData
 	   ::gs_worker_request_dequeue
 	   ::gs_worker_packet_enqueue
 	   ::gs_worker_packet_dequeue
+	   ::gs_worker_packet_dequeue_timeout_reconnects
 */
 struct GsWorkerData
 {
@@ -222,13 +223,29 @@ struct GsWorkerData
 	sp<std::condition_variable> mWorkerDataCond;
 };
 
+/** value struct
+    @sa:
+        ::gs_worker_data_vec_create
+		::gs_worker_data_vec_destroy
+		::gs_worker_data_vec_id
+*/
+struct GsWorkerDataVec
+{
+	uint32_t mLen;
+	struct GsWorkerData **mData;
+};
+
 /** @sa
        ::gs_ctrl_con_create
+	   ::gs_ctrl_con_destroy
 	   ::gs_ctrl_con_signal_exited
 	   ::gs_ctrl_con_wait_exited
+	   ::gs_ctrl_con_get_num_workers
 */
 struct GsCtrlCon
 {
+	uint32_t mNumNtwks;
+	uint32_t mNumWorkers;
 	uint32_t mExitedSignalLeft;
 	sp<std::mutex> mCtrlConMutex;
 	sp<std::condition_variable> mCtrlConCondExited;
@@ -267,9 +284,9 @@ struct GsExtraWorker
 };
 
 /** @sa
-       GsExtraWorkerClient
-	   GsExtraWorkerServer
-	   GsExtraWorkerSelfUpdateBasic
+       GsStoreNtwkClient
+	   GsStoreNtwkServer
+	   GsStoreNtwkSelfUpdateBasic
 */
 struct GsStoreNtwk
 {
@@ -282,9 +299,9 @@ struct GsStoreNtwk
 };
 
 /** @sa
-       GsExtraWorkerClient
-	   GsExtraWorkerServer
-	   GsExtraWorkerSelfUpdateBasic
+       GsStoreWorkerClient
+	   GsStoreWorkerServer
+	   GsStoreWorkerSelfUpdateBasic
 */
 struct GsStoreWorker
 {
@@ -294,11 +311,14 @@ struct GsStoreWorker
 		struct GsWorkerData *WorkerDataRecv,
 		struct GsWorkerData *WorkerDataSend,
 		struct GsStoreWorker *StoreWorker,
-		struct GsExtraWorker *ExtraWorker);
+		struct GsExtraWorker *ExtraWorker,
+		gs_worker_id_t WorkerId);
 	int(*cb_destroy_t)(struct GsStoreWorker *StoreWorker);
 
 	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
 	struct GsCtrlCon *mCtrlCon;             /**< notowned */
+
+	uint32_t mNumWorkers;
 };
 
 /**
@@ -328,7 +348,7 @@ struct GsFullConnection
 	sp<std::thread> ThreadNtwk;
 	std::vector<sp<std::thread> > mThreadWorker;         /**< owned */
 	struct GsAffinityQueue *mAffinityQueue;              /**< owned */
-	struct GsWorkerData *mWorkerDataRecv;                /**< owned */
+	struct GsWorkerDataVec *mWorkerDataVecRecv;          /**< owned */
 	struct GsWorkerData *mWorkerDataSend;                /**< owned */
 	struct GsExtraHostCreate *mExtraHostCreate;          /**< owned */
 	struct GsStoreNtwk       *mStoreNtwk;                /**< owned */
@@ -402,10 +422,14 @@ int gs_packet_create(
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
 int gs_worker_data_destroy(struct GsWorkerData *WorkerData);
 
-int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft);
+int gs_ctrl_con_create(
+	uint32_t NumNtwks,
+	uint32_t NumWorkers,
+	struct GsCtrlCon **oCtrlCon);
 int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
+int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers);
 
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
@@ -460,9 +484,19 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 	uint32_t TimeoutMs,
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId);
+
+int gs_worker_data_vec_create(
+	uint32_t NumWorkers,
+	struct GsWorkerDataVec **oWorkerDataVec);
+int gs_worker_data_vec_destroy(
+	struct GsWorkerDataVec *WorkerDataVec);
+struct GsWorkerData * gs_worker_data_vec_id(
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t WorkerId);
+
 int gs_ntwk_reconnect_expend(
 	struct GsExtraHostCreate *ExtraHostCreate,
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct ClntStateReconnect *ioStateReconnect,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	struct GsHostSurrogate *ioHostSurrogate,
@@ -487,24 +521,24 @@ int gs_ntwk_host_service_sends(
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_host_service_event(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	int errService,
 	struct GsEventSurrogate *Event);
 int gs_ntwk_host_service(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk  *StoreNtwk,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_reconnecter(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate);
 void gs_ntwk_thread_func(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate,
@@ -520,9 +554,10 @@ int gs_worker_reconnect(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsExtraWorker **oExtraWorker);
 void gs_worker_thread_func(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
 	const char *ExtraThreadName);
 
 int gs_net_full_create_connection(
@@ -537,7 +572,7 @@ int gs_net_full_create_connection(
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
 	std::vector<sp<std::thread> > ThreadWorker,
-	struct GsWorkerData *WorkerDataRecv, /**< owned */
+	struct GsWorkerDataVec *WorkerDataVecRecv, /**< owned */
 	struct GsWorkerData *WorkerDataSend, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
 	struct GsStoreNtwk       *StoreNtwk,      /**< owned */

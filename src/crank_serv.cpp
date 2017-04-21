@@ -87,12 +87,18 @@ int gs_store_worker_server_create(
 
 	struct GsStoreWorkerServer *StoreWorker = new GsStoreWorkerServer();
 
+	uint32_t NumWorkers = 0;
+
+	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
+		GS_GOTO_CLEAN();
+
 	StoreWorker->base.magic = GS_STORE_WORKER_SERVER_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
 	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_server;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
-	
+	StoreWorker->base.mNumWorkers = NumWorkers;
+
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;
 	StoreWorker->mRefNameSelfUpdateBuf = RefNameSelfUpdateBuf;
@@ -427,7 +433,7 @@ int gs_net_full_create_connection_server(
 	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
+	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_extra_host_create_server_create(
@@ -488,7 +494,8 @@ int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker)
+	struct GsExtraWorker *ExtraWorker,
+	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 

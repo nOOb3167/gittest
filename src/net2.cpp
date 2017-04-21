@@ -409,11 +409,16 @@ int gs_worker_data_destroy(struct GsWorkerData *WorkerData)
 	return 0;
 }
 
-int gs_ctrl_con_create(struct GsCtrlCon **oCtrlCon, uint32_t ExitedSignalLeft)
+int gs_ctrl_con_create(
+	uint32_t NumNtwks,
+	uint32_t NumWorkers,
+	struct GsCtrlCon **oCtrlCon)
 {
 	struct GsCtrlCon *CtrlCon = new GsCtrlCon();
 
-	CtrlCon->mExitedSignalLeft = ExitedSignalLeft;
+	CtrlCon->mNumNtwks = NumNtwks;
+	CtrlCon->mNumWorkers = NumWorkers;
+	CtrlCon->mExitedSignalLeft = NumNtwks + NumWorkers;
 	CtrlCon->mCtrlConMutex = sp<std::mutex>(new std::mutex);
 	CtrlCon->mCtrlConCondExited = sp<std::condition_variable>(new std::condition_variable);
 
@@ -453,6 +458,15 @@ int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
 	{
 		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
 		CtrlCon->mCtrlConCondExited->wait(lock, [&]() { return ! CtrlCon->mExitedSignalLeft; });
+	}
+	return 0;
+}
+
+int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers)
+{
+	{
+		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
+		*oNumWorkers = CtrlCon->mNumWorkers;
 	}
 	return 0;
 }
@@ -776,9 +790,51 @@ clean:
 	return r;
 }
 
+int gs_worker_data_vec_create(
+	uint32_t NumWorkers,
+	struct GsWorkerDataVec **oWorkerDataVec)
+{
+	int r = 0;
+
+	struct GsWorkerDataVec *WorkerDataVec = new GsWorkerDataVec();
+
+	WorkerDataVec->mLen = NumWorkers;
+	WorkerDataVec->mData = new GsWorkerData * [NumWorkers];
+
+	for (size_t i = 0; i < WorkerDataVec->mLen; i++)
+		if (!!(r = gs_worker_data_create(&WorkerDataVec->mData[i])))
+			GS_GOTO_CLEAN();
+
+	if (oWorkerDataVec)
+		*oWorkerDataVec = WorkerDataVec;
+
+clean:
+
+	return r;
+}
+
+int gs_worker_data_vec_destroy(
+	struct GsWorkerDataVec *WorkerDataVec)
+{
+	for (size_t i = 0; i < WorkerDataVec->mLen; i++)
+		GS_DELETE_F(WorkerDataVec->mData[i], gs_worker_data_destroy);
+	delete [] WorkerDataVec->mData;
+	delete WorkerDataVec;
+	return 0;
+}
+
+struct GsWorkerData * gs_worker_data_vec_id(
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t WorkerId)
+{
+	if (WorkerId >= WorkerDataVec->mLen)
+		GS_ASSERT(0);
+	return WorkerDataVec->mData[WorkerId];
+}
+
 int gs_ntwk_reconnect_expend(
 	struct GsExtraHostCreate *ExtraHostCreate,
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct ClntStateReconnect *ioStateReconnect,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	struct GsHostSurrogate *ioHostSurrogate,
@@ -815,8 +871,9 @@ int gs_ntwk_reconnect_expend(
 
 		GS_LOG(I, S, "notifying worker");
 
-		if (!!(r = gs_worker_request_enqueue_double_notify(WorkerDataRecv, ExtraWorker)))
-			GS_GOTO_CLEAN();
+		for (uint32_t i = 0; i < WorkerDataVecRecv->mLen; i++)
+			if (!!(r = gs_worker_request_enqueue_double_notify(gs_worker_data_vec_id(WorkerDataVecRecv, i), ExtraWorker)))
+				GS_GOTO_CLEAN();
 	}
 
 	/* connection is ensured if no errors occurred (either existing or newly established)
@@ -1047,7 +1104,7 @@ clean:
 }
 
 int gs_ntwk_host_service_event(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	int errService,
@@ -1141,7 +1198,8 @@ int gs_ntwk_host_service_event(
 		if (!!(r = gs_worker_request_data_type_packet_make(Packet, ctxstruct->m0Id, &RequestRecv)))
 			GS_GOTO_CLEAN();
 
-		if (!!(r = gs_worker_request_enqueue(WorkerDataRecv, &RequestRecv)))
+		// FIXME: arbitrarily choose worker zero
+		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVecRecv, 0), &RequestRecv)))
 			GS_GOTO_CLEAN();
 	}
 	break;
@@ -1156,7 +1214,7 @@ clean:
 }
 
 int gs_ntwk_host_service(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk  *StoreNtwk,
 	struct GsHostSurrogate *HostSurrogate,
@@ -1190,7 +1248,7 @@ int gs_ntwk_host_service(
 		}
 
 		if (!!(r = gs_ntwk_host_service_event(
-			WorkerDataRecv,
+			WorkerDataVecRecv,
 			HostSurrogate,
 			ioConnectionSurrogateMap,
 			errService,
@@ -1209,7 +1267,7 @@ clean:
 }
 
 int gs_ntwk_reconnecter(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate)
@@ -1241,7 +1299,7 @@ int gs_ntwk_reconnecter(
 		/* NOTE: no_clean */
 		if (!!(r = gs_ntwk_reconnect_expend(
 			ExtraHostCreate,
-			WorkerDataRecv,
+			WorkerDataVecRecv,
 			&StateReconnect,
 			ConnectionSurrogateMap.get(),
 			&HostSurrogate,
@@ -1252,7 +1310,7 @@ int gs_ntwk_reconnecter(
 
 		/* NOTE: special error handling */
 		r = gs_ntwk_host_service(
-			WorkerDataRecv,
+			WorkerDataVecRecv,
 			WorkerDataSend,
 			StoreNtwk,
 			&HostSurrogate,
@@ -1275,7 +1333,7 @@ clean:
 }
 
 void gs_ntwk_thread_func(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk *StoreNtwk,
 	struct GsExtraHostCreate *ExtraHostCreate,
@@ -1288,7 +1346,7 @@ void gs_ntwk_thread_func(
 	log_guard_t log(GS_LOG_GET_2("ntwk_", ExtraThreadName));
 
 	r = gs_ntwk_reconnecter(
-		WorkerDataRecv,
+		WorkerDataVecRecv,
 		WorkerDataSend,
 		StoreNtwk,
 		ExtraHostCreate);
@@ -1400,9 +1458,10 @@ clean:
 }
 
 void gs_worker_thread_func(
-	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
 	const char *ExtraThreadName)
 {
 	int r = 0;
@@ -1417,14 +1476,19 @@ void gs_worker_thread_func(
 
 	while (true) {
 
-		if (!!(r = gs_worker_reconnect(WorkerDataRecv, &ExtraWorker)))
+		if (!!(r = gs_worker_reconnect(
+			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
+			&ExtraWorker)))
+		{
 			GS_GOTO_CLEAN();
+		}
 
 		r = StoreWorker->cb_crank_t(
-			WorkerDataRecv,
+			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
 			WorkerDataSend,
 			StoreWorker,
-			ExtraWorker);
+			ExtraWorker,
+			WorkerId);
 
 		if (r == GS_ERRCODE_RECONNECT) {
 			GS_LOG(E, S, "worker reconnect attempt");
@@ -1464,29 +1528,30 @@ int gs_net_full_create_connection(
 {
 	int r = 0;
 
-	struct GsWorkerData *WorkerDataRecv = NULL;
+	struct GsWorkerDataVec *WorkerDataVecRecv = NULL;
 	struct GsWorkerData *WorkerDataSend = NULL;
 
-	std::vector<sp<std::thread> > WorkerThread;
+	std::vector<sp<std::thread> > ThreadWorker;
 	sp<std::thread> NtwkThread;
 
 	struct GsFullConnection *Connection = NULL;
 
-	if (!!(r = gs_worker_data_create(&WorkerDataRecv)))
+	if (!!(r = gs_worker_data_vec_create(StoreWorker->mNumWorkers, &WorkerDataVecRecv)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_data_create(&WorkerDataSend)))
 		GS_GOTO_CLEAN();
 
-	for (size_t i = 0; i < GS_MAGIC_NUM_WORKER_THREADS; i++) {
+	for (size_t i = 0; i < StoreWorker->mNumWorkers; i++) {
 		gs_worker_id_t WorkerId = i;
-		WorkerThread.push_back(
+		ThreadWorker.push_back(
 			sp<std::thread>(
 				new std::thread(
 					gs_worker_thread_func,
-					WorkerDataRecv,
+					WorkerDataVecRecv,
 					WorkerDataSend,
 					StoreWorker,
+					WorkerId,
 					ExtraThreadName),
 				gs_sp_thread_detaching_deleter));
 	}
@@ -1494,7 +1559,7 @@ int gs_net_full_create_connection(
 	NtwkThread = sp<std::thread>(
 		new std::thread(
 			gs_ntwk_thread_func,
-			WorkerDataRecv,
+			WorkerDataVecRecv,
 			WorkerDataSend,
 			StoreNtwk,
 			ExtraHostCreate,
@@ -1503,8 +1568,8 @@ int gs_net_full_create_connection(
 
 	if (!!(r = gs_full_connection_create(
 		NtwkThread,
-		WorkerThread,
-		GS_ARGOWN(&WorkerDataRecv, struct GsWorkerData),
+		ThreadWorker,
+		GS_ARGOWN(&WorkerDataVecRecv, struct GsWorkerDataVec),
 		GS_ARGOWN(&WorkerDataSend, struct GsWorkerData),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
 		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
@@ -1522,7 +1587,7 @@ clean:
 	if (!!r) {
 		GS_DELETE_F(Connection, gs_full_connection_destroy);
 		GS_DELETE_F(WorkerDataSend, gs_worker_data_destroy);
-		GS_DELETE_F(WorkerDataRecv, gs_worker_data_destroy);
+		GS_DELETE_F(WorkerDataVecRecv, gs_worker_data_vec_destroy);
 		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
 		GS_DELETE_VF(ExtraHostCreate, cb_destroy_t);
 		GS_DELETE_VF(StoreNtwk, cb_destroy_t);
@@ -1535,14 +1600,13 @@ clean:
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
 	std::vector<sp<std::thread> > ThreadWorker,
-	struct GsWorkerData *WorkerDataRecv, /**< owned */
+	struct GsWorkerDataVec *WorkerDataVecRecv, /**< owned */
 	struct GsWorkerData *WorkerDataSend, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
 	struct GsStoreNtwk       *StoreNtwk,      /**< owned */
 	struct GsStoreWorker     *StoreWorker,    /**< owned */
 	struct GsCtrlCon *CtrlCon, /**< owned */
 	struct GsFullConnection **oConnection)
-
 {
 	int r = 0;
 
@@ -1550,7 +1614,7 @@ int gs_full_connection_create(
 
 	Connection->ThreadNtwk = ThreadNtwk;
 	Connection->mThreadWorker = ThreadWorker;
-	Connection->mWorkerDataRecv = WorkerDataRecv;
+	Connection->mWorkerDataVecRecv = WorkerDataVecRecv;
 	Connection->mWorkerDataSend = WorkerDataSend;
 	Connection->mExtraHostCreate = ExtraHostCreate;
 	Connection->mStoreNtwk = StoreNtwk;
@@ -1570,7 +1634,7 @@ int gs_full_connection_destroy(struct GsFullConnection *Connection)
 	if (!Connection)
 		return 0;
 
-	GS_DELETE_F(Connection->mWorkerDataRecv, gs_worker_data_destroy);
+	GS_DELETE_F(Connection->mWorkerDataVecRecv, gs_worker_data_vec_destroy);
 	GS_DELETE_F(Connection->mWorkerDataSend, gs_worker_data_destroy);
 	GS_DELETE_VF(Connection->mExtraHostCreate, cb_destroy_t);
 	GS_DELETE_VF(Connection->mStoreNtwk, cb_destroy_t);

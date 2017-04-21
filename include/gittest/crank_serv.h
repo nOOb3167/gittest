@@ -95,7 +95,8 @@ int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker);
+	struct GsExtraWorker *ExtraWorker,
+	gs_worker_id_t WorkerId);
 
 int gs_extra_host_create_cb_create_t_server(
 	GsExtraHostCreate *ExtraHostCreate,

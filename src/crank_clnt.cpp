@@ -819,7 +819,12 @@ int gs_store_worker_client_create(
 
 	struct GsStoreWorkerClient *StoreWorker = new GsStoreWorkerClient();
 
+	uint32_t NumWorkers = 0;
+
 	sp<ClntState> State(new ClntState());
+
+	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
@@ -829,6 +834,7 @@ int gs_store_worker_client_create(
 	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_client;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
+	StoreWorker->base.mNumWorkers = NumWorkers;
 	
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;
@@ -887,7 +893,7 @@ int gs_net_full_create_connection_client(
 	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
+	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_extra_host_create_client_create(
@@ -947,7 +953,8 @@ int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker)
+	struct GsExtraWorker *ExtraWorker,
+	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
@@ -1076,7 +1083,6 @@ int gs_extra_worker_client_create(
 	struct GsExtraWorkerClient * pThis = new GsExtraWorkerClient();
 
 	pThis->base.magic = GS_EXTRA_WORKER_CLIENT_MAGIC;
-
 	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_client;
 
 	pThis->mId = Id;

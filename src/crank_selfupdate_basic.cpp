@@ -94,12 +94,18 @@ int gs_store_worker_selfupdate_basic_create(
 
 	struct GsStoreWorkerSelfUpdateBasic *StoreWorker = new GsStoreWorkerSelfUpdateBasic();
 
+	uint32_t NumWorkers = 0;
+
+	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
+		GS_GOTO_CLEAN();
+
 	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
 	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
 	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_selfupdate_basic;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
-	
+	StoreWorker->base.mNumWorkers = NumWorkers;
+
 	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
 	StoreWorker->LenFileNameAbsoluteSelfUpdate = LenFileNameAbsoluteSelfUpdate;
 	StoreWorker->resultHaveUpdate = false;
@@ -330,7 +336,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = gs_ctrl_con_create(&CtrlCon, 2)))
+	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_extra_host_create_selfupdate_basic_create(
@@ -397,7 +403,8 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker)
+	struct GsExtraWorker *ExtraWorker,
+	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
