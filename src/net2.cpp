@@ -1411,8 +1411,6 @@ int gs_ntwk_reconnecter(
 		}
 		else if (r == GS_ERRCODE_EXIT) {
 			GS_LOG(E, S, "ntwk exit attempt");
-			if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
-				GS_ERR_CLEAN(r);
 			GS_ERR_NO_CLEAN(0);
 		}
 		else if (!!r)
@@ -1454,6 +1452,9 @@ void gs_ntwk_thread_func(
 clean:
 
 	GS_LOG(I, S, "thread exiting");
+
+	if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
+		GS_GOTO_CLEAN();
 
 	/* NOTE: void return */
 }
@@ -1583,8 +1584,6 @@ void gs_worker_thread_func(
 		}
 		else if (r == GS_ERRCODE_EXIT) {
 			GS_LOG(E, S, "worker exit attempt");
-			if (!!(r = gs_worker_exit(WorkerDataSend, StoreWorker)))
-				GS_GOTO_CLEAN();
 			GS_ERR_NO_CLEAN(0);
 		}
 		else if (!!r) {
@@ -1595,13 +1594,18 @@ void gs_worker_thread_func(
 noclean:
 
 clean:
+	if (!!r) {
+		GS_ASSERT(0);
+	}
+
 	GS_DELETE_VF(ExtraWorker, cb_destroy_t);
 
 	GS_LOG(I, S, "thread exiting");
 
-	if (!!r) {
-		GS_ASSERT(0);
-	}
+	if (!!(r = gs_worker_exit(WorkerDataSend, StoreWorker)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: void return */
 }
 
 int gs_net_full_create_connection(
