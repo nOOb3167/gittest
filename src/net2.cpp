@@ -19,6 +19,91 @@ static void gs_sp_thread_detaching_deleter(std::thread *t)
 	delete t;
 }
 
+int gs_helper_api_worker_exit(struct GsWorkerData *WorkerDataSend)
+{
+	int r = 0;
+
+	struct GsWorkerRequestData Request = {};
+
+	if (!!(r = gs_worker_request_data_type_exit_make(&Request)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &Request)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: special success path return semantics */
+	// FIXME: logging success path
+	GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_helper_api_worker_reconnect(struct GsWorkerData *WorkerDataSend)
+{
+	int r = 0;
+
+	struct GsWorkerRequestData Request = {};
+
+	if (!!(r = gs_worker_request_data_type_reconnect_prepare_make(&Request)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &Request)))
+		GS_GOTO_CLEAN();
+
+	/* NOTE: special success path return semantics */
+	// FIXME: logging success path
+	GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_helper_api_ntwk_exit(struct GsWorkerDataVec *WorkerDataVecRecv)
+{
+	int r = 0;
+
+	struct GsWorkerRequestData Request = {};
+
+	if (!!(r = gs_worker_request_data_type_exit_make(&Request)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t i = 0; i < WorkerDataVecRecv->mLen; i++)
+		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVecRecv, i), &Request)))
+			GS_GOTO_CLEAN();
+
+	/* NOTE: special success path return semantics */
+	// FIXME: logging success path
+	GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
+
+noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_helper_api_ntwk_reconnect()
+{
+	int r = 0;
+
+	/* NOTE: special success path return semantics */
+	// FIXME: logging success path
+	GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+
+noclean:
+
+clean:
+
+	return r;
+}
+
 int gs_affinity_queue_create(
 	size_t NumWorkers,
 	struct GsAffinityQueue **oAffinityQueue)
@@ -758,13 +843,8 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 
 	r = gs_worker_request_dequeue_timeout(pThis, &Request, TimeoutMs);
 	if (!!r && r == GS_ERRCODE_TIMEOUT) {
-		GsWorkerRequestData RequestReconnectPrepare = {};
-		if (!!(r = gs_worker_request_data_type_reconnect_prepare_make(&RequestReconnectPrepare)))
-			GS_GOTO_CLEAN();
-		if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &RequestReconnectPrepare)))
-			GS_GOTO_CLEAN();
-
-		GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+		int r2 = gs_helper_api_worker_reconnect(WorkerDataSend);
+		GS_ERR_NO_CLEAN(r2);
 	}
 	if (!!r)
 		GS_GOTO_CLEAN();
@@ -1027,6 +1107,7 @@ clean:
 }
 
 int gs_ntwk_host_service_sends(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
@@ -1044,17 +1125,23 @@ int gs_ntwk_host_service_sends(
 		{
 		case GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT:
 		{
+			int r2 = 0;
+
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT");
 
-			GS_ERR_CLEAN(GS_ERRCODE_EXIT);
+			r2 = gs_helper_api_ntwk_exit(WorkerDataVecRecv);
+			GS_ERR_CLEAN(r2);
 		}
 		break;
 
 		case GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE:
 		{
+			int r2 = 0;
+
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE");
 
-			GS_ERR_CLEAN(GS_ERRCODE_RECONNECT);
+			r2 = gs_helper_api_ntwk_reconnect();
+			GS_ERR_CLEAN(r2);
 		}
 		break;
 
@@ -1240,6 +1327,7 @@ int gs_ntwk_host_service(
 		&Intr.base)))
 	{
 		if (!!(r = gs_ntwk_host_service_sends(
+			WorkerDataVecRecv,
 			WorkerDataSend,
 			HostSurrogate,
 			ioConnectionSurrogateMap)))
@@ -1316,12 +1404,18 @@ int gs_ntwk_reconnecter(
 			&HostSurrogate,
 			ConnectionSurrogateMap.get());
 
-		if (!!r && r == GS_ERRCODE_RECONNECT) {
+		if (r == GS_ERRCODE_RECONNECT) {
 			GS_LOG(E, S, "ntwk reconnect attempt");
 			WantReconnect = true;
 			continue;
 		}
-		if (!!r)
+		else if (r == GS_ERRCODE_EXIT) {
+			GS_LOG(E, S, "ntwk exit attempt");
+			if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
+				GS_ERR_CLEAN(r);
+			GS_ERR_NO_CLEAN(0);
+		}
+		else if (!!r)
 			GS_ERR_NO_CLEAN(r);
 	}
 
@@ -1351,13 +1445,6 @@ void gs_ntwk_thread_func(
 		StoreNtwk,
 		ExtraHostCreate);
 
-	if (!!r && r == GS_ERRCODE_EXIT) {
-		
-		if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
-			GS_ERR_CLEAN(r);
-
-		GS_ERR_CLEAN(r);
-	}
 	if (!!r) {
 		//GS_ASSERT(0);
 		// FIXME:

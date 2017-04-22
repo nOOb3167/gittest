@@ -356,6 +356,11 @@ struct GsFullConnection
 	struct GsCtrlCon *mCtrlCon;                          /**< owned */
 };
 
+int gs_helper_api_worker_exit(struct GsWorkerData *WorkerDataSend);
+int gs_helper_api_worker_reconnect(struct GsWorkerData *WorkerDataSend);
+int gs_helper_api_ntwk_exit(struct GsWorkerDataVec *WorkerDataVecRecv);
+int gs_helper_api_ntwk_reconnect();
+
 int gs_affinity_queue_create(
 	size_t NumWorkers,
 	struct GsAffinityQueue **oAffinityQueue);
@@ -517,6 +522,7 @@ int gs_ntwk_host_service_worker_packet(
 	struct GsWorkerRequestData *RequestSend,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_host_service_sends(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);

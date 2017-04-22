@@ -723,7 +723,8 @@ int clnt_state_crank2(
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{
-		GS_ERR_CLEAN(GS_ERRCODE_EXIT);
+		int r2 = gs_helper_api_worker_exit(WorkerDataSend);
+		GS_ERR_CLEAN(r2);
 	}
 	break;
 
