@@ -9,7 +9,7 @@
 #define GS_LOG_LEVEL_ERROR 600
 #define GS_LOG_LEVEL_E GS_LOG_LEVEL_ERROR
 
-#define GS_LOG(LEVEL, TT, ...) { GS_LOG_TT_ ## TT (__FILE__, __LINE__, GS_LOG_LEVEL_ ## LEVEL, __VA_ARGS__); }
+#define GS_LOG(LEVEL, TT, ...) do { GS_LOG_TT_ ## TT (__FILE__, __LINE__, GS_LOG_LEVEL_ ## LEVEL, __VA_ARGS__); } while(0)
 
 #define GS_LOG_TT_SZ gs_log_tls_SZ
 #define GS_LOG_TT_S  gs_log_tls_S
