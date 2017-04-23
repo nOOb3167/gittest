@@ -18,7 +18,7 @@ int gs_extra_host_create_server_create(
 	struct GsExtraHostCreateServer *ExtraHostCreate = new GsExtraHostCreateServer();
 
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SERVER_MAGIC;
-	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_server;
+	ExtraHostCreate->base.cb_create_batch_t = gs_extra_host_create_cb_create_t_server;
 	ExtraHostCreate->base.cb_destroy_host_t = gs_extra_host_create_cb_destroy_host_t_enet_host_destroy;
 	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
 
@@ -494,13 +494,13 @@ int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker,
+	struct GsExtraWorker **ExtraWorker,
 	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
 	GsStoreWorkerServer *pStoreWorker = (GsStoreWorkerServer *) StoreWorker;
-	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) ExtraWorker;
+	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) *ExtraWorker;
 
 	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
 		GS_ERR_CLEAN(1);
@@ -530,10 +530,11 @@ clean:
 }
 
 int gs_extra_host_create_cb_create_t_server(
-	GsExtraHostCreate *ExtraHostCreate,
-	GsHostSurrogate *ioHostSurrogate,
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	GsExtraWorker **oExtraWorker)
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	size_t LenExtraWorker,
+	struct GsExtraWorker **oExtraWorkerArr)
 {
 	int r = 0;
 
@@ -542,8 +543,6 @@ int gs_extra_host_create_cb_create_t_server(
 	ENetAddress addr = {};
 	ENetIntrHostCreateFlags FlagsHost = {};
 	ENetHost *host = NULL;
-
-	GsExtraWorker *ExtraWorker = NULL;
 
 	int errService = 0;
 
@@ -560,14 +559,12 @@ int gs_extra_host_create_cb_create_t_server(
 	if (!(host = enet_host_create_interruptible(&addr, 128, 1, 0, 0, &FlagsHost)))
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = gs_extra_worker_server_create(&ExtraWorker)))
-		GS_GOTO_CLEAN();
+	for (uint32_t i = 0; i < LenExtraWorker; i++)
+		if (!!(r = gs_extra_worker_server_create(oExtraWorkerArr + i)))
+			GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
 		ioHostSurrogate->mHost = host;
-
-	if (oExtraWorker)
-		*oExtraWorker = ExtraWorker;
 
 clean:
 

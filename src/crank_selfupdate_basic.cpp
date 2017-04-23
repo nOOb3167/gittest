@@ -26,7 +26,7 @@ int gs_extra_host_create_selfupdate_basic_create(
 	struct GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = new GsExtraHostCreateSelfUpdateBasic();
 
 	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_SELFUPDATE_BASIC_MAGIC;
-	ExtraHostCreate->base.cb_create_t = gs_extra_host_create_cb_create_t_selfupdate_basic;
+	ExtraHostCreate->base.cb_create_batch_t = gs_extra_host_create_cb_create_t_selfupdate_basic;
 	ExtraHostCreate->base.cb_destroy_host_t = gs_extra_host_create_cb_destroy_host_t_enet_host_destroy;
 	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
 
@@ -403,13 +403,13 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker,
+	struct GsExtraWorker **ExtraWorker,
 	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
-	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *)StoreWorker;
-	GsExtraWorkerSelfUpdateBasic *pExtraWorker = (GsExtraWorkerSelfUpdateBasic *)ExtraWorker;
+	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) StoreWorker;
+	GsExtraWorkerSelfUpdateBasic *pExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ExtraWorker;
 
 	uint32_t HaveUpdate = false;
 	std::string BufferUpdate;
@@ -444,10 +444,11 @@ clean:
 }
 
 int gs_extra_host_create_cb_create_t_selfupdate_basic(
-	GsExtraHostCreate *ExtraHostCreate,
-	GsHostSurrogate *ioHostSurrogate,
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	GsExtraWorker **oExtraWorker)
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	size_t LenExtraWorker,
+	struct GsExtraWorker **oExtraWorkerArr)
 {
 	int r = 0;
 
@@ -462,8 +463,6 @@ int gs_extra_host_create_cb_create_t_selfupdate_basic(
 	GsConnectionSurrogate ConnectionSurrogate = {};
 
 	gs_connection_surrogate_id_t AssignedId = 0;
-
-	GsExtraWorker *ExtraWorker = NULL;
 
 	int errService = 0;
 
@@ -515,14 +514,12 @@ int gs_extra_host_create_cb_create_t_selfupdate_basic(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_extra_worker_selfupdate_basic_create(&ExtraWorker, AssignedId)))
-		GS_GOTO_CLEAN();
+	for (size_t i = 0; i < LenExtraWorker; i++)
+		if (!!(r = gs_extra_worker_selfupdate_basic_create(oExtraWorkerArr + i, AssignedId)))
+			GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
 		ioHostSurrogate->mHost = host;
-
-	if (oExtraWorker)
-		*oExtraWorker = ExtraWorker;
 
 clean:
 

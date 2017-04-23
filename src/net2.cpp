@@ -104,6 +104,46 @@ clean:
 	return r;
 }
 
+int gs_helper_api_ntwk_extra_host_create_and_notify(
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsHostSurrogate *ioHostSurrogate)
+{
+	int r = 0;
+
+	/* create batch then transfer ownership to notification request */
+	std::vector<GsExtraWorker *> ExtraWorker(WorkerDataVecRecv->mLen, NULL);
+
+	if (!!(r = ExtraHostCreate->cb_create_batch_t(
+		ExtraHostCreate,
+		ioHostSurrogate,
+		ioConnectionSurrogateMap,
+		ExtraWorker.size(),
+		ExtraWorker.data())))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	// FIXME: change ownership of ExtraWorker param to owned inside double notification function
+	//   ex function must release ExtraWorker on failure
+	for (uint32_t i = 0; i < WorkerDataVecRecv->mLen; i++)
+		if (!!(r = gs_worker_request_enqueue_double_notify(
+			gs_worker_data_vec_id(WorkerDataVecRecv, i),
+			GS_ARGOWN(ExtraWorker.data() + i, GsExtraWorker))))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+clean:
+	if (!!r) {
+		for (size_t i = 0; i < ExtraWorker.size(); i++)
+			GS_DELETE_VF(ExtraWorker[i], cb_destroy_t);
+	}
+
+	return r;
+}
+
 int gs_affinity_queue_create(
 	size_t NumWorkers,
 	struct GsAffinityQueue **oAffinityQueue)
@@ -938,22 +978,16 @@ int gs_ntwk_reconnect_expend(
 			GS_GOTO_CLEAN();
 		}
 
-		GS_LOG(I, S, "reconnection wanted - performing");
+		GS_LOG(I, S, "reconnection wanted - performing (create extra worker, use for notification)");
 
-		if (!!(r = ExtraHostCreate->cb_create_t(
+		if (!!(r = gs_helper_api_ntwk_extra_host_create_and_notify(
 			ExtraHostCreate,
-			ioHostSurrogate,
+			WorkerDataVecRecv,
 			ioConnectionSurrogateMap,
-			&ExtraWorker)))
+			ioHostSurrogate)))
 		{
 			GS_GOTO_CLEAN();
 		}
-
-		GS_LOG(I, S, "notifying worker");
-
-		for (uint32_t i = 0; i < WorkerDataVecRecv->mLen; i++)
-			if (!!(r = gs_worker_request_enqueue_double_notify(gs_worker_data_vec_id(WorkerDataVecRecv, i), ExtraWorker)))
-				GS_GOTO_CLEAN();
 	}
 
 	/* connection is ensured if no errors occurred (either existing or newly established)
@@ -1562,45 +1596,34 @@ void gs_worker_thread_func(
 
 	GS_LOG(I, S, "entering reconnect-service cycle");
 
-	while (true) {
+	if (!!(r = gs_worker_reconnect(
+		gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
+		&ExtraWorker)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
-		if (!!(r = gs_worker_reconnect(
-			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
-			&ExtraWorker)))
-		{
-			GS_GOTO_CLEAN();
-		}
-
-		r = StoreWorker->cb_crank_t(
-			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
-			WorkerDataSend,
-			StoreWorker,
-			ExtraWorker,
-			WorkerId);
-
-		if (r == GS_ERRCODE_RECONNECT) {
-			GS_LOG(E, S, "worker reconnect attempt");
-			continue;
-		}
-		else if (r == GS_ERRCODE_EXIT) {
-			GS_LOG(E, S, "worker exit attempt");
-			GS_ERR_NO_CLEAN(0);
-		}
-		else if (!!r) {
-			GS_GOTO_CLEAN();
-		}
+	if (!!(r = StoreWorker->cb_crank_t(
+		gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
+		WorkerDataSend,
+		StoreWorker,
+		&ExtraWorker,
+		WorkerId)))
+	{
+		GS_GOTO_CLEAN();
 	}
 
 noclean:
 
 clean:
-	if (!!r) {
-		GS_ASSERT(0);
-	}
-
 	GS_DELETE_VF(ExtraWorker, cb_destroy_t);
 
-	GS_LOG(I, S, "thread exiting");
+	if (r == 0)
+		GS_LOG(E, S, "worker implicit exit");
+	else if (r == GS_ERRCODE_EXIT)
+		GS_LOG(E, S, "worker explicit exit");
+	else
+		GS_ASSERT(0);
 
 	if (!!(r = gs_worker_exit(WorkerDataSend, StoreWorker)))
 		GS_GOTO_CLEAN();

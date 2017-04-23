@@ -260,14 +260,15 @@ int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker *ExtraWorker,
+	struct GsExtraWorker **ExtraWorker,
 	gs_worker_id_t WorkerId);
 
 int gs_extra_host_create_cb_create_t_client(
-	GsExtraHostCreate *ExtraHostCreate,
-	GsHostSurrogate *ioHostSurrogate,
-	GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	GsExtraWorker **oExtraWorker);
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	size_t LenExtraWorker,
+	struct GsExtraWorker **oExtraWorkerArr);
 
 int gs_extra_worker_client_create(
 	struct GsExtraWorker **oExtraWorker,

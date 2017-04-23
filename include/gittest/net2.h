@@ -260,11 +260,12 @@ struct GsExtraHostCreate
 {
 	uint32_t magic;
 
-	int(*cb_create_t)(
+	int(*cb_create_batch_t)(
 		struct GsExtraHostCreate *ExtraHostCreate,
 		struct GsHostSurrogate *ioHostSurrogate,
 		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-		struct GsExtraWorker **oExtraWorker);
+		size_t LenExtraWorker,
+		struct GsExtraWorker **oExtraWorkerArr);
 	int(*cb_destroy_host_t)(
 		struct GsExtraHostCreate *ExtraHostCreate,
 		struct GsHostSurrogate *ioHostSurrogate);
@@ -311,7 +312,7 @@ struct GsStoreWorker
 		struct GsWorkerData *WorkerDataRecv,
 		struct GsWorkerData *WorkerDataSend,
 		struct GsStoreWorker *StoreWorker,
-		struct GsExtraWorker *ExtraWorker,
+		struct GsExtraWorker **ioExtraWorker,
 		gs_worker_id_t WorkerId);
 	int(*cb_destroy_t)(struct GsStoreWorker *StoreWorker);
 
@@ -360,6 +361,11 @@ int gs_helper_api_worker_exit(struct GsWorkerData *WorkerDataSend);
 int gs_helper_api_worker_reconnect(struct GsWorkerData *WorkerDataSend);
 int gs_helper_api_ntwk_exit(struct GsWorkerDataVec *WorkerDataVecRecv);
 int gs_helper_api_ntwk_reconnect();
+int gs_helper_api_ntwk_extra_host_create_and_notify(
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	struct GsHostSurrogate *ioHostSurrogate);
 
 int gs_affinity_queue_create(
 	size_t NumWorkers,
