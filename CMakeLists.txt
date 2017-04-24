@@ -19,6 +19,7 @@ SET(GITTEST_SOURCES_MAGIC_TARGET_LIST
   gittest_clnt
   gittest_clnt_clone
   gittest_repo_setup
+  gittest_log_convert
 )
 
 GITTEST_COMMON_SET_PLATFORM()
