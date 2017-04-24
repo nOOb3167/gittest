@@ -77,6 +77,7 @@ int crank_selfupdate_basic(
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsExtraWorker **ioExtraWorker,
 	uint32_t *oHaveUpdate,
 	std::string *oBufferUpdate);
 
@@ -91,7 +92,7 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
+	struct GsExtraWorker **ioExtraWorker,
 	gs_worker_id_t WorkerId);
 
 int gs_extra_host_create_cb_create_t_selfupdate_basic(

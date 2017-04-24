@@ -22,6 +22,7 @@
 
 #define GS_PORT 3756
 
+#define GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS 0xFFFFFFFF
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
 #define GS_CONNECT_NUMRETRY   5
 #define GS_CONNECT_TIMEOUT_MS 1000
@@ -276,6 +277,7 @@ struct GsExtraHostCreate
        GsExtraWorkerClient
 	   GsExtraWorkerServer
 	   GsExtraWorkerSelfUpdateBasic
+	   ::gs_extra_worker_replace
 */
 struct GsExtraWorker
 {
@@ -358,7 +360,10 @@ struct GsFullConnection
 };
 
 int gs_helper_api_worker_exit(struct GsWorkerData *WorkerDataSend);
-int gs_helper_api_worker_reconnect(struct GsWorkerData *WorkerDataSend);
+int gs_helper_api_worker_reconnect(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsWorkerRequestData *oValRequestReconnectRecv);
 int gs_helper_api_ntwk_exit(struct GsWorkerDataVec *WorkerDataVecRecv);
 int gs_helper_api_ntwk_reconnect();
 int gs_helper_api_ntwk_extra_host_create_and_notify(
@@ -442,6 +447,10 @@ int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers);
 
+int gs_extra_worker_replace(
+	struct GsExtraWorker **ioExtraWorker,
+	struct GsExtraWorker *Replacement);
+
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate);
@@ -472,12 +481,18 @@ int gs_worker_request_dequeue_timeout(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData,
 	uint32_t TimeoutMs);
+int gs_worker_request_dequeue_timeout_noprepare(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs);
 int gs_worker_request_dequeue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData);
 int gs_worker_request_dequeue_all_opt_cpp(
 	struct GsWorkerData *pThis,
 	std::deque<struct GsWorkerRequestData> *oValRequestData);
+int gs_worker_request_dequeue_discard_until_reconnect(
+	struct GsWorkerData *pThis);
 
 int gs_worker_packet_enqueue(
 	struct GsWorkerData *pThis,
@@ -494,7 +509,8 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 	struct GsWorkerData *WorkerDataSend,
 	uint32_t TimeoutMs,
 	struct GsPacket **oPacket,
-	gs_connection_surrogate_id_t *oId);
+	gs_connection_surrogate_id_t *oId,
+	struct GsExtraWorker **ioExtraWorkerCond);
 
 int gs_worker_data_vec_create(
 	uint32_t NumWorkers,

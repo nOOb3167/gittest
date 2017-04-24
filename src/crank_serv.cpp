@@ -190,7 +190,8 @@ int serv_state_crank2(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath)
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	struct GsExtraWorker **ioExtraWorker)
 {
 		int r = 0;
 
@@ -209,8 +210,17 @@ int serv_state_crank2(
 
 		GS_LOG(I, S, "waiting for request");
 
-		if (!!(r = gs_worker_packet_dequeue(WorkerDataRecv, &Packet, &IdForSend)))
+		// FIXME: need some kind of infinite timeout mechanism or alt func
+		if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
+			WorkerDataRecv,
+			WorkerDataSend,
+			GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS,
+			&Packet,
+			&IdForSend,
+			ioExtraWorker)))
+		{
 			GS_GOTO_CLEAN();
+		}
 
 		uint32_t OffsetStart = 0;
 		uint32_t OffsetSize = 0;
@@ -494,13 +504,13 @@ int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
+	struct GsExtraWorker **ioExtraWorker,
 	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
 	GsStoreWorkerServer *pStoreWorker = (GsStoreWorkerServer *) StoreWorker;
-	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) *ExtraWorker;
+	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) *ioExtraWorker;
 
 	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
 		GS_ERR_CLEAN(1);
@@ -517,7 +527,8 @@ int gs_store_worker_cb_crank_t_server(
 			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
 			pStoreWorker->mRefNameSelfUpdateBuf, pStoreWorker->mLenRefNameSelfUpdate,
 			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath,
-			pStoreWorker->mRepoSelfUpdatePathBuf, pStoreWorker->mLenRepoSelfUpdatePath)))
+			pStoreWorker->mRepoSelfUpdatePathBuf, pStoreWorker->mLenRepoSelfUpdatePath,
+			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
 		}

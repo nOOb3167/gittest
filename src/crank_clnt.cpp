@@ -146,7 +146,8 @@ int clnt_state_need_tree_head_setup2(
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
 	ClntState *State,
-	const char *RefNameMainBuf, size_t LenRefNameMain)
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -167,7 +168,8 @@ int clnt_state_need_tree_head_setup2(
 		IntrToken,
 		RefNameMainBuf, LenRefNameMain,
 		RepositoryT,
-		TreeHeadOid.get())))
+		TreeHeadOid.get(),
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -187,7 +189,8 @@ int clnt_state_need_tree_head_noown2(
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	git_repository *RepositoryT,
-	git_oid *oTreeHeadOid)
+	git_oid *oTreeHeadOid,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -207,8 +210,16 @@ int clnt_state_need_tree_head_noown2(
 	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Packet, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
+		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		&Packet,
+		NULL,
+		ioExtraWorker)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_LATEST_COMMIT_TREE))))
 		GS_GOTO_CLEAN();
@@ -238,7 +249,8 @@ int clnt_state_need_treelist_setup2(
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State)
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -256,7 +268,8 @@ int clnt_state_need_treelist_setup2(
 		RepositoryT,
 		TreeHeadOid.get(),
 		Treelist.get(),
-		MissingTreelist.get())))
+		MissingTreelist.get(),
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -278,7 +291,8 @@ int clnt_state_need_treelist_noown2(
 	git_repository *RepositoryT,
 	git_oid *TreeHeadOid,
 	std::vector<git_oid> *oTreelist,
-	std::vector<git_oid> *oMissingTreelist)
+	std::vector<git_oid> *oMissingTreelist,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -299,8 +313,16 @@ int clnt_state_need_treelist_noown2(
 	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &Packet, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
+		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		&Packet,
+		NULL,
+		ioExtraWorker)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = aux_frame_ensure_frametype(Packet->data, Packet->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREELIST))))
 		GS_GOTO_CLEAN();
@@ -324,7 +346,8 @@ int clnt_state_need_bloblist_setup2(
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State)
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -350,7 +373,8 @@ int clnt_state_need_bloblist_setup2(
 		MissingBloblist.get(),
 		&PacketTree,
 		&OffsetSizeBufferTree,
-		&OffsetObjectBufferTree)))
+		&OffsetObjectBufferTree,
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -378,7 +402,8 @@ int clnt_state_need_bloblist_noown2(
 	std::vector<git_oid> *oMissingBloblist,
 	struct GsPacket **oPacketTree,
 	uint32_t *oOffsetSizeBufferTree,
-	uint32_t *oOffsetObjectBufferTree)
+	uint32_t *oOffsetObjectBufferTree,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -406,8 +431,16 @@ int clnt_state_need_bloblist_noown2(
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &PacketTree, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
+		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		&PacketTree,
+		NULL,
+		ioExtraWorker)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
@@ -444,7 +477,8 @@ int clnt_state_need_written_blob_and_tree_setup2(
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State)
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -471,7 +505,8 @@ int clnt_state_need_written_blob_and_tree_setup2(
 		OffsetSizeBufferTree,
 		OffsetObjectBufferTree,
 		WrittenBlob.get(),
-		WrittenTree.get())))
+		WrittenTree.get(),
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -497,7 +532,8 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	uint32_t OffsetSizeBufferTree,
 	uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob,
-	std::vector<git_oid> *oWrittenTree)
+	std::vector<git_oid> *oWrittenTree,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -527,8 +563,16 @@ int clnt_state_need_written_blob_and_tree_noown2(
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(WorkerDataRecv, WorkerDataSend, GS_SERV_AUX_ARBITRARY_TIMEOUT_MS, &PacketBlob, NULL)))
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
+		WorkerDataRecv,
+		WorkerDataSend,
+		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		&PacketBlob,
+		NULL,
+		ioExtraWorker)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
 		GS_GOTO_CLEAN();
@@ -630,7 +674,8 @@ int clnt_state_crank2(
 	struct GsIntrTokenSurrogate *IntrToken,
 	ClntState *State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath)
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	struct GsExtraWorker **ioExtraWorker)
 {
 	int r = 0;
 
@@ -662,7 +707,8 @@ int clnt_state_crank2(
 			IdForSend,
 			IntrToken,
 			State,
-			RefNameMainBuf, LenRefNameMain)))
+			RefNameMainBuf, LenRefNameMain,
+			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -676,7 +722,8 @@ int clnt_state_crank2(
 			WorkerDataSend,
 			IdForSend,
 			IntrToken,
-			State)))
+			State,
+			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -690,7 +737,8 @@ int clnt_state_crank2(
 			WorkerDataSend,
 			IdForSend,
 			IntrToken,
-			State)))
+			State,
+			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -704,7 +752,8 @@ int clnt_state_crank2(
 			WorkerDataSend,
 			IdForSend,
 			IntrToken,
-			State)))
+			State,
+			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -954,13 +1003,13 @@ int gs_store_worker_cb_crank_t_client(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
+	struct GsExtraWorker **ioExtraWorker,
 	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
 	GsStoreWorkerClient *pStoreWorker = (GsStoreWorkerClient *) StoreWorker;
-	GsExtraWorkerClient *pExtraWorker = (GsExtraWorkerClient *) *ExtraWorker;
+	GsExtraWorkerClient *pExtraWorker = (GsExtraWorkerClient *) *ioExtraWorker;
 
 	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
 		GS_ERR_CLEAN(1);
@@ -977,7 +1026,8 @@ int gs_store_worker_cb_crank_t_client(
 			&pStoreWorker->base.mIntrToken,
 			pStoreWorker->mClntState.get(),
 			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
-			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath)))
+			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath,
+			ioExtraWorker)))
 		{
 			GS_ERR_NO_CLEAN(r);
 		}

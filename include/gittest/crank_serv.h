@@ -81,7 +81,8 @@ int serv_state_crank2(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath);
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	struct GsExtraWorker **ioExtraWorker);
 
 int gs_net_full_create_connection_server(
 	uint32_t ServPort,
@@ -95,7 +96,7 @@ int gs_store_worker_cb_crank_t_server(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
+	struct GsExtraWorker **ioExtraWorker,
 	gs_worker_id_t WorkerId);
 
 int gs_extra_host_create_cb_create_t_server(

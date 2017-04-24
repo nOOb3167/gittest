@@ -140,7 +140,8 @@ int clnt_state_need_tree_head_setup2(
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
 	ClntState *State,
-	const char *RefNameMainBuf, size_t LenRefNameMain);
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_tree_head_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -148,13 +149,15 @@ int clnt_state_need_tree_head_noown2(
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	git_repository *RepositoryT,
-	git_oid *oTreeHeadOid);
+	git_oid *oTreeHeadOid,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_treelist_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State);
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_treelist_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -163,28 +166,15 @@ int clnt_state_need_treelist_noown2(
 	git_repository *RepositoryT,
 	git_oid *TreeHeadOid,
 	std::vector<git_oid> *oTreelist,
-	std::vector<git_oid> *oMissingTreelist);
-int clnt_state_need_treelist_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State);
-int clnt_state_need_treelist_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	git_repository *RepositoryT,
-	git_oid *TreeHeadOid,
-	std::vector<git_oid> *oTreelist,
-	std::vector<git_oid> *oMissingTreelist);
+	std::vector<git_oid> *oMissingTreelist,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_bloblist_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State);
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_bloblist_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -195,13 +185,15 @@ int clnt_state_need_bloblist_noown2(
 	std::vector<git_oid> *oMissingBloblist,
 	struct GsPacket **oPacketTree,
 	uint32_t *oOffsetSizeBufferTree,
-	uint32_t *oOffsetObjectBufferTree);
+	uint32_t *oOffsetObjectBufferTree,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_written_blob_and_tree_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
-	ClntState *State);
+	ClntState *State,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_written_blob_and_tree_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -214,7 +206,8 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	uint32_t OffsetSizeBufferTree,
 	uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob,
-	std::vector<git_oid> *oWrittenTree);
+	std::vector<git_oid> *oWrittenTree,
+	struct GsExtraWorker **ioExtraWorker);
 int clnt_state_need_updated_ref_setup2(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	ClntState *State);
@@ -230,7 +223,8 @@ int clnt_state_crank2(
 	struct GsIntrTokenSurrogate *IntrToken,
 	ClntState *State,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath);
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	struct GsExtraWorker **ioExtraWorker);
 
 int gs_extra_host_create_client_create(
 	uint32_t ServPort,

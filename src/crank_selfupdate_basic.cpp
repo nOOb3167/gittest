@@ -142,6 +142,7 @@ int crank_selfupdate_basic(
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsExtraWorker **ioExtraWorker,
 	uint32_t *oHaveUpdate,
 	std::string *oBufferUpdate)
 {
@@ -197,7 +198,8 @@ int crank_selfupdate_basic(
 		WorkerDataSend,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
 		&PacketBlobOid,
-		NULL)))
+		NULL,
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -240,7 +242,8 @@ int crank_selfupdate_basic(
 		WorkerDataSend,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
 		&PacketBlob,
-		NULL)))
+		NULL,
+		ioExtraWorker)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -403,13 +406,13 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
+	struct GsExtraWorker **ioExtraWorker,
 	gs_worker_id_t WorkerId)
 {
 	int r = 0;
 
 	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) StoreWorker;
-	GsExtraWorkerSelfUpdateBasic *pExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ExtraWorker;
+	GsExtraWorkerSelfUpdateBasic *pExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ioExtraWorker;
 
 	uint32_t HaveUpdate = false;
 	std::string BufferUpdate;
@@ -427,6 +430,7 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 		pExtraWorker->mId,
 		&pStoreWorker->base.mIntrToken,
 		pStoreWorker->FileNameAbsoluteSelfUpdateBuf, pStoreWorker->LenFileNameAbsoluteSelfUpdate,
+		ioExtraWorker,
 		&HaveUpdate,
 		&BufferUpdate)))
 	{

@@ -42,23 +42,26 @@ clean:
 	return r;
 }
 
-int gs_helper_api_worker_reconnect(struct GsWorkerData *WorkerDataSend)
+int gs_helper_api_worker_reconnect(
+	struct GsWorkerData *WorkerDataRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsWorkerRequestData *oValRequestReconnectRecv)
 {
 	int r = 0;
 
-	struct GsWorkerRequestData Request = {};
+	struct GsWorkerRequestData RequestPrepareSend = {};
 
-	if (!!(r = gs_worker_request_data_type_reconnect_prepare_make(&Request)))
+	if (!!(r = gs_worker_request_data_type_reconnect_prepare_make(&RequestPrepareSend)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &Request)))
+	if (!!(r = gs_worker_request_enqueue(WorkerDataSend, &RequestPrepareSend)))
 		GS_GOTO_CLEAN();
 
-	/* NOTE: special success path return semantics */
-	// FIXME: logging success path
-	GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
+	if (!!(r = gs_worker_request_dequeue_discard_until_reconnect(WorkerDataRecv)))
+		GS_GOTO_CLEAN();
 
-noclean:
+	if (!!(r = gs_worker_dequeue_handling_double_notify(WorkerDataRecv, oValRequestReconnectRecv)))
+		GS_GOTO_CLEAN();
 
 clean:
 
@@ -596,6 +599,17 @@ int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers
 	return 0;
 }
 
+int gs_extra_worker_replace(
+	struct GsExtraWorker **ioExtraWorker,
+	struct GsExtraWorker *Replacement)
+{
+	if (ioExtraWorker && (*ioExtraWorker)) {
+		GS_DELETE_VF(*ioExtraWorker, cb_destroy_t);
+		*ioExtraWorker = Replacement;
+	}
+	return 0;
+}
+
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate)
@@ -760,6 +774,34 @@ int gs_worker_request_dequeue_timeout(
 	return 0;
 }
 
+/** Skips through if RECONNECT_PREPARE is dequeued.
+*/
+int gs_worker_request_dequeue_timeout_noprepare(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs)
+{
+	int r = 0;
+
+	if (!!(r = gs_worker_request_dequeue_timeout(
+		pThis,
+		oValRequestData,
+		TimeoutMs)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (oValRequestData->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE) {
+		if (!!(r = gs_worker_request_dequeue(pThis, oValRequestData)))
+			GS_GOTO_CLEAN();
+		GS_ASSERT(oValRequestData->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT);
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_worker_request_dequeue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData)
@@ -780,8 +822,29 @@ int gs_worker_request_dequeue_all_opt_cpp(
 	oValRequestData->clear();
 	{
 		std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
-		oValRequestData->clear();
 		oValRequestData->swap(*pThis->mWorkerQueue);
+	}
+	return 0;
+}
+
+/** Discard all requests until a reconnect request is reached.
+    Once a reconnect request is reached, leave it in the queue and succeed.
+*/
+int gs_worker_request_dequeue_discard_until_reconnect(
+	struct GsWorkerData *pThis)
+{
+	while (true) {
+		{
+			std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+			pThis->mWorkerDataCond->wait(lock, [&]() { return !pThis->mWorkerQueue->empty(); });
+			struct GsWorkerRequestData &Request = pThis->mWorkerQueue->front();
+			if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
+				Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
+			{
+				break;
+			}
+			pThis->mWorkerQueue->pop_front();
+		}
 	}
 	return 0;
 }
@@ -865,38 +928,47 @@ clean:
 
 /** Principal read facility for blocking-type worker.
 
-	Queue WorkerDataSend message GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE on timeout.
+	Due to reconnecting on timeout (and handling the double notify),
+	This function must be ready to marshall a newly obtained ExtraWorker out.
 
-	@retval: GS_ERRCODE_TIMEOUT   if timeout attempting to dequeue
-	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
+	@param ioExtraWorkerCond replaced on _failure_ with GS_ERRCODE_RECONNECT
+
+	@retval GS_ERRCODE_RECONNECT if reconnect request dequeued
+	         either normally or after timeout.
 */
 int gs_worker_packet_dequeue_timeout_reconnects(
 	struct GsWorkerData *pThis,
 	struct GsWorkerData *WorkerDataSend,
 	uint32_t TimeoutMs,
 	struct GsPacket **oPacket,
-	gs_connection_surrogate_id_t *oId)
+	gs_connection_surrogate_id_t *oId,
+	struct GsExtraWorker **ioExtraWorkerCond)
 {
 	int r = 0;
 
 	GsWorkerRequestData Request = {};
 
-	r = gs_worker_request_dequeue_timeout(pThis, &Request, TimeoutMs);
-	if (!!r && r == GS_ERRCODE_TIMEOUT) {
-		int r2 = gs_helper_api_worker_reconnect(WorkerDataSend);
-		GS_ERR_NO_CLEAN(r2);
-	}
-	if (!!r)
+	/* attempt dequeuing a request normally.
+	   GS_ERRCODE_TIMEOUT not considered an error and will be handled specially. */
+	r = gs_worker_request_dequeue_timeout_noprepare(pThis, &Request, TimeoutMs);
+	if (!!r && r != GS_ERRCODE_TIMEOUT)
 		GS_GOTO_CLEAN();
 
-	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
-		Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
+	/* GS_ERRCODE_TIMEOUT causes a second request dequeue attempt.
+	   In case of, the reconnect protocol is also ran. */
+	if (r == GS_ERRCODE_TIMEOUT)
+		if (!!(r = gs_helper_api_worker_reconnect(pThis, WorkerDataSend, &Request)))
+			GS_GOTO_CLEAN();
+
+	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
 	{
+		if (!!(r = gs_extra_worker_replace(ioExtraWorkerCond, Request.mExtraWorker)))
+			GS_GOTO_CLEAN();
+
 		GS_ERR_NO_CLEAN(GS_ERRCODE_RECONNECT);
 	}
 
-	if (Request.type != GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET)
-		GS_ERR_CLEAN(1);
+	GS_ASSERT(Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET);
 
 noclean:
 	if (oPacket && Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET)
@@ -1567,12 +1639,8 @@ int gs_worker_reconnect(
 
 	GS_LOG(I, S, "received notification");
 
-	// FIXME: cb_destroy_t return value
-	if (ioExtraWorker && (*ioExtraWorker))
-		GS_DELETE_VF(*ioExtraWorker, cb_destroy_t);
-
-	if (ioExtraWorker)
-		*ioExtraWorker = Reconnect.mExtraWorker;
+	if (!!(r = gs_extra_worker_replace(ioExtraWorker, Reconnect.mExtraWorker)))
+		GS_GOTO_CLEAN();
 
 clean:
 
