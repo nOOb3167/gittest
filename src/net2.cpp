@@ -92,9 +92,29 @@ clean:
 	return r;
 }
 
-int gs_helper_api_ntwk_reconnect()
+int gs_helper_api_ntwk_reconnect(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	int r = 0;
+
+	if (!!(r = ExtraHostCreate->cb_destroy_host_t(
+		ExtraHostCreate,
+		ioHostSurrogate)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_helper_api_ntwk_extra_host_create_and_notify(
+		ExtraHostCreate,
+		WorkerDataVecRecv,
+		ioHostSurrogate,
+		ioConnectionSurrogateMap)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	/* NOTE: special success path return semantics */
 	// FIXME: logging success path
@@ -110,8 +130,8 @@ clean:
 int gs_helper_api_ntwk_extra_host_create_and_notify(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsWorkerDataVec *WorkerDataVecRecv,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	struct GsHostSurrogate *ioHostSurrogate)
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	int r = 0;
 
@@ -323,6 +343,13 @@ int gs_connection_surrogate_map_create(
 	if (oConnectionSurrogateMap)
 		*oConnectionSurrogateMap = ConnectionSurrogateMap;
 
+	return 0;
+}
+
+int gs_connection_surrogate_map_destroy(
+	struct GsConnectionSurrogateMap *ConnectionSurrogateMap)
+{
+	GS_DELETE(&ConnectionSurrogateMap);
 	return 0;
 }
 
@@ -1028,43 +1055,34 @@ int gs_ntwk_reconnect_expend(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct ClntStateReconnect *ioStateReconnect,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	struct GsHostSurrogate *ioHostSurrogate,
-	uint32_t *ioWantReconnect)
+	struct GsHostSurrogate *ioHostSurrogate)
 {
 	int r = 0;
+
+	struct GsExtraWorker *ExtraWorker = NULL;
 
 	if (!!(r = clnt_state_reconnect_expend(ioStateReconnect)))
 		GS_GOTO_CLEAN();
 
-	if (*ioWantReconnect) {
+	GS_LOG(I, S, "reconnection wanted - disconnecting");
 
-		GsExtraWorker *ExtraWorker = NULL;
-
-		GS_LOG(I, S, "reconnection wanted - disconnecting");
-
-		if (!!(r = ExtraHostCreate->cb_destroy_host_t(
-			ExtraHostCreate,
-			ioHostSurrogate)))
-		{
-			GS_GOTO_CLEAN();
-		}
-
-		GS_LOG(I, S, "reconnection wanted - performing (create extra worker, use for notification)");
-
-		if (!!(r = gs_helper_api_ntwk_extra_host_create_and_notify(
-			ExtraHostCreate,
-			WorkerDataVecRecv,
-			ioConnectionSurrogateMap,
-			ioHostSurrogate)))
-		{
-			GS_GOTO_CLEAN();
-		}
+	if (!!(r = ExtraHostCreate->cb_destroy_host_t(
+		ExtraHostCreate,
+		ioHostSurrogate)))
+	{
+		GS_GOTO_CLEAN();
 	}
 
-	/* connection is ensured if no errors occurred (either existing or newly established)
-	*  in either case we no longer need to reconnect */
-	if (ioWantReconnect)
-		*ioWantReconnect = false;
+	GS_LOG(I, S, "reconnection wanted - performing (create extra worker, use for notification)");
+
+	if (!!(r = gs_helper_api_ntwk_extra_host_create_and_notify(
+		ExtraHostCreate,
+		WorkerDataVecRecv,
+		ioHostSurrogate,
+		ioConnectionSurrogateMap)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 clean:
 
@@ -1214,7 +1232,8 @@ clean:
 int gs_ntwk_host_service_sends(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
-	struct GsHostSurrogate *HostSurrogate,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	int r = 0;
@@ -1245,7 +1264,11 @@ int gs_ntwk_host_service_sends(
 
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE");
 
-			r2 = gs_helper_api_ntwk_reconnect();
+			r2 = gs_helper_api_ntwk_reconnect(
+				WorkerDataVecRecv,
+				ExtraHostCreate,
+				ioHostSurrogate,
+				ioConnectionSurrogateMap);
 			GS_ERR_CLEAN(r2);
 		}
 		break;
@@ -1255,7 +1278,7 @@ int gs_ntwk_host_service_sends(
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_DISCONNECT");
 
 			if (!!(r = gs_ntwk_host_service_worker_disconnect(
-				HostSurrogate,
+				ioHostSurrogate,
 				&RequestSend[i],
 				ioConnectionSurrogateMap)))
 			{
@@ -1269,7 +1292,7 @@ int gs_ntwk_host_service_sends(
 			GS_LOG(I, S, "GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET");
 
 			if (!!(r = gs_ntwk_host_service_worker_packet(
-				HostSurrogate,
+				ioHostSurrogate,
 				&RequestSend[i],
 				ioConnectionSurrogateMap)))
 			{
@@ -1288,7 +1311,7 @@ int gs_ntwk_host_service_sends(
 	// FIXME: flush only if any GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET were serviced
 
 	if (RequestSend.size())
-		enet_host_flush(HostSurrogate->mHost);
+		enet_host_flush(ioHostSurrogate->mHost);
 
 clean:
 
@@ -1409,7 +1432,8 @@ int gs_ntwk_host_service(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk  *StoreNtwk,
-	struct GsHostSurrogate *HostSurrogate,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap)
 {
 	int r = 0;
@@ -1425,7 +1449,7 @@ int gs_ntwk_host_service(
 	GS_LOG(I, S, "host service interruptible");
 
 	while (0 <= (errService = enet_host_service_interruptible(
-		HostSurrogate->mHost,
+		ioHostSurrogate->mHost,
 		&Event.event,
 		GS_TIMEOUT_1SEC,
 		StoreNtwk->mIntrToken.mIntrToken,
@@ -1434,7 +1458,8 @@ int gs_ntwk_host_service(
 		if (!!(r = gs_ntwk_host_service_sends(
 			WorkerDataVecRecv,
 			WorkerDataSend,
-			HostSurrogate,
+			ExtraHostCreate,
+			ioHostSurrogate,
 			ioConnectionSurrogateMap)))
 		{
 			GS_GOTO_CLEAN();
@@ -1442,7 +1467,7 @@ int gs_ntwk_host_service(
 
 		if (!!(r = gs_ntwk_host_service_event(
 			WorkerDataVecRecv,
-			HostSurrogate,
+			ioHostSurrogate,
 			ioConnectionSurrogateMap,
 			errService,
 			&Event)))
@@ -1459,76 +1484,6 @@ clean:
 	return r;
 }
 
-int gs_ntwk_reconnecter(
-	struct GsWorkerDataVec *WorkerDataVecRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreNtwk *StoreNtwk,
-	struct GsExtraHostCreate *ExtraHostCreate)
-{
-	int r = 0;
-
-	ClntStateReconnect StateReconnect = {};
-
-	GsConnectionSurrogateMap *rawConnectionSurrogateMap = NULL;
-
-	sp<GsConnectionSurrogateMap> ConnectionSurrogateMap;
-
-	GsHostSurrogate HostSurrogate = {};
-
-	uint32_t WantReconnect = true;
-
-	GS_LOG(I, S, "entering reconnect-service cycle");
-
-	if (!!(r = gs_connection_surrogate_map_create(&rawConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
-
-	GS_SP_SET_RAW_NULLING(ConnectionSurrogateMap, rawConnectionSurrogateMap, GsConnectionSurrogateMap);
-
-	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
-		GS_GOTO_CLEAN();
-
-	while (true) {
-
-		/* NOTE: no_clean */
-		if (!!(r = gs_ntwk_reconnect_expend(
-			ExtraHostCreate,
-			WorkerDataVecRecv,
-			&StateReconnect,
-			ConnectionSurrogateMap.get(),
-			&HostSurrogate,
-			&WantReconnect)))
-		{
-			GS_ERR_NO_CLEAN(r);
-		}
-
-		/* NOTE: special error handling */
-		r = gs_ntwk_host_service(
-			WorkerDataVecRecv,
-			WorkerDataSend,
-			StoreNtwk,
-			&HostSurrogate,
-			ConnectionSurrogateMap.get());
-
-		if (r == GS_ERRCODE_RECONNECT) {
-			GS_LOG(E, S, "ntwk reconnect attempt");
-			WantReconnect = true;
-			continue;
-		}
-		else if (r == GS_ERRCODE_EXIT) {
-			GS_LOG(E, S, "ntwk exit attempt");
-			GS_ERR_NO_CLEAN(0);
-		}
-		else if (!!r)
-			GS_ERR_NO_CLEAN(r);
-	}
-
-noclean:
-
-clean:
-
-	return r;
-}
-
 void gs_ntwk_thread_func(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
@@ -1538,25 +1493,52 @@ void gs_ntwk_thread_func(
 {
 	int r = 0;
 
+	struct ClntStateReconnect StateReconnect = {};
+	struct GsConnectionSurrogateMap *ConnectionSurrogateMap = NULL;
+	struct GsHostSurrogate HostSurrogate = {};
+
 	gs_current_thread_name_set_cstr_2("ntwk_", ExtraThreadName);
 
 	log_guard_t log(GS_LOG_GET_2("ntwk_", ExtraThreadName));
 
-	r = gs_ntwk_reconnecter(
-		WorkerDataVecRecv,
-		WorkerDataSend,
-		StoreNtwk,
-		ExtraHostCreate);
+	GS_LOG(I, S, "entering reconnect-service cycle");
 
-	if (!!r) {
-		//GS_ASSERT(0);
-		// FIXME:
-		gs_log_crash_handler_dump_global_log_list_suffix_2("ntwk_", ExtraThreadName);
+	if (!!(r = gs_connection_surrogate_map_create(&ConnectionSurrogateMap)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_ntwk_reconnect_expend(
+		ExtraHostCreate,
+		WorkerDataVecRecv,
+		&StateReconnect,
+		ConnectionSurrogateMap,
+		&HostSurrogate)))
+	{
+		GS_GOTO_CLEAN();
 	}
 
-clean:
+	do {
+		r = gs_ntwk_host_service(
+			WorkerDataVecRecv,
+			WorkerDataSend,
+			StoreNtwk,
+			ExtraHostCreate,
+			&HostSurrogate,
+			ConnectionSurrogateMap);
+	} while (r == GS_ERRCODE_RECONNECT);
+	/* NOTE: other return codes handled by fallthrough */
 
-	GS_LOG(I, S, "thread exiting");
+clean:
+	GS_DELETE_F(ConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
+
+	if (r == 0)
+		GS_LOG(E, S, "ntwk implicit exit");
+	else if (r == GS_ERRCODE_EXIT)
+		GS_LOG(E, S, "ntwk explicit exit");
+	else
+		GS_ASSERT(0);
 
 	if (!!(r = gs_ctrl_con_signal_exited(StoreNtwk->mCtrlCon)))
 		GS_GOTO_CLEAN();
@@ -1670,17 +1652,15 @@ void gs_worker_thread_func(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = StoreWorker->cb_crank_t(
-		gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
-		WorkerDataSend,
-		StoreWorker,
-		&ExtraWorker,
-		WorkerId)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-noclean:
+	do {
+		r = StoreWorker->cb_crank_t(
+			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
+			WorkerDataSend,
+			StoreWorker,
+			&ExtraWorker,
+			WorkerId);
+	} while (r == GS_ERRCODE_RECONNECT);
+	/* NOTE: other return codes handled by fallthrough */
 
 clean:
 	GS_DELETE_VF(ExtraWorker, cb_destroy_t);

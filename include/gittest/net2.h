@@ -74,6 +74,7 @@ struct GsAffinityQueue {
 
 	@sa
        ::gs_connection_surrogate_map_create
+	   ::gs_connection_surrogate_map_destroy
 	   ::gs_connection_surrogate_map_clear
 	   ::gs_connection_surrogate_map_insert_id
 	   ::gs_connection_surrogate_map_insert
@@ -365,12 +366,16 @@ int gs_helper_api_worker_reconnect(
 	struct GsWorkerData *WorkerDataSend,
 	struct GsWorkerRequestData *oValRequestReconnectRecv);
 int gs_helper_api_ntwk_exit(struct GsWorkerDataVec *WorkerDataVecRecv);
-int gs_helper_api_ntwk_reconnect();
+int gs_helper_api_ntwk_reconnect(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_helper_api_ntwk_extra_host_create_and_notify(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsWorkerDataVec *WorkerDataVecRecv,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	struct GsHostSurrogate *ioHostSurrogate);
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 
 int gs_affinity_queue_create(
 	size_t NumWorkers,
@@ -526,8 +531,7 @@ int gs_ntwk_reconnect_expend(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct ClntStateReconnect *ioStateReconnect,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	struct GsHostSurrogate *ioHostSurrogate,
-	uint32_t *ioWantReconnect);
+	struct GsHostSurrogate *ioHostSurrogate);
 int gs_aux_aux_aux_connection_register_transfer_ownership(
 	struct GsConnectionSurrogate valConnectionSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
@@ -546,7 +550,8 @@ int gs_ntwk_host_service_worker_packet(
 int gs_ntwk_host_service_sends(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
-	struct GsHostSurrogate *HostSurrogate,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_host_service_event(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
@@ -558,13 +563,9 @@ int gs_ntwk_host_service(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
 	struct GsStoreNtwk  *StoreNtwk,
-	struct GsHostSurrogate *HostSurrogate,
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
-int gs_ntwk_reconnecter(
-	struct GsWorkerDataVec *WorkerDataVecRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreNtwk *StoreNtwk,
-	struct GsExtraHostCreate *ExtraHostCreate);
 void gs_ntwk_thread_func(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
 	struct GsWorkerData *WorkerDataSend,
