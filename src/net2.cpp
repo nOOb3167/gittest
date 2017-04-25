@@ -603,10 +603,9 @@ int gs_extra_worker_replace(
 	struct GsExtraWorker **ioExtraWorker,
 	struct GsExtraWorker *Replacement)
 {
-	if (ioExtraWorker && (*ioExtraWorker)) {
+	if (ioExtraWorker && (*ioExtraWorker))
 		GS_DELETE_VF(*ioExtraWorker, cb_destroy_t);
-		*ioExtraWorker = Replacement;
-	}
+	*ioExtraWorker = Replacement;
 	return 0;
 }
 
