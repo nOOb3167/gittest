@@ -233,11 +233,13 @@ int gs_extra_host_create_client_create(
 int gs_store_ntwk_client_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsStoreNtwkClient **oStoreNtwk);
 int gs_store_ntwk_cb_destroy_t_client(struct GsStoreNtwk *StoreNtwk);
 int gs_store_worker_client_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	struct GsStoreWorkerClient **oStoreWorker);

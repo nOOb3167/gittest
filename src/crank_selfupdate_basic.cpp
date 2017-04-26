@@ -48,6 +48,7 @@ clean:
 int gs_store_ntwk_selfupdate_basic_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsStoreNtwkSelfUpdateBasic **oStoreNtwk)
 {
 	int r = 0;
@@ -58,6 +59,13 @@ int gs_store_ntwk_selfupdate_basic_create(
 	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_selfupdate_basic;
 	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
 	StoreNtwk->base.mCtrlCon = CtrlCon;
+	StoreNtwk->base.mAffinityQueue = AffinityQueue;
+
+	if (!!(r = clnt_state_reconnect_make_default(&StoreNtwk->base.mStateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_connection_surrogate_map_create(&StoreNtwk->base.mConnectionSurrogateMap)))
+		GS_GOTO_CLEAN();
 
 	if (oStoreNtwk)
 		*oStoreNtwk = StoreNtwk;
@@ -79,6 +87,8 @@ int gs_store_ntwk_cb_destroy_t_selfupdate_basic(struct GsStoreNtwk *StoreNtwk)
 
 	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC);
 
+	GS_DELETE_F(pThis->base.mConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
+
 	GS_DELETE(&StoreNtwk);
 
 	return 0;
@@ -87,6 +97,7 @@ int gs_store_ntwk_cb_destroy_t_selfupdate_basic(struct GsStoreNtwk *StoreNtwk)
 int gs_store_worker_selfupdate_basic_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
 	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker)
 {
@@ -104,6 +115,7 @@ int gs_store_worker_selfupdate_basic_create(
 	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_selfupdate_basic;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
+	StoreWorker->base.mAffinityQueue = AffinityQueue;
 	StoreWorker->base.mNumWorkers = NumWorkers;
 
 	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
@@ -329,6 +341,8 @@ int gs_net_full_create_connection_selfupdate_basic(
 
 	GsCtrlCon                        *CtrlCon = NULL;
 
+	GsAffinityQueue *AffinityQueue = NULL;
+
 	GsExtraHostCreateSelfUpdateBasic *ExtraHostCreate = NULL;
 	GsStoreNtwkSelfUpdateBasic       *StoreNtwk       = NULL;
 	GsStoreWorkerSelfUpdateBasic     *StoreWorker     = NULL;
@@ -342,6 +356,9 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
 		GS_GOTO_CLEAN();
 
+	if (!!(r = gs_affinity_queue_create(GS_MAGIC_NUM_WORKER_THREADS, &AffinityQueue)))
+		GS_GOTO_CLEAN();
+
 	if (!!(r = gs_extra_host_create_selfupdate_basic_create(
 		ServPort,
 		ServHostNameBuf, LenServHostName,
@@ -353,6 +370,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!!(r = gs_store_ntwk_selfupdate_basic_create(
 		IntrToken,
 		CtrlCon,
+		AffinityQueue,
 		&StoreNtwk)))
 	{
 		GS_GOTO_CLEAN();
@@ -361,6 +379,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!!(r = gs_store_worker_selfupdate_basic_create(
 		IntrToken,
 		CtrlCon,
+		AffinityQueue,
 		FileNameAbsoluteSelfUpdateBuf, LenFileNameAbsoluteSelfUpdate,
 		&StoreWorker)))
 	{
@@ -370,6 +389,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
 		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
+		GS_ARGOWN(&AffinityQueue, struct GsAffinityQueue),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
 		&StoreNtwk->base,
 		&StoreWorker->base,
@@ -393,6 +413,7 @@ clean:
 		GS_DELETE(&StoreWorker);
 		GS_DELETE(&StoreNtwk);
 		GS_DELETE_VF((&ExtraHostCreate->base), cb_destroy_t);
+		GS_DELETE_F(AffinityQueue, gs_affinity_queue_destroy);
 		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
 		GS_DELETE_F(ConnectionSelfUpdateBasic, gs_full_connection_destroy);
 	}

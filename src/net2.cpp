@@ -1493,8 +1493,6 @@ void gs_ntwk_thread_func(
 {
 	int r = 0;
 
-	struct ClntStateReconnect StateReconnect = {};
-	struct GsConnectionSurrogateMap *ConnectionSurrogateMap = NULL;
 	struct GsHostSurrogate HostSurrogate = {};
 
 	gs_current_thread_name_set_cstr_2("ntwk_", ExtraThreadName);
@@ -1503,17 +1501,11 @@ void gs_ntwk_thread_func(
 
 	GS_LOG(I, S, "entering reconnect-service cycle");
 
-	if (!!(r = gs_connection_surrogate_map_create(&ConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = clnt_state_reconnect_make_default(&StateReconnect)))
-		GS_GOTO_CLEAN();
-
 	if (!!(r = gs_ntwk_reconnect_expend(
 		ExtraHostCreate,
 		WorkerDataVecRecv,
-		&StateReconnect,
-		ConnectionSurrogateMap,
+		&StoreNtwk->mStateReconnect,
+		StoreNtwk->mConnectionSurrogateMap,
 		&HostSurrogate)))
 	{
 		GS_GOTO_CLEAN();
@@ -1526,13 +1518,11 @@ void gs_ntwk_thread_func(
 			StoreNtwk,
 			ExtraHostCreate,
 			&HostSurrogate,
-			ConnectionSurrogateMap);
+			StoreNtwk->mConnectionSurrogateMap);
 	} while (r == GS_ERRCODE_RECONNECT);
 	/* NOTE: other return codes handled by fallthrough */
 
 clean:
-	GS_DELETE_F(ConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
-
 	if (r == 0)
 		GS_LOG(E, S, "ntwk implicit exit");
 	else if (r == GS_ERRCODE_EXIT)
@@ -1681,6 +1671,7 @@ clean:
 int gs_net_full_create_connection(
 	uint32_t ServPort,
 	struct GsCtrlCon *CtrlCon, /**< owned */
+	struct GsAffinityQueue *AffinityQueue, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
 	struct GsStoreNtwk       *StoreNtwk, /**< owned */
 	struct GsStoreWorker     *StoreWorker, /**< owned */
@@ -1736,6 +1727,7 @@ int gs_net_full_create_connection(
 		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
 		GS_ARGOWN(&StoreWorker, struct GsStoreWorker),
 		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
+		GS_ARGOWN(&AffinityQueue, struct GsAffinityQueue),
 		&Connection)))
 	{
 		GS_GOTO_CLEAN();
@@ -1767,6 +1759,7 @@ int gs_full_connection_create(
 	struct GsStoreNtwk       *StoreNtwk,      /**< owned */
 	struct GsStoreWorker     *StoreWorker,    /**< owned */
 	struct GsCtrlCon *CtrlCon, /**< owned */
+	struct GsAffinityQueue *AffinityQueue, /**< owned */
 	struct GsFullConnection **oConnection)
 {
 	int r = 0;
@@ -1781,6 +1774,7 @@ int gs_full_connection_create(
 	Connection->mStoreNtwk = StoreNtwk;
 	Connection->mStoreWorker = StoreWorker;
 	Connection->mCtrlCon = CtrlCon;
+	Connection->mAffinityQueue = AffinityQueue;
 
 	if (oConnection)
 		*oConnection = Connection;
@@ -1801,6 +1795,7 @@ int gs_full_connection_destroy(struct GsFullConnection *Connection)
 	GS_DELETE_VF(Connection->mStoreNtwk, cb_destroy_t);
 	GS_DELETE_VF(Connection->mStoreWorker, cb_destroy_t);
 	GS_DELETE_F(Connection->mCtrlCon, gs_ctrl_con_destroy);
+	GS_DELETE_F(Connection->mAffinityQueue, gs_affinity_queue_destroy);
 
 	GS_DELETE(&Connection);
 

@@ -53,11 +53,13 @@ int gs_extra_host_create_server_create(
 int gs_store_ntwk_server_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsStoreNtwkServer **oStoreNtwk);
 int gs_store_ntwk_cb_destroy_t_server(struct GsStoreNtwk *StoreNtwk);
 int gs_store_worker_server_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,

@@ -300,6 +300,10 @@ struct GsStoreNtwk
 
 	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
 	struct GsCtrlCon *mCtrlCon;             /**< notowned */
+	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
+
+	struct ClntStateReconnect mStateReconnect; /**< owned (nodestroy) */
+	struct GsConnectionSurrogateMap *mConnectionSurrogateMap; /**< owned */
 };
 
 /** @sa
@@ -321,6 +325,7 @@ struct GsStoreWorker
 
 	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
 	struct GsCtrlCon *mCtrlCon;             /**< notowned */
+	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
 
 	uint32_t mNumWorkers;
 };
@@ -351,13 +356,13 @@ struct GsFullConnection
 {
 	sp<std::thread> ThreadNtwk;
 	std::vector<sp<std::thread> > mThreadWorker;         /**< owned */
-	struct GsAffinityQueue *mAffinityQueue;              /**< owned */
 	struct GsWorkerDataVec *mWorkerDataVecRecv;          /**< owned */
 	struct GsWorkerData *mWorkerDataSend;                /**< owned */
 	struct GsExtraHostCreate *mExtraHostCreate;          /**< owned */
 	struct GsStoreNtwk       *mStoreNtwk;                /**< owned */
 	struct GsStoreWorker     *mStoreWorker;              /**< owned */
 	struct GsCtrlCon *mCtrlCon;                          /**< owned */
+	struct GsAffinityQueue *mAffinityQueue;              /**< owned */
 };
 
 int gs_helper_api_worker_exit(struct GsWorkerData *WorkerDataSend);
@@ -405,6 +410,8 @@ int gs_affinity_queue_request_finish(
 
 int gs_connection_surrogate_map_create(
 	struct GsConnectionSurrogateMap **oConnectionSurrogateMap);
+int gs_connection_surrogate_map_destroy(
+	struct GsConnectionSurrogateMap *ConnectionSurrogateMap);
 int gs_connection_surrogate_map_clear(
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_connection_surrogate_map_insert_id(
@@ -592,6 +599,7 @@ void gs_worker_thread_func(
 int gs_net_full_create_connection(
 	uint32_t ServPort,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsStoreNtwk       *StoreNtwk,
 	struct GsStoreWorker     *StoreWorker,
@@ -607,6 +615,7 @@ int gs_full_connection_create(
 	struct GsStoreNtwk       *StoreNtwk,      /**< owned */
 	struct GsStoreWorker     *StoreWorker,    /**< owned */
 	struct GsCtrlCon *CtrlCon, /**< owned */
+	struct GsAffinityQueue *AffinityQueue, /**< owned */
 	struct GsFullConnection **oConnection);
 int gs_full_connection_destroy(struct GsFullConnection *Connection);
 

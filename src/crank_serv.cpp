@@ -38,6 +38,7 @@ clean:
 int gs_store_ntwk_server_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsStoreNtwkServer **oStoreNtwk)
 {
 	int r = 0;
@@ -48,6 +49,13 @@ int gs_store_ntwk_server_create(
 	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_server;
 	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
 	StoreNtwk->base.mCtrlCon = CtrlCon;
+	StoreNtwk->base.mAffinityQueue = AffinityQueue;
+
+	if (!!(r = clnt_state_reconnect_make_default(&StoreNtwk->base.mStateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_connection_surrogate_map_create(&StoreNtwk->base.mConnectionSurrogateMap)))
+		GS_GOTO_CLEAN();
 
 	if (oStoreNtwk)
 		*oStoreNtwk = StoreNtwk;
@@ -69,6 +77,8 @@ int gs_store_ntwk_cb_destroy_t_server(struct GsStoreNtwk *StoreNtwk)
 
 	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_SERVER_MAGIC);
 
+	GS_DELETE_F(pThis->base.mConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
+
 	GS_DELETE(&StoreNtwk);
 
 	return 0;
@@ -77,6 +87,7 @@ int gs_store_ntwk_cb_destroy_t_server(struct GsStoreNtwk *StoreNtwk)
 int gs_store_worker_server_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
@@ -97,6 +108,7 @@ int gs_store_worker_server_create(
 	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_server;
 	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
 	StoreWorker->base.mCtrlCon = CtrlCon;
+	StoreWorker->base.mAffinityQueue = AffinityQueue;
 	StoreWorker->base.mNumWorkers = NumWorkers;
 
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
@@ -433,6 +445,8 @@ int gs_net_full_create_connection_server(
 
 	GsCtrlCon               *CtrlCon = NULL;
 
+	GsAffinityQueue *AffinityQueue = NULL;
+
 	GsExtraHostCreateServer *ExtraHostCreate = NULL;
 	GsStoreNtwkServer       *StoreNtwk       = NULL;
 	GsStoreWorkerServer     *StoreWorker     = NULL;
@@ -446,6 +460,9 @@ int gs_net_full_create_connection_server(
 	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
 		GS_GOTO_CLEAN();
 
+	if (!!(r = gs_affinity_queue_create(GS_MAGIC_NUM_WORKER_THREADS, &AffinityQueue)))
+		GS_GOTO_CLEAN();
+
 	if (!!(r = gs_extra_host_create_server_create(
 		ServPort,
 		&ExtraHostCreate)))
@@ -456,6 +473,7 @@ int gs_net_full_create_connection_server(
 	if (!!(r = gs_store_ntwk_server_create(
 		IntrToken,
 		CtrlCon,
+		AffinityQueue,
 		&StoreNtwk)))
 	{
 		GS_GOTO_CLEAN();
@@ -464,6 +482,7 @@ int gs_net_full_create_connection_server(
 	if (!!(r = gs_store_worker_server_create(
 		IntrToken,
 		CtrlCon,
+		AffinityQueue,
 		RefNameMainBuf, LenRefNameMain,
 		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
 		RepoMainPathBuf, LenRepoMainPath,
@@ -476,6 +495,7 @@ int gs_net_full_create_connection_server(
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
 		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
+		GS_ARGOWN(&AffinityQueue, struct GsAffinityQueue),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
 		&StoreNtwk->base,
 		&StoreWorker->base,
@@ -493,6 +513,7 @@ clean:
 		GS_DELETE(&StoreWorker);
 		GS_DELETE(&StoreNtwk);
 		GS_DELETE_VF((&ExtraHostCreate->base), cb_destroy_t);
+		GS_DELETE_F(AffinityQueue, gs_affinity_queue_destroy);
 		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
 		GS_DELETE_F(ConnectionServer, gs_full_connection_destroy);
 	}
