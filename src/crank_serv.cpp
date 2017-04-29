@@ -198,6 +198,8 @@ clean:
 int serv_state_crank2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
+	gs_worker_id_t WorkerId,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
@@ -205,10 +207,12 @@ int serv_state_crank2(
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	struct GsExtraWorker **ioExtraWorker)
 {
-		int r = 0;
+	int r = 0;
 
 	git_repository *Repository = NULL;
 	git_repository *RepositorySelfUpdate = NULL;
+
+	struct GsAffinityToken AffinityToken = {};
 
 	if (!!(r = aux_repository_open(RepoMainPathBuf, &Repository)))
 		GS_GOTO_CLEAN();
@@ -217,7 +221,7 @@ int serv_state_crank2(
 		GS_GOTO_CLEAN();
 
 	while (true) {
-		GsPacket *Packet = NULL;
+		struct GsPacket *Packet = NULL;
 		gs_connection_surrogate_id_t IdForSend = 0;
 
 		GS_LOG(I, S, "waiting for request");
@@ -226,7 +230,10 @@ int serv_state_crank2(
 		if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 			WorkerDataRecv,
 			WorkerDataSend,
+			WorkerId,
 			GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS,
+			AffinityQueue,
+			&AffinityToken,
 			&Packet,
 			&IdForSend,
 			ioExtraWorker)))
@@ -419,6 +426,8 @@ int serv_state_crank2(
 	}
 
 clean:
+	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
+
 	if (RepositorySelfUpdate)
 		git_repository_free(RepositorySelfUpdate);
 
@@ -544,6 +553,8 @@ int gs_store_worker_cb_crank_t_server(
 		if (!!(r = serv_state_crank2(
 			WorkerDataRecv,
 			WorkerDataSend,
+			WorkerId,
+			pStoreWorker->base.mAffinityQueue,
 			&pStoreWorker->base.mIntrToken,
 			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
 			pStoreWorker->mRefNameSelfUpdateBuf, pStoreWorker->mLenRefNameSelfUpdate,

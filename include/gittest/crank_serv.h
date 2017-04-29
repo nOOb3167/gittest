@@ -79,6 +79,8 @@ int serv_state_service_request_blobs2(
 int serv_state_crank2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
+	gs_worker_id_t WorkerId,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsIntrTokenSurrogate *IntrToken,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,

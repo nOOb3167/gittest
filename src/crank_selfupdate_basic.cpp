@@ -151,14 +151,16 @@ int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWor
 int crank_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
 	struct GsExtraWorker **ioExtraWorker,
 	uint32_t *oHaveUpdate,
 	std::string *oBufferUpdate)
 {
 	int r = 0;
+
+	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) StoreWorker;
+	GsExtraWorkerSelfUpdateBasic *pIoExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ioExtraWorker;
 
 	uint32_t HaveUpdate = 0;
 	std::string BufferUpdate;
@@ -181,11 +183,19 @@ int crank_selfupdate_basic(
 	uint32_t BlobOffsetSizeBuffer = 0;
 	uint32_t BlobOffsetObjectBuffer = 0;
 
+	struct GsAffinityToken AffinityToken = {};
+
 	GS_BYPART_DATA_VAR(String, BysizeBufferLatest);
 	GS_BYPART_DATA_INIT(String, BysizeBufferLatest, &BufferLatest);
 
 	GS_BYPART_DATA_VAR(String, BysizeBufferBlobs);
 	GS_BYPART_DATA_INIT(String, BysizeBufferBlobs, &BufferBlobs);
+
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pIoExtraWorker->base.magic != GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC)
+		GS_ERR_CLEAN(1);
 
 	if (!!(r = gs_strided_for_oid_vec_cpp(&BlobSelfUpdateOidVec, &BlobSelfUpdateOidVecStrided)))
 		GS_GOTO_CLEAN();
@@ -198,8 +208,8 @@ int crank_selfupdate_basic(
 
 	if (!!(r = gs_worker_packet_enqueue(
 		WorkerDataSend,
-		IntrToken,
-		IdForSend,
+		&pStoreWorker->base.mIntrToken,
+		pIoExtraWorker->mId,
 		BufferLatest.data(), BufferLatest.size())))
 	{
 		GS_GOTO_CLEAN();
@@ -208,7 +218,10 @@ int crank_selfupdate_basic(
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		pStoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&PacketBlobOid,
 		NULL,
 		ioExtraWorker)))
@@ -228,8 +241,8 @@ int crank_selfupdate_basic(
 		GS_GOTO_CLEAN();
 
 	/* empty as_path parameter means no filters applied */
-	if (!!(r = git_repository_hashfile(&BlobSelfUpdateOidT, RepositoryMemory, FileNameAbsoluteSelfUpdateBuf, GIT_OBJ_BLOB, "")))
-		GS_GOTO_CLEAN_L(E, PF, "failure hashing [filename=[%.*s]]", LenFileNameAbsoluteSelfUpdate, FileNameAbsoluteSelfUpdateBuf);
+	if (!!(r = git_repository_hashfile(&BlobSelfUpdateOidT, RepositoryMemory, pStoreWorker->FileNameAbsoluteSelfUpdateBuf, GIT_OBJ_BLOB, "")))
+		GS_GOTO_CLEAN_L(E, PF, "failure hashing [filename=[%.*s]]", pStoreWorker->LenFileNameAbsoluteSelfUpdate, pStoreWorker->FileNameAbsoluteSelfUpdateBuf);
 
 	if (git_oid_cmp(&BlobSelfUpdateOidT, &BlobSelfUpdateOidVec.at(0)) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
@@ -242,8 +255,8 @@ int crank_selfupdate_basic(
 
 	if (!!(r = gs_worker_packet_enqueue(
 		WorkerDataSend,
-		IntrToken,
-		IdForSend,
+		&pStoreWorker->base.mIntrToken,
+		pIoExtraWorker->mId,
 		BufferBlobs.data(), BufferBlobs.size())))
 	{
 		GS_GOTO_CLEAN();
@@ -252,7 +265,10 @@ int crank_selfupdate_basic(
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		pStoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&PacketBlob,
 		NULL,
 		ioExtraWorker)))
@@ -318,7 +334,9 @@ int crank_selfupdate_basic(
 
 noclean:
 
-clean:
+clean :
+	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
+
 	if (RepositoryMemory)
 		git_repository_free(RepositoryMemory);
 
@@ -448,9 +466,8 @@ int gs_store_worker_cb_crank_t_selfupdate_basic(
 	if (!!(r = crank_selfupdate_basic(
 		WorkerDataRecv,
 		WorkerDataSend,
-		pExtraWorker->mId,
-		&pStoreWorker->base.mIntrToken,
-		pStoreWorker->FileNameAbsoluteSelfUpdateBuf, pStoreWorker->LenFileNameAbsoluteSelfUpdate,
+		StoreWorker,
+		WorkerId,
 		ioExtraWorker,
 		&HaveUpdate,
 		&BufferUpdate)))

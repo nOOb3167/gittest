@@ -76,9 +76,8 @@ int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWor
 int crank_selfupdate_basic(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
 	struct GsExtraWorker **ioExtraWorker,
 	uint32_t *oHaveUpdate,
 	std::string *oBufferUpdate);

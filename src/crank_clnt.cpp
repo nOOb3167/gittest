@@ -143,11 +143,10 @@ clean:
 int clnt_state_need_tree_head_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	ClntState *State,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -164,9 +163,8 @@ int clnt_state_need_tree_head_setup2(
 	if (!!(r = clnt_state_need_tree_head_noown2(
 		WorkerDataRecv,
 		WorkerDataSend,
-		IdForSend,
-		IntrToken,
-		RefNameMainBuf, LenRefNameMain,
+		StoreWorker,
+		WorkerId,
 		RepositoryT,
 		TreeHeadOid.get(),
 		ioExtraWorker)))
@@ -185,12 +183,11 @@ clean:
 int clnt_state_need_tree_head_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	git_repository *RepositoryT,
 	git_oid *oTreeHeadOid,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -201,22 +198,33 @@ int clnt_state_need_tree_head_noown2(
 	git_oid CommitHeadOidT = {};
 	git_oid TreeHeadOidT = {};
 
+	struct GsAffinityToken AffinityToken = {};
+
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
 	if (!!(r = aux_frame_full_write_request_latest_commit_tree(gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
+	if (!!(r = gs_worker_packet_enqueue(
+		WorkerDataSend,
+		&StoreWorker->base.mIntrToken,
+		(*ioExtraWorker)->mId,
+		Buffer.data(), Buffer.size())))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		StoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&Packet,
 		NULL,
-		ioExtraWorker)))
+		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -230,7 +238,7 @@ int clnt_state_need_tree_head_noown2(
 	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, oTreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, RefNameMainBuf, &CommitHeadOidT, &TreeHeadOidT)))
+	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, StoreWorker->mRefNameMainBuf, &CommitHeadOidT, &TreeHeadOidT)))
 		GS_GOTO_CLEAN();
 
 	if (git_oid_cmp(&TreeHeadOidT, oTreeHeadOid) == 0) {
@@ -240,6 +248,7 @@ int clnt_state_need_tree_head_noown2(
 	}
 
 clean:
+	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
 
 	return r;
 }
@@ -247,10 +256,10 @@ clean:
 int clnt_state_need_treelist_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	ClntState *State,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -263,8 +272,8 @@ int clnt_state_need_treelist_setup2(
 	if (!!(r = clnt_state_need_treelist_noown2(
 		WorkerDataRecv,
 		WorkerDataSend,
-		IdForSend,
-		IntrToken,
+		StoreWorker,
+		WorkerId,
 		RepositoryT,
 		TreeHeadOid.get(),
 		Treelist.get(),
@@ -286,13 +295,13 @@ clean:
 int clnt_state_need_treelist_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	git_repository *RepositoryT,
 	git_oid *TreeHeadOid,
 	std::vector<git_oid> *oTreelist,
 	std::vector<git_oid> *oMissingTreelist,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -300,6 +309,8 @@ int clnt_state_need_treelist_noown2(
 	GsPacket *Packet = NULL;
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
+
+	struct GsAffinityToken AffinityToken = {};
 
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
@@ -310,16 +321,25 @@ int clnt_state_need_treelist_noown2(
 	if (!!(r = aux_frame_full_write_request_treelist(TreeHeadOid->id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
+	if (!!(r = gs_worker_packet_enqueue(
+		WorkerDataSend,
+		&StoreWorker->base.mIntrToken,
+		(*ioExtraWorker)->mId,
+		Buffer.data(), Buffer.size())))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		StoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&Packet,
 		NULL,
-		ioExtraWorker)))
+		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -337,6 +357,7 @@ int clnt_state_need_treelist_noown2(
 		GS_GOTO_CLEAN();
 
 clean:
+	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
 
 	return r;
 }
@@ -344,10 +365,10 @@ clean:
 int clnt_state_need_bloblist_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	ClntState *State,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -366,8 +387,8 @@ int clnt_state_need_bloblist_setup2(
 	if (!!(r = clnt_state_need_bloblist_noown2(
 		WorkerDataRecv,
 		WorkerDataSend,
-		IdForSend,
-		IntrToken,
+		StoreWorker,
+		WorkerId,
 		RepositoryT,
 		MissingTreelist.get(),
 		MissingBloblist.get(),
@@ -395,15 +416,15 @@ clean:
 int clnt_state_need_bloblist_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	git_repository *RepositoryT,
 	std::vector<git_oid> *MissingTreelist,
 	std::vector<git_oid> *oMissingBloblist,
 	struct GsPacket **oPacketTree,
 	uint32_t *oOffsetSizeBufferTree,
 	uint32_t *oOffsetObjectBufferTree,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -417,6 +438,8 @@ int clnt_state_need_bloblist_noown2(
 
 	uint32_t BufferTreeLen = 0;
 
+	struct GsAffinityToken AffinityToken = {};
+
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
@@ -426,18 +449,27 @@ int clnt_state_need_bloblist_noown2(
 	if (!!(r = aux_frame_full_write_request_trees(MissingTreelistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
+	if (!!(r = gs_worker_packet_enqueue(
+		WorkerDataSend,
+		&StoreWorker->base.mIntrToken,
+		(*ioExtraWorker)->mId,
+		Buffer.data(), Buffer.size())))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		StoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&PacketTree,
 		NULL,
-		ioExtraWorker)))
+		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -468,6 +500,7 @@ int clnt_state_need_bloblist_noown2(
 		*oPacketTree = PacketTree;
 
 clean:
+	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
 
 	return r;
 }
@@ -475,10 +508,10 @@ clean:
 int clnt_state_need_written_blob_and_tree_setup2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	ClntState *State,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -496,8 +529,8 @@ int clnt_state_need_written_blob_and_tree_setup2(
 	if (!!(r = clnt_state_need_written_blob_and_tree_noown2(
 		WorkerDataRecv,
 		WorkerDataSend,
-		IdForSend,
-		IntrToken,
+		StoreWorker,
+		WorkerId,
 		RepositoryT,
 		MissingTreelist.get(),
 		MissingBloblist.get(),
@@ -523,8 +556,8 @@ clean:
 int clnt_state_need_written_blob_and_tree_noown2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	git_repository *RepositoryT,
 	std::vector<git_oid> *MissingTreelist,
 	std::vector<git_oid> *MissingBloblist,
@@ -533,7 +566,7 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	uint32_t OffsetObjectBufferTree,
 	std::vector<git_oid> *oWrittenBlob,
 	std::vector<git_oid> *oWrittenTree,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -549,6 +582,8 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	uint32_t OffsetSizeBufferBlob;
 	uint32_t OffsetObjectBufferBlob;
 
+	struct GsAffinityToken AffinityToken = {};
+
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
@@ -558,18 +593,27 @@ int clnt_state_need_written_blob_and_tree_noown2(
 	if (!!(r = aux_frame_full_write_request_blobs(MissingBloblistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, Buffer.data(), Buffer.size())))
+	if (!!(r = gs_worker_packet_enqueue(
+		WorkerDataSend,
+		&StoreWorker->base.mIntrToken,
+		(*ioExtraWorker)->mId,
+		Buffer.data(), Buffer.size())))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
 	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
 		WorkerDataRecv,
 		WorkerDataSend,
+		WorkerId,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
+		StoreWorker->base.mAffinityQueue,
+		&AffinityToken,
 		&PacketBlob,
 		NULL,
-		ioExtraWorker)))
+		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -613,7 +657,7 @@ clean:
 }
 
 int clnt_state_need_updated_ref_setup2(
-	const char *RefNameMainBuf, size_t LenRefNameMain,
+	struct GsStoreWorkerClient *StoreWorker,
 	ClntState *State)
 {
 	int r = 0;
@@ -624,8 +668,8 @@ int clnt_state_need_updated_ref_setup2(
 	git_oid * const TreeHeadOid = State->mTreeHeadOid.get();
 
 	if (!!(r = clnt_state_need_updated_ref_noown2(
+		StoreWorker,
 		RepositoryT,
-		RefNameMainBuf, LenRefNameMain,
 		TreeHeadOid,
 		UpdatedRefOid.get())))
 	{
@@ -641,8 +685,8 @@ clean:
 }
 
 int clnt_state_need_updated_ref_noown2(
+	struct GsStoreWorkerClient *StoreWorker,
 	git_repository *RepositoryT,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
 	git_oid *TreeHeadOid,
 	git_oid *oUpdatedRefOid)
 {
@@ -650,13 +694,13 @@ int clnt_state_need_updated_ref_noown2(
 
 	git_oid CommitOid = {};
 
-	if (!!(r = gs_buf_ensure_haszero(RefNameMainBuf, LenRefNameMain + 1)))
+	if (!!(r = gs_buf_ensure_haszero(StoreWorker->mRefNameMainBuf, StoreWorker->mLenRefNameMain + 1)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_commit_ensure_dummy(RepositoryT, TreeHeadOid, &CommitOid)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_commit_setref(RepositoryT, RefNameMainBuf, &CommitOid)))
+	if (!!(r = clnt_commit_setref(RepositoryT, StoreWorker->mRefNameMainBuf, &CommitOid)))
 		GS_GOTO_CLEAN();
 
 	if (oUpdatedRefOid)
@@ -670,12 +714,10 @@ clean:
 int clnt_state_crank2(
 	struct GsWorkerData *WorkerDataRecv,
 	struct GsWorkerData *WorkerDataSend,
-	gs_connection_surrogate_id_t IdForSend,
-	struct GsIntrTokenSurrogate *IntrToken,
+	struct GsStoreWorkerClient *StoreWorker,
+	gs_worker_id_t WorkerId,
 	ClntState *State,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	struct GsExtraWorker **ioExtraWorker)
+	struct GsExtraWorkerClient **ioExtraWorker)
 {
 	int r = 0;
 
@@ -692,7 +734,7 @@ int clnt_state_crank2(
 	{
 		if (!!(r = clnt_state_need_repository_setup2(
 			State,
-			RepoMainPathBuf, LenRepoMainPath)))
+			StoreWorker->mRepoMainPathBuf, StoreWorker->mLenRepoMainPath)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -704,10 +746,9 @@ int clnt_state_crank2(
 		if (!!(r = clnt_state_need_tree_head_setup2(
 			WorkerDataRecv,
 			WorkerDataSend,
-			IdForSend,
-			IntrToken,
+			StoreWorker,
+			WorkerId,
 			State,
-			RefNameMainBuf, LenRefNameMain,
 			ioExtraWorker)))
 		{
 			GS_GOTO_CLEAN();
@@ -720,8 +761,8 @@ int clnt_state_crank2(
 		if (!!(r = clnt_state_need_treelist_setup2(
 			WorkerDataRecv,
 			WorkerDataSend,
-			IdForSend,
-			IntrToken,
+			StoreWorker,
+			WorkerId,
 			State,
 			ioExtraWorker)))
 		{
@@ -735,8 +776,8 @@ int clnt_state_crank2(
 		if (!!(r = clnt_state_need_bloblist_setup2(
 			WorkerDataRecv,
 			WorkerDataSend,
-			IdForSend,
-			IntrToken,
+			StoreWorker,
+			WorkerId,
 			State,
 			ioExtraWorker)))
 		{
@@ -750,8 +791,8 @@ int clnt_state_crank2(
 		if (!!(r = clnt_state_need_written_blob_and_tree_setup2(
 			WorkerDataRecv,
 			WorkerDataSend,
-			IdForSend,
-			IntrToken,
+			StoreWorker,
+			WorkerId,
 			State,
 			ioExtraWorker)))
 		{
@@ -763,7 +804,7 @@ int clnt_state_crank2(
 	case GS_CLNT_STATE_CODE_NEED_UPDATED_REF:
 	{
 		if (!!(r = clnt_state_need_updated_ref_setup2(
-			RefNameMainBuf, LenRefNameMain,
+			StoreWorker,
 			State)))
 		{
 			GS_GOTO_CLEAN();
@@ -1030,12 +1071,12 @@ int gs_store_worker_cb_crank_t_client(
 	int r = 0;
 
 	GsStoreWorkerClient *pStoreWorker = (GsStoreWorkerClient *) StoreWorker;
-	GsExtraWorkerClient *pExtraWorker = (GsExtraWorkerClient *) *ioExtraWorker;
+	GsExtraWorkerClient **ppIoExtraWorker = (GsExtraWorkerClient **) ioExtraWorker;
 
 	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
 		GS_ERR_CLEAN(1);
 
-	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+	if ((*ppIoExtraWorker)->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
 		GS_ERR_CLEAN(1);
 
 	while (true) {
@@ -1043,12 +1084,10 @@ int gs_store_worker_cb_crank_t_client(
 		if (!!(r = clnt_state_crank2(
 			WorkerDataRecv,
 			WorkerDataSend,
-			pExtraWorker->mId,
-			&pStoreWorker->base.mIntrToken,
+			pStoreWorker,
+			WorkerId,
 			pStoreWorker->mClntState.get(),
-			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
-			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath,
-			ioExtraWorker)))
+			ppIoExtraWorker)))
 		{
 			GS_ERR_NO_CLEAN(r);
 		}

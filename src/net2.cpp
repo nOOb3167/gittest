@@ -167,171 +167,6 @@ clean:
 	return r;
 }
 
-int gs_affinity_queue_create(
-	size_t NumWorkers,
-	struct GsAffinityQueue **oAffinityQueue)
-{
-	int r = 0;
-
-	struct GsAffinityQueue *AffinityQueue = new GsAffinityQueue();
-
-	for (size_t i = 0; i < NumWorkers; i++)
-		AffinityQueue->mAffinityList.push_back(i);
-
-	if (oAffinityQueue)
-		*oAffinityQueue = AffinityQueue;
-
-clean:
-
-	return r;
-}
-
-int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue)
-{
-	GS_DELETE(&AffinityQueue);
-	return 0;
-}
-
-int gs_affinity_queue_worker_acquire_ready(
-	struct GsAffinityQueue *AffinityQueue,
-	gs_connection_surrogate_id_t ConnectionId,
-	gs_worker_id_t *oWorkerIdReady)
-{
-	int r = 0;
-
-	gs_worker_id_t WorkerIdReady = 0;
-
-	{
-		std::lock_guard<std::mutex> lock(AffinityQueue->mMutexData);
-
-		auto it = AffinityQueue->mAffinityList.begin();
-
-		for (auto it = AffinityQueue->mAffinityList.begin(); it != AffinityQueue->mAffinityList.end(); it++) {
-			gs_worker_id_t WorkerId = *it;
-			auto it2 = AffinityQueue->mAffinityMap.find(ConnectionId);
-			if (it2 != AffinityQueue->mAffinityMap.end()) {
-				/* acquire to worker currently already holding lease for ConnectionId */
-				WorkerIdReady = it2->second;
-			}
-			else {
-				/* acquire to worker any */
-				WorkerIdReady = AffinityQueue->mAffinityList.front();
-				// move to back of list as a form of load balancing
-				AffinityQueue->mAffinityList.pop_front();
-				AffinityQueue->mAffinityList.push_back(WorkerIdReady);
-			}
-		}
-	}
-
-	if (oWorkerIdReady)
-		*oWorkerIdReady = WorkerIdReady;
-
-clean:
-
-	return r;
-}
-
-int gs_affinity_queue_worker_acquire_lease(
-	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t WorkerId,
-	gs_connection_surrogate_id_t ConnectionId)
-{
-	int r = 0;
-
-	{
-		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
-
-		/* lease might already exist (someone else is servicing) - wait */
-
-		AffinityQueue->mCondDataLeaseReleased.wait(lock,
-			[&]() { return AffinityQueue->mAffinityMap.find(ConnectionId) == AffinityQueue->mAffinityMap.end(); });
-
-		AffinityQueue->mAffinityMap[ConnectionId] = WorkerId;
-	}
-
-clean:
-
-	return r;
-}
-
-int gs_affinity_queue_worker_release_lease(
-	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t ExpectedWorkerId,
-	gs_connection_surrogate_id_t ConnectionId)
-{
-	int r = 0;
-
-	bool WasALeaseReleased = false;
-
-	{
-		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
-
-		auto it = AffinityQueue->mAffinityMap.find(ConnectionId);
-
-		if (it != AffinityQueue->mAffinityMap.end() &&
-			it->second == ExpectedWorkerId)
-		{
-			AffinityQueue->mAffinityMap.erase(it);
-			WasALeaseReleased = true;
-		}
-	}
-
-	if (WasALeaseReleased)
-		AffinityQueue->mCondDataLeaseReleased.notify_all();
-
-clean:
-
-	return r;
-}
-
-int gs_affinity_queue_request_dequeue_coupled(
-	struct GsAffinityQueue *AffinityQueue,
-	struct GsWorkerData *WorkerData,
-	gs_worker_id_t WorkerId,
-	struct GsWorkerRequestData *oValRequest)
-{
-	int r = 0;
-
-	GsWorkerRequestData Request = {};
-
-	if (!!(r = gs_worker_request_dequeue(WorkerData, &Request)))
-		GS_GOTO_CLEAN();
-
-	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET) {
-		if (!!(r = gs_affinity_queue_worker_acquire_lease(AffinityQueue, WorkerId, Request.mId)))
-			GS_GOTO_CLEAN();
-	}
-
-	if (oValRequest)
-		*oValRequest = Request;
-
-clean:
-
-	return r;
-}
-
-int gs_affinity_queue_request_finish(
-	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t ExpectedWorkerId,
-	struct GsWorkerRequestData valRequest)
-{
-	int r = 0;
-
-	if (valRequest.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET) {
-		if (!!(r = gs_affinity_queue_worker_release_lease(
-			AffinityQueue,
-			ExpectedWorkerId,
-			valRequest.mId)))
-		{
-			GS_GOTO_CLEAN();
-		}
-	}
-
-clean:
-
-	return r;
-}
-
 int gs_connection_surrogate_map_create(
 	struct GsConnectionSurrogateMap **oConnectionSurrogateMap)
 {
@@ -789,10 +624,24 @@ int gs_worker_request_dequeue_timeout(
 	struct GsWorkerRequestData *oValRequestData,
 	uint32_t TimeoutMs)
 {
+	std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+	return gs_worker_request_dequeue_timeout_nolock(
+		pThis,
+		oValRequestData,
+		TimeoutMs,
+		&lock);
+}
+
+int gs_worker_request_dequeue_timeout_nolock(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs,
+	std::unique_lock<std::mutex> *Lock)
+{
 	std::chrono::milliseconds To = std::chrono::milliseconds(TimeoutMs);
 	{
-		std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
-		if (! pThis->mWorkerDataCond->wait_for(lock, To, [&]() { return !pThis->mWorkerQueue->empty(); }))
+		GS_ASSERT(Lock->owns_lock());
+		if (! pThis->mWorkerDataCond->wait_for(*Lock, To, [&]() { return !pThis->mWorkerQueue->empty(); }))
 			return GS_ERRCODE_TIMEOUT;
 		*oValRequestData = pThis->mWorkerQueue->front();
 		pThis->mWorkerQueue->pop_front();
@@ -807,19 +656,42 @@ int gs_worker_request_dequeue_timeout_noprepare(
 	struct GsWorkerRequestData *oValRequestData,
 	uint32_t TimeoutMs)
 {
-	int r = 0;
-
-	if (!!(r = gs_worker_request_dequeue_timeout(
+	std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+	return gs_worker_request_dequeue_timeout_noprepare_nolock(
 		pThis,
 		oValRequestData,
-		TimeoutMs)))
+		TimeoutMs,
+		&lock);
+}
+
+int gs_worker_request_dequeue_timeout_noprepare_nolock(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs,
+	std::unique_lock<std::mutex> *Lock)
+{
+	int r = 0;
+
+	GS_ASSERT(Lock->owns_lock());
+
+	if (!!(r = gs_worker_request_dequeue_timeout_nolock(
+		pThis,
+		oValRequestData,
+		TimeoutMs,
+		Lock)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
 	if (oValRequestData->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE) {
-		if (!!(r = gs_worker_request_dequeue(pThis, oValRequestData)))
+		if (!!(r = gs_worker_request_dequeue_timeout_nolock(
+			pThis,
+			oValRequestData,
+			TimeoutMs,
+			Lock)))
+		{
 			GS_GOTO_CLEAN();
+		}
 		GS_ASSERT(oValRequestData->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT);
 	}
 
@@ -859,6 +731,8 @@ int gs_worker_request_dequeue_all_opt_cpp(
 int gs_worker_request_dequeue_discard_until_reconnect(
 	struct GsWorkerData *pThis)
 {
+	// FIXME: (PERFORMANCE) avoid retaking the lock every time
+	//   should be while(true) { wait; while(nonempty); }
 	while (true) {
 		{
 			std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
@@ -912,11 +786,13 @@ clean:
 	return r;
 }
 
-/** Principal blocking read facility for blocking-type worker.
+/** FIXME: OBSOLETE / DEPRECATED: use gs_worker_packet_dequeue_timeout_reconnects
+
+    Principal blocking read facility for blocking-type worker.
 
 	@retval: GS_ERRCODE_RECONNECT if reconnect request dequeued
 */
-int gs_worker_packet_dequeue(
+int gs_worker_packet_dequeue_(
 	struct GsWorkerData *pThis,
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId)
@@ -965,7 +841,10 @@ clean:
 int gs_worker_packet_dequeue_timeout_reconnects(
 	struct GsWorkerData *pThis,
 	struct GsWorkerData *WorkerDataSend,
+	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsAffinityToken *ioAffinityToken,
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId,
 	struct GsExtraWorker **ioExtraWorkerCond)
@@ -976,7 +855,13 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 
 	/* attempt dequeuing a request normally.
 	   GS_ERRCODE_TIMEOUT not considered an error and will be handled specially. */
-	r = gs_worker_request_dequeue_timeout_noprepare(pThis, &Request, TimeoutMs);
+	r = gs_affinity_queue_request_dequeue_and_acquire(
+		AffinityQueue,
+		pThis,
+		WorkerId,
+		TimeoutMs,
+		&Request,
+		ioAffinityToken);
 	if (!!r && r != GS_ERRCODE_TIMEOUT)
 		GS_GOTO_CLEAN();
 
@@ -1048,6 +933,213 @@ struct GsWorkerData * gs_worker_data_vec_id(
 	if (WorkerId >= WorkerDataVec->mLen)
 		GS_ASSERT(0);
 	return WorkerDataVec->mData[WorkerId];
+}
+
+int gs_affinity_queue_create(
+	size_t NumWorkers,
+	struct GsAffinityQueue **oAffinityQueue)
+{
+	int r = 0;
+
+	struct GsAffinityQueue *AffinityQueue = new GsAffinityQueue();
+
+	for (size_t i = 0; i < NumWorkers; i++)
+		AffinityQueue->mAffinityList.push_back(i);
+
+	AffinityQueue->mAffinityInProgress.resize(NumWorkers, GS_AFFINITY_IN_PROGRESS_NONE);
+
+	if (oAffinityQueue)
+		*oAffinityQueue = AffinityQueue;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue)
+{
+	GS_DELETE(&AffinityQueue);
+	return 0;
+}
+
+int gs_affinity_queue_worker_acquire_ready(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_connection_surrogate_id_t ConnectionId,
+	gs_worker_id_t *oWorkerIdReady)
+{
+	int r = 0;
+
+	gs_worker_id_t WorkerIdReady = 0;
+
+	{
+		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+
+		auto it = AffinityQueue->mAffinityMap.find(ConnectionId);
+
+		if (it != AffinityQueue->mAffinityMap.end()) {
+			/* acquire to worker currently already holding lease for ConnectionId */
+			WorkerIdReady = it->second;
+		}
+		else {
+			/* acquire to worker any */
+			// FIXME: TODO: it would be nice if affinitylist were priority sorted
+			//   by queue length. currently just selecting the first list element.
+			WorkerIdReady = AffinityQueue->mAffinityList.front();
+			// move to back of list as a form of load balancing
+			AffinityQueue->mAffinityList.pop_front();
+			AffinityQueue->mAffinityList.push_back(WorkerIdReady);
+
+			AffinityQueue->mAffinityMap[ConnectionId] = WorkerIdReady;
+		}
+	}
+
+	if (oWorkerIdReady)
+		*oWorkerIdReady = WorkerIdReady;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_worker_completed_all_requests(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId)
+{
+	/* NOTE: it might be sufficient to perform lease releasing (or work stealing)
+	*        once all requests have been completed ie recv queue empty.
+	*    could a connection lease be released as soon as all requests for that specific connection have been completed?
+	*    yes, but would required tracking (number of connid X requests inside recv queue).
+	*    scenario:
+	*    (- having work stealing on completion of all requests (@LATE) AND
+	*     - work stealing as soon as requests for specific connection complete (@EARLY))
+	*      queue A, servicing connections C, D, E.
+	*      all C requests are processed, D and E remain.
+	*      imagine work stealing / lease releasing is triggered, queue B stealing D.
+	*      observe that queue A keeps processing at full capability regardless stealing having occurred.
+	*        if queue B was nonempty: queue B keeps processing at full capacity
+	*        if queue B was empty: queue B processing capacity improves.
+	*                              however! the assumption we are attempting to test is that work stealing
+	*                              implemented to trigger @LATE
+	*                              (aka once queue is empty) is sufficient. thus B would have stolen
+	*                              some (although not necessarily A's D) work and kept processing capacity
+	*                              equal to the @EARLY case.
+	*     conclusion: @EARLY is not necessary, @LATE is sufficient. */
+
+	int r = 0;
+
+	{
+		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+
+		/* release all connection leases held by WorkerId */
+
+		for (auto it = AffinityQueue->mAffinityMap.begin(); it != AffinityQueue->mAffinityMap.end(); /* empty */) {
+			if (it->second == WorkerId)
+				AffinityQueue->mAffinityMap.erase(it++);
+			else
+				it++;
+		}
+
+		// FIXME: TODO: implement work stealing
+		// FIXME: TODO: also put the empty worker at the start of the list
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_request_dequeue_and_acquire(
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerData *WorkerData,
+	gs_worker_id_t WorkerId,
+	uint32_t TimeoutMs,
+	struct GsWorkerRequestData *oValRequest,
+	struct GsAffinityToken *ioAffinityToken)
+{
+	int r = 0;
+
+	GsWorkerRequestData Request = {};
+
+	// FIXME: TODO: maybe make a _nolock version, and call it in scope of this function's lock
+	if (!!(r = gs_affinity_token_release(ioAffinityToken)))
+		GS_GOTO_CLEAN();
+
+	{
+		/* besides WorkerDataVec[WorkerId], lock used for mAffinityInProgress[WorkerId] */
+		std::unique_lock<std::mutex> lock(*WorkerData->mWorkerDataMutex);
+
+		if (!!(r = gs_worker_request_dequeue_timeout_noprepare_nolock(
+			WorkerData,
+			&Request,
+			TimeoutMs,
+			&lock)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+		if (!!(r = gs_affinity_token_acquire_raw_nolock(
+			ioAffinityToken,
+			WorkerId,
+			AffinityQueue,
+			WorkerData,
+			Request)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+
+	if (oValRequest)
+		*oValRequest = Request;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_token_acquire_raw_nolock(
+	struct GsAffinityToken *ioAffinityToken,
+	gs_worker_id_t WorkerId,
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerData *WorkerData,
+	struct GsWorkerRequestData valRequest)
+{
+	int r = 0;
+
+	GS_ASSERT(! ioAffinityToken->mIsAcquired);
+
+	/* only PACKET type requests need to be properly acquired */
+	if (valRequest.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET) {
+		AffinityQueue->mAffinityInProgress[WorkerId] = valRequest.mId;
+
+		ioAffinityToken->mIsAcquired = 1;
+		ioAffinityToken->mExpectedWorker = WorkerId;
+		ioAffinityToken->mAffinityQueue = AffinityQueue;
+		ioAffinityToken->mWorkerData = WorkerData;
+		ioAffinityToken->mValRequest = valRequest;
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_token_release(
+	struct GsAffinityToken *ioAffinityToken)
+{
+	int r = 0;
+
+	if (ioAffinityToken->mIsAcquired) {
+		/* besides WorkerData, lock used for mAffinityInProgress[WorkerId] */
+		std::unique_lock<std::mutex> lock(*ioAffinityToken->mWorkerData->mWorkerDataMutex);
+
+		ioAffinityToken->mAffinityQueue->mAffinityInProgress[ioAffinityToken->mExpectedWorker] = GS_AFFINITY_IN_PROGRESS_NONE;
+	}
+
+	ioAffinityToken->mIsAcquired = 0;
+
+clean:
+
+	return r;
 }
 
 int gs_ntwk_reconnect_expend(
@@ -1320,6 +1412,7 @@ clean:
 
 int gs_ntwk_host_service_event(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	int errService,
@@ -1388,6 +1481,7 @@ int gs_ntwk_host_service_event(
 		GsPacketSurrogate PacketSurrogate = {};
 		GsPacket *Packet = {};
 		GsWorkerRequestData RequestRecv = {};
+		gs_worker_id_t WorkerIdReady = 0;
 
 		PacketSurrogate.mPacket = Event->event.packet;
 
@@ -1410,11 +1504,26 @@ int gs_ntwk_host_service_event(
 			GS_LOG(I, PF, "packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
 		}
 
-		if (!!(r = gs_worker_request_data_type_packet_make(Packet, ctxstruct->m0Id, &RequestRecv)))
+		if (!!(r = gs_worker_request_data_type_packet_make(Packet, IdOfRecv, &RequestRecv)))
 			GS_GOTO_CLEAN();
 
-		// FIXME: arbitrarily choose worker zero
-		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVecRecv, 0), &RequestRecv)))
+		// FIXME: race condition (also have external note)
+		//   between calls to
+		//     gs_affinity_queue_worker_acquire_ready
+		//     gs_worker_request_enqueue
+		//   a worker steals 'IdOfRecv' connids from
+		//   'WorkerIdReady' worker.
+		//   now connid IdOfRecv appears in two workers
+
+		if (!!(r = gs_affinity_queue_worker_acquire_ready(
+			AffinityQueue,
+			IdOfRecv,
+			&WorkerIdReady)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVecRecv, WorkerIdReady), &RequestRecv)))
 			GS_GOTO_CLEAN();
 	}
 	break;
@@ -1467,6 +1576,7 @@ int gs_ntwk_host_service(
 
 		if (!!(r = gs_ntwk_host_service_event(
 			WorkerDataVecRecv,
+			StoreNtwk->mAffinityQueue,
 			ioHostSurrogate,
 			ioConnectionSurrogateMap,
 			errService,
@@ -1666,6 +1776,14 @@ clean:
 		GS_GOTO_CLEAN();
 
 	/* NOTE: void return */
+}
+
+struct GsExtraWorker **gs_extra_worker_pp_base_cast(
+	struct GsExtraWorker **PtrPtrExtraWorker,
+	uint32_t ExpectedMagic)
+{
+	GS_ASSERT((*PtrPtrExtraWorker)->magic == ExpectedMagic);
+	return PtrPtrExtraWorker;
 }
 
 int gs_net_full_create_connection(

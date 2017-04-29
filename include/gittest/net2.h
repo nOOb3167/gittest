@@ -46,6 +46,9 @@
 #define GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC        0x503C3260
 #define GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C3261
 
+#define GS_EXTRA_WORKER_PP_BASE_CAST(PTR_PTR_EXTRA_WORKER, EXPECTED_MAGIC_LUMP) \
+	gs_extra_worker_pp_base_cast((struct GsExtraWorker **)(PTR_PTR_EXTRA_WORKER), GS_EXTRA_WORKER_ ## EXPECTED_MAGIC_LUMP ## _MAGIC)
+
 struct GsConnectionSurrogate;
 
 typedef uint64_t gs_connection_surrogate_id_t;
@@ -54,16 +57,12 @@ typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_conne
 typedef uint64_t gs_worker_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, gs_worker_id_t> gs_affinity_map_t;
 typedef ::std::list<gs_worker_id_t> gs_affinity_list_t;
+typedef ::std::vector<gs_connection_surrogate_id_t> gs_affinity_in_progress_t;
+
+#define GS_AFFINITY_IN_PROGRESS_NONE -1
 
 struct GsExtraWorker;
 struct GsWorkerData;
-
-struct GsAffinityQueue {
-	std::mutex mMutexData;
-	std::condition_variable mCondDataLeaseReleased;
-	gs_affinity_map_t mAffinityMap;
-	gs_affinity_list_t mAffinityList;
-};
 
 /** Design:
 	Entries enter this structure on connection (ENet ENET_EVENT_TYPE_CONNECT).
@@ -237,6 +236,36 @@ struct GsWorkerDataVec
 	struct GsWorkerData **mData;
 };
 
+/** the lock for mAffinityInProgress field N is GsWorkerDataVec N
+    @sa
+	   ::gs_affinity_queue_create
+	   ::gs_affinity_queue_destroy
+	   ::gs_affinity_queue_worker_acquire_ready
+	   ::gs_affinity_queue_worker_completed_all_requests
+	   ::gs_affinity_queue_request_dequeue_and_acquire
+*/
+struct GsAffinityQueue {
+	std::mutex mMutexData;
+	gs_affinity_map_t mAffinityMap;
+	gs_affinity_list_t mAffinityList;
+	gs_affinity_in_progress_t mAffinityInProgress; /**< special locking semantics */
+};
+
+/** nodestroy
+    should be initializable by '= {}' assignment
+    @sa
+	   ::gs_affinity_token_acquire_raw_nolock
+	   ::gs_affinity_token_release
+*/
+struct GsAffinityToken
+{
+	uint32_t mIsAcquired;
+	gs_worker_id_t mExpectedWorker;         /**< notowned */
+	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
+	struct GsWorkerData *mWorkerData;        /**< notowned */
+	struct GsWorkerRequestData mValRequest; /**< notowned */
+};
+
 /** @sa
        ::gs_ctrl_con_create
 	   ::gs_ctrl_con_destroy
@@ -310,6 +339,7 @@ struct GsStoreNtwk
        GsStoreWorkerClient
 	   GsStoreWorkerServer
 	   GsStoreWorkerSelfUpdateBasic
+	   ::gs_store_worker_pp_base_cast
 */
 struct GsStoreWorker
 {
@@ -390,23 +420,24 @@ int gs_affinity_queue_worker_acquire_ready(
 	struct GsAffinityQueue *AffinityQueue,
 	gs_connection_surrogate_id_t ConnectionId,
 	gs_worker_id_t *oWorkerIdReady);
-int gs_affinity_queue_worker_acquire_lease(
+int gs_affinity_queue_worker_completed_all_requests(
 	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t WorkerId,
-	gs_connection_surrogate_id_t ConnectionId);
-int gs_affinity_queue_worker_release_lease(
-	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t ExpectedWorkerId,
-	gs_connection_surrogate_id_t ConnectionId);
-int gs_affinity_queue_request_dequeue_coupled(
+	gs_worker_id_t WorkerId);
+int gs_affinity_queue_request_dequeue_and_acquire(
 	struct GsAffinityQueue *AffinityQueue,
 	struct GsWorkerData *WorkerData,
 	gs_worker_id_t WorkerId,
-	struct GsWorkerRequestData *oValRequest);
-int gs_affinity_queue_request_finish(
+	uint32_t TimeoutMs,
+	struct GsWorkerRequestData *oValRequest,
+	struct GsAffinityToken *ioAffinityToken);
+int gs_affinity_token_acquire_raw_nolock(
+	struct GsAffinityToken *ioAffinityToken,
+	gs_worker_id_t WorkerId,
 	struct GsAffinityQueue *AffinityQueue,
-	gs_worker_id_t ExpectedWorkerId,
+	struct GsWorkerData *WorkerData,
 	struct GsWorkerRequestData valRequest);
+int gs_affinity_token_release(
+	struct GsAffinityToken *ioAffinityToken);
 
 int gs_connection_surrogate_map_create(
 	struct GsConnectionSurrogateMap **oConnectionSurrogateMap);
@@ -493,10 +524,20 @@ int gs_worker_request_dequeue_timeout(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData,
 	uint32_t TimeoutMs);
+int gs_worker_request_dequeue_timeout_nolock(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs,
+	std::unique_lock<std::mutex> *Lock);
 int gs_worker_request_dequeue_timeout_noprepare(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData,
 	uint32_t TimeoutMs);
+int gs_worker_request_dequeue_timeout_noprepare_nolock(
+	struct GsWorkerData *pThis,
+	struct GsWorkerRequestData *oValRequestData,
+	uint32_t TimeoutMs,
+	std::unique_lock<std::mutex> *Lock);
 int gs_worker_request_dequeue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *oValRequestData);
@@ -511,7 +552,7 @@ int gs_worker_packet_enqueue(
 	struct GsIntrTokenSurrogate *IntrToken,
 	gs_connection_surrogate_id_t Id,
 	const char *Data, uint32_t DataSize);
-int gs_worker_packet_dequeue(
+int gs_worker_packet_dequeue_(
 	struct GsWorkerData *pThis,
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId);
@@ -519,7 +560,10 @@ int gs_worker_packet_dequeue(
 int gs_worker_packet_dequeue_timeout_reconnects(
 	struct GsWorkerData *pThis,
 	struct GsWorkerData *WorkerDataSend,
+	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsAffinityToken *ioAffinityToken,
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId,
 	struct GsExtraWorker **ioExtraWorkerCond);
@@ -562,6 +606,7 @@ int gs_ntwk_host_service_sends(
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
 int gs_ntwk_host_service_event(
 	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsAffinityQueue *AffinityQueue,
 	struct GsHostSurrogate *HostSurrogate,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	int errService,
@@ -595,6 +640,10 @@ void gs_worker_thread_func(
 	struct GsStoreWorker *StoreWorker,
 	gs_worker_id_t WorkerId,
 	const char *ExtraThreadName);
+
+struct GsExtraWorker **gs_extra_worker_pp_base_cast(
+	struct GsExtraWorker **PtrPtrExtraWorker,
+	uint32_t ExpectedMagic);
 
 int gs_net_full_create_connection(
 	uint32_t ServPort,

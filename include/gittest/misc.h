@@ -28,7 +28,12 @@
 #define GS_DELETE(PTR_PTR_ALLOCATED_WITH_NEW) do { gs_aux_delete_nulling((void **) (PTR_PTR_ALLOCATED_WITH_NEW)); } while (0)
 #define GS_DELETE_F(VARNAME, FNAME) do { if (!!((FNAME)((VARNAME)))) { GS_ASSERT(0); } } while (0)
 #define GS_DELETE_VF(VARNAME, VFNAME) do { if (!!((VARNAME)->VFNAME((VARNAME)))) { GS_ASSERT(0); } } while (0)
+
+/* distinguished from GS_DELETE_F for documentation purposes */
+#define GS_RELEASE_F(VARNAME, FNAME) GS_DELETE_F(VARNAME, FNAME)
+
 #define GS_ARGOWN(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
+
 
 #define GS_DEBUG_BREAK() gs_debug_break()
 
