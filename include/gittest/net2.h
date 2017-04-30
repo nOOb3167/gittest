@@ -416,10 +416,11 @@ int gs_affinity_queue_create(
 	size_t NumWorkers,
 	struct GsAffinityQueue **oAffinityQueue);
 int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue);
-int gs_affinity_queue_worker_acquire_ready(
+int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 	struct GsAffinityQueue *AffinityQueue,
-	gs_connection_surrogate_id_t ConnectionId,
-	gs_worker_id_t *oWorkerIdReady);
+	struct GsWorkerDataVec *WorkerDataVec,
+	struct GsWorkerRequestData *valRequestData,
+	gs_connection_surrogate_id_t ConnectionId);
 int gs_affinity_queue_worker_completed_all_requests(
 	struct GsAffinityQueue *AffinityQueue,
 	gs_worker_id_t WorkerId);

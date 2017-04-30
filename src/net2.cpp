@@ -962,10 +962,15 @@ int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue)
 	return 0;
 }
 
-int gs_affinity_queue_worker_acquire_ready(
+/**
+    NOTE: TAKES HOLD OF MULTIPLE LOCKS
+	  lock order: AffinityQueue lock, WorkerData lock (computed)
+*/
+int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 	struct GsAffinityQueue *AffinityQueue,
-	gs_connection_surrogate_id_t ConnectionId,
-	gs_worker_id_t *oWorkerIdReady)
+	struct GsWorkerDataVec *WorkerDataVec,
+	struct GsWorkerRequestData *valRequestData,
+	gs_connection_surrogate_id_t ConnectionId)
 {
 	int r = 0;
 
@@ -991,10 +996,10 @@ int gs_affinity_queue_worker_acquire_ready(
 
 			AffinityQueue->mAffinityMap[ConnectionId] = WorkerIdReady;
 		}
-	}
 
-	if (oWorkerIdReady)
-		*oWorkerIdReady = WorkerIdReady;
+		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVec, WorkerIdReady), valRequestData)))
+			GS_GOTO_CLEAN();
+	}
 
 clean:
 
@@ -1481,7 +1486,6 @@ int gs_ntwk_host_service_event(
 		GsPacketSurrogate PacketSurrogate = {};
 		GsPacket *Packet = {};
 		GsWorkerRequestData RequestRecv = {};
-		gs_worker_id_t WorkerIdReady = 0;
 
 		PacketSurrogate.mPacket = Event->event.packet;
 
@@ -1507,24 +1511,14 @@ int gs_ntwk_host_service_event(
 		if (!!(r = gs_worker_request_data_type_packet_make(Packet, IdOfRecv, &RequestRecv)))
 			GS_GOTO_CLEAN();
 
-		// FIXME: race condition (also have external note)
-		//   between calls to
-		//     gs_affinity_queue_worker_acquire_ready
-		//     gs_worker_request_enqueue
-		//   a worker steals 'IdOfRecv' connids from
-		//   'WorkerIdReady' worker.
-		//   now connid IdOfRecv appears in two workers
-
-		if (!!(r = gs_affinity_queue_worker_acquire_ready(
+		if (!!(r = gs_affinity_queue_worker_acquire_ready_and_enqueue(
 			AffinityQueue,
-			IdOfRecv,
-			&WorkerIdReady)))
+			WorkerDataVecRecv,
+			&RequestRecv,
+			IdOfRecv)))
 		{
 			GS_GOTO_CLEAN();
 		}
-
-		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVecRecv, WorkerIdReady), &RequestRecv)))
-			GS_GOTO_CLEAN();
 	}
 	break;
 
