@@ -281,6 +281,10 @@ int gs_selfupdate_crash_handler_dump_global_log_list(
 int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	int r = 0;
 
+	confmap_t KeyVal;
+
+	GsAuxConfigCommonVars CommonVars = {};
+
 	size_t LenFileNameCurrent = 0;
 	char FileNameCurrentBuf[512] = {};
 
@@ -289,6 +293,12 @@ int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 
 	uint32_t HaveUpdate = 0;
 	std::string BufferUpdate;
+
+	if (!!(r = aux_config_read_default_everything(&KeyVal)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_get_current_executable_filename(FileNameCurrentBuf, sizeof FileNameCurrentBuf, &LenFileNameCurrent)))
 		GS_GOTO_CLEAN();
@@ -308,8 +318,8 @@ int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	GS_LOG(I, PF, "child_filename=[%.*s]", LenFileNameChild, FileNameChildBuf);
 
 	if (!!(r = gs_net_full_create_connection_selfupdate_basic(
-		GS_PORT,    // FIXME: crutch - refactor passing from config
-		"localhost", strlen("localhost"),    // FIXME: crutch - refactor passing from config
+		CommonVars.ServPort,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
 		FileNameCurrentBuf, LenFileNameCurrent,
 		&HaveUpdate,
 		&BufferUpdate)))

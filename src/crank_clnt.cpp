@@ -1120,6 +1120,8 @@ int gs_extra_host_create_cb_create_t_client(
 
 	GsConnectionSurrogate ConnectionSurrogate = {};
 
+	struct GsBypartCbDataGsConnectionSurrogateId *ctxstruct = new GsBypartCbDataGsConnectionSurrogateId();
+
 	gs_connection_surrogate_id_t AssignedId = 0;
 
 	int errService = 0;
@@ -1163,9 +1165,9 @@ int gs_extra_host_create_cb_create_t_client(
 	ConnectionSurrogate.mPeer = peer;
 	ConnectionSurrogate.mIsPrincipalClientConnection = true;
 
-	// FIXME: pretty ugly initialization of GsConnectionSurrogate
 	if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
 		ConnectionSurrogate,
+		GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
 		ioConnectionSurrogateMap,
 		&AssignedId)))
 	{
@@ -1180,6 +1182,9 @@ int gs_extra_host_create_cb_create_t_client(
 		ioHostSurrogate->mHost = host;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&ctxstruct);
+	}
 
 	return r;
 }

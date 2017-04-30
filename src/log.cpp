@@ -50,7 +50,6 @@ struct GsLogList {
 	GsVersion mVersion;
 
 	sp<std::mutex> mMutexData;
-	sp<GsLogList> mSelf;
 	sp<gs_log_map_t> mLogs;
 
 	struct GsLogUnified *mLogUnifiedOpt;  /**< owned */
@@ -87,7 +86,6 @@ struct GsLog {
 	uint32_t mLogLevelLimit;
 };
 
-// FIXME: port to non-msvc (use thread_local keyword most likely)
 static GS_THREAD_LOCAL_DESIGNATOR GsLogTls g_tls_log_global = {};
 
 GsLogTls *gs_log_global_get() {
@@ -104,12 +102,10 @@ GsLogBase *gs_log_base_cast_(void *Log) {
 int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefix) {
 	int r = 0;
 
-	sp<std::mutex> Mutex(new std::mutex);
-
 	gs_log_version_make_compiled(&Klass->mVersion);
 	Klass->mTripwire = GS_TRIPWIRE_LOG_BASE;
 
-	Klass->mMutexData = Mutex;
+	Klass->mMutexData = sp<std::mutex>(new std::mutex);
 	Klass->mPrefix = std::string(Prefix);
 	Klass->mPreviousLog = NULL;
 	Klass->mLogUnifiedOpt = NULL;
@@ -120,8 +116,7 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 	Klass->mFuncDump = NULL;
 	Klass->mFuncDumpLowLevel = NULL;
 
-	// FIXME: is this enough to make the above writes sequenced-before ?
-	std::lock_guard<std::mutex> lock(*Mutex);
+	{ std::lock_guard<std::mutex> lock(*Klass->mMutexData); }
 
 clean:
 
@@ -143,22 +138,22 @@ void gs_log_base_exit(GsLogBase *Klass) {
 	std::lock_guard<std::mutex> lock(*Klass->mMutexData);
 
 	GsLogTls *lg = gs_log_global_get();
-	/* have previous exit not paired with an entry? */
-	// FIXME: toplevel mpCurrentLog is NULL
-	//   enable this check if toplevel dummy log design is used
-	//if (!mPreviousLog)
-	//	GS_ASSERT(0);
+
 	std::swap(Klass->mPreviousLog, lg->mpCurrentLog);
+
+	/* presumably previous exit not paired with an entry? */
 	if (Klass->mPreviousLog != Klass)
 		GS_ASSERT(0);
+
 	Klass->mPreviousLog = NULL;
 }
 
 GsLog *gs_log_cast_(void *Log) {
 	GsLog *a = (GsLog *)Log;
-	// FIXME: should lock mutex checking the tripwire?
+
 	if (a->mTripwire != GS_TRIPWIRE_LOG)
 		GS_ASSERT(0);
+
 	return a;
 }
 
@@ -166,11 +161,10 @@ int gs_log_create(const char *Prefix, GsLog **oLog) {
 	int r = 0;
 
 	GsLog *Log = new GsLog;
-	GsLogBase *LogBase = &Log->mBase;
 
 	const uint32_t DefaultLevel = GS_LOG_LEVEL_INFO;
 
-	if (!!(r = gs_log_base_init(LogBase, DefaultLevel, Prefix)))
+	if (!!(r = gs_log_base_init(&Log->mBase, DefaultLevel, Prefix)))
 		goto clean;
 
 	if (!!(r = gs_log_init(Log, DefaultLevel)))
@@ -232,7 +226,6 @@ void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, u
 
 	const std::string &ssstr = ss.str();
 
-	// FIXME: what to do on error here?
 	if (!!cbuf_push_back_discarding_trunc(Klass->mMsg.get(), ssstr.data(), ssstr.size()))
 		GS_ASSERT(0);
 }
@@ -395,34 +388,26 @@ void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, si
 int gs_log_list_create(GsLogList **oLogList) {
 	int r = 0;
 
-	sp<GsLogList> LogList(new GsLogList());
-
-	sp<std::mutex> Mutex(new std::mutex);
+	GsLogList *LogList = new GsLogList();
 
 	struct GsLogUnified *LogUnified = NULL;
 
 	gs_log_version_make_compiled(&LogList->mVersion);
 
-	LogList->mMutexData = Mutex;
-	LogList->mSelf = LogList;
+	LogList->mMutexData = sp<std::mutex>(new std::mutex);
 	LogList->mLogs = sp<gs_log_map_t>(new gs_log_map_t);
 	LogList->mLogUnifiedOpt = NULL;
-
-	/* create unified log */
-	// FIXME: is this the right place to decide unified log creation?
 
 	if (!!(r = gs_log_unified_create(&LogUnified)))
 		goto clean;
 
-	if (!!(r = gs_log_list_set_log_unified(LogList.get(), LogUnified)))
+	if (!!(r = gs_log_list_set_log_unified(LogList, LogUnified)))
 		goto clean;
 
-	{
-		std::lock_guard<std::mutex> lock(*LogList->mMutexData);
+	{ std::lock_guard<std::mutex> lock(*LogList->mMutexData); }
 
-		if (oLogList)
-			*oLogList = LogList.get();
-	}
+	if (oLogList)
+		*oLogList = LogList;
 
 clean:
 
@@ -458,7 +443,7 @@ int gs_log_list_free(GsLogList *LogList) {
 		LogList->mLogUnifiedOpt = NULL;
 	}
 
-	LogList->mSelf = sp<GsLogList>();
+	GS_DELETE(&LogList);
 
 clean:
 

@@ -330,7 +330,7 @@ clean:
 	return r;
 }
 
-/* FIXME: untested function */
+/* Dead code */
 int aux_frame_read_oid_vec_(
 	uint8_t *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew,
 	gs_bysize_cb_t cb, void *ctx)

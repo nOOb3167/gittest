@@ -20,8 +20,6 @@
 
 #define GS_MAGIC_NUM_WORKER_THREADS 1
 
-#define GS_PORT 3756
-
 #define GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS 0xFFFFFFFF
 #define GS_SERV_AUX_ARBITRARY_TIMEOUT_MS 5000
 #define GS_CONNECT_NUMRETRY   5
@@ -143,8 +141,6 @@ struct GsEventSurrogate {
 
 /** manual-init struct
     value struct
-
-    FIXME: think about using a shared pointer
 
 	@sa
 	   ::gs_packet_surrogate_release_ownership
@@ -586,6 +582,7 @@ int gs_ntwk_reconnect_expend(
 	struct GsHostSurrogate *ioHostSurrogate);
 int gs_aux_aux_aux_connection_register_transfer_ownership(
 	struct GsConnectionSurrogate valConnectionSurrogate,
+	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t *oAssignedId);
 int gs_aux_aux_aux_cb_last_chance_t(

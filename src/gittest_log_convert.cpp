@@ -49,11 +49,11 @@ int logconvert() {
 		GS_GOTO_CLEAN();
 	}
 
-	// FIXME: hardcoded 4 minute timeout
+	/* NOTE: hardcoded 4 minute timeout */
 	if (SQLITE_OK != (r = sqlite3_busy_timeout(Sqlite, 240000)))
 		GS_GOTO_CLEAN();
 
-	// FIXME: sqlite disable sync because why not
+	/* NOTE: sqlite disable sync because why not */
 	if (SQLITE_OK != (r = sqlite3_exec(Sqlite, "PRAGMA synchronous=OFF;", NULL, NULL, NULL)))
 		GS_GOTO_CLEAN();
 

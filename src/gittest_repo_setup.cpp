@@ -157,20 +157,20 @@ int gs_repo_setup_main_mode_commit_main(
 
 	GS_LOG(I, PF, "old workdir [%s]", OldWorkDir ? OldWorkDir : "(bare)");
 
-	// FIXME: consider git_repository_state_cleanup
-	// FIXME: consider setting an in-memory index, all all entries, then updating the main index
-
 	if (!!(r = git_repository_set_workdir(Repository, DirectoryFileNameBuf, 0)))
 		GS_GOTO_CLEAN();
 
 	GS_LOG(I, S, "updating index");
 
-	// FIXME: it would be nice to use an in-memory index - but git_index_add_all is a filesystem operation
+	/* NOTE: consider setting an in-memory index, adding all entries, then updating the main index
+	         it would be nice to use an in-memory index - but git_index_add_all is a filesystem operation */
 	if (!!(r = git_repository_index(&Index, Repository)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = git_index_clear(Index)))
 		GS_GOTO_CLEAN();
+
+	// FIXME: consider git_repository_state_cleanup
 
 	if (!!(r = git_index_add_all(Index, &PathSpecAll, GIT_INDEX_ADD_FORCE, NULL, NULL)))
 		GS_GOTO_CLEAN();

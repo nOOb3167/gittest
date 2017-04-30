@@ -26,9 +26,7 @@
 #define GS_FRAME_TYPE_REQUEST_LATEST_SELFUPDATE_BLOB 11
 #define GS_FRAME_TYPE_RESPONSE_LATEST_SELFUPDATE_BLOB 12
 
-// FIXME: bits of old design etc
 #define GS_FRAME_TYPE_DECL2(name) GS_FRAME_TYPE_ ## name
-//#define GS_FRAME_TYPE_DECL(name) { # name, GS_FRAME_TYPE_DECL2(name) }
 #define GS_FRAME_TYPE_DECL(name) aux_frametype_make( # name , GS_FRAME_TYPE_DECL2(name) )
 
 #define GS_FRAME_TYPE_DEFINE_FRAME_TYPE_ARRAY(VARNAME)       \

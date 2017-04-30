@@ -230,7 +230,6 @@ int aux_config_parse(
 	/* hdr_raw_size of ASCII letters and 1 of NEWLINE */
 	if (hdr_raw_size < Offset - OldOffset)
 		{ r = 1; goto clean; }
-	// FIXME: relying on string data() contiguity
 	if (memcmp(hdr_nulterm_expected, DataStart + OldOffset, hdr_raw_size) != 0)
 		{ r = 1; goto clean; }
 	if (!!(r = aux_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
@@ -642,8 +641,7 @@ int aux_deserialize_objects_odb(
 	WrittenObjectOid.resize(SizeVector.size());
 	for (uint32_t idx = 0, i = 0; i < SizeVector.size(); idx+=SizeVector[i], i++) {
 		git_oid FreshOid = {};
-		/* supposedly git_odb_stream_write recommended */
-		// FIXME: assuming contiguous std::string etc
+		/* NOTE: supposedly git_odb_stream_write recommended */
 		if (!!(r = git_odb_write(&FreshOid, OdbT, DataStartObjectBuffer + OffsetObjectBuffer + idx, SizeVector[i], WrittenObjectType)))
 			goto clean;
 		git_oid_cpy(&WrittenObjectOid[i], &FreshOid);
@@ -784,7 +782,8 @@ int aux_memory_repository_new(git_repository **oRepositoryMemory) {
 		*oRepositoryMemory = RepositoryMemory;
 
 clean:
-	// FIXME: afaik backend is owned by git_repository and destroyed automatically
+	/* NOTE: backend is owned by odb, and odb is owned by repository.
+	     backend thus destroyed indirectly with the repository. */
 
 	if (RepositoryOdb)
 		git_odb_free(RepositoryOdb);
@@ -1123,7 +1122,7 @@ int aux_checkout(
 
 	opts.checkout_strategy = 0;
 	opts.checkout_strategy |= GIT_CHECKOUT_FORCE;
-	// FIXME: want this flag bug bugs have potential to cause more damage - enable after enough testing
+	// FIXME: want this flag but bugs have potential to cause more damage - enable after enough testing
 	//opts.checkout_strategy |= GIT_CHECKOUT_REMOVE_UNTRACKED;
 
 	opts.disable_filters = 1;

@@ -1194,37 +1194,36 @@ clean:
 */
 int gs_aux_aux_aux_connection_register_transfer_ownership(
 	struct GsConnectionSurrogate valConnectionSurrogate,
+	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t *oAssignedId)
 {
 	int r = 0;
 
-	ENetPeer *peer = valConnectionSurrogate.mPeer;
+	HeapAllocatedDefaultedOwnedCtxstruct->Tripwire = GS_BYPART_TRIPWIRE_GsConnectionSurrogateId;
+	HeapAllocatedDefaultedOwnedCtxstruct->m0Id = -1;
 
-	gs_connection_surrogate_id_t Id = 0;
-
-	GS_BYPART_DATA_VAR(GsConnectionSurrogateId, ctxstruct);
+	/* bond to the peer */
+	valConnectionSurrogate.mPeer->data = HeapAllocatedDefaultedOwnedCtxstruct;
 
 	/* assign entry with id */
+	/* NOTE: valConnectionSurrogate.mPeer->data pointer gets copied into connection map entry.
+	         since data was set to HeapAllocatedDefaultedOwnedCtxstruct, we can assign to its m0Id field. */
 	if (!!(r = gs_connection_surrogate_map_insert(
 		ioConnectionSurrogateMap,
 		valConnectionSurrogate,
-		&Id)))
+		&HeapAllocatedDefaultedOwnedCtxstruct->m0Id)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	GS_BYPART_DATA_INIT(GsConnectionSurrogateId, ctxstruct, Id);
-
-	/* bond to the peer */
-	/* NOTE: making use of property that mPeer pointer field was copied into the connection surrogate map */
-	// FIXME: sigh raw allocation, deletion occurs in principle on receipt of ENET_EVENT_TYPE_DISCONNECT events
-	peer->data = new GsBypartCbDataGsConnectionSurrogateId(ctxstruct);
-
 	if (oAssignedId)
-		*oAssignedId = Id;
+		*oAssignedId = HeapAllocatedDefaultedOwnedCtxstruct->m0Id;
 
 clean:
+	if (!!r) {
+		GS_DELETE(&HeapAllocatedDefaultedOwnedCtxstruct);
+	}
 
 	return r;
 }
@@ -1437,7 +1436,10 @@ int gs_ntwk_host_service_event(
 
 		gs_connection_surrogate_id_t AssignedId = 0;
 
-		GsConnectionSurrogate ConnectionSurrogate = {};
+		/* NOTE: raw new, routinely deleted at ENET_EVENT_TYPE_DISCONNECT */
+		struct GsBypartCbDataGsConnectionSurrogateId *ctxstruct = new GsBypartCbDataGsConnectionSurrogateId();
+
+		struct GsConnectionSurrogate ConnectionSurrogate = {};
 
 		ConnectionSurrogate.mHost = HostSurrogate->mHost;
 		ConnectionSurrogate.mPeer = Event->event.peer;
@@ -1445,6 +1447,7 @@ int gs_ntwk_host_service_event(
 
 		if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
 			ConnectionSurrogate,
+			GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
 			ioConnectionSurrogateMap,
 			&AssignedId)))
 		{
@@ -1460,23 +1463,18 @@ int gs_ntwk_host_service_event(
 
 	case ENET_EVENT_TYPE_DISCONNECT:
 	{
-		gs_connection_surrogate_id_t Id = 0;
-
 		GS_LOG(I, S, "ENET_EVENT_TYPE_DISCONNECT");
 
-		/* get the id, then just dispose of the structure */
-		{
-			GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, Event->event.peer->data);
-			Id = ctxstruct->m0Id;
-			// FIXME: sigh raw deletion, should have been allocated at ENET_EVENT_TYPE_CONNECT
-			delete ctxstruct;
-		}
-
-		if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, Id)))
-			GS_GOTO_CLEAN();
+		GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, Event->event.peer->data);
 
 		GS_LOG(I, PF, "%llu disconnected",
-			(unsigned long long)Id);
+			(unsigned long long)ctxstruct->m0Id);
+
+		if (!!(r = gs_connection_surrogate_map_erase(ioConnectionSurrogateMap, ctxstruct->m0Id)))
+			GS_GOTO_CLEAN();
+
+		/* NOTE: raw delete, routinely new'd at ENET_EVENT_TYPE_CONNECT */
+		GS_DELETE(&ctxstruct);
 	}
 	break;
 
