@@ -12,6 +12,7 @@
 #include <vector>
 #include <deque>
 #include <map>
+#include <set>
 #include <list>
 
 #include <enet/enet.h>
@@ -56,6 +57,23 @@ typedef uint64_t gs_worker_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, gs_worker_id_t> gs_affinity_map_t;
 typedef ::std::list<gs_worker_id_t> gs_affinity_list_t;
 typedef ::std::vector<gs_connection_surrogate_id_t> gs_affinity_in_progress_t;
+
+/** manual-init struct
+	value struct
+*/
+struct GsPrioData {
+	uint32_t mPrio;
+	gs_worker_id_t mWorkerId;
+};
+
+struct GsPrioDataComparator {
+	bool operator() (const struct GsPrioData &a, const struct GsPrioData &b) const {
+		return a.mPrio < b.mPrio;
+	}
+};
+
+typedef ::std::multiset<GsPrioData, GsPrioDataComparator> gs_prio_set_t;
+typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;
 
 #define GS_AFFINITY_IN_PROGRESS_NONE -1
 
@@ -239,12 +257,15 @@ struct GsWorkerDataVec
 	   ::gs_affinity_queue_worker_acquire_ready
 	   ::gs_affinity_queue_worker_completed_all_requests
 	   ::gs_affinity_queue_request_dequeue_and_acquire
+	   ::gs_affinity_queue_prio_increment_nolock
+	   ::gs_affinity_queue_prio_zero_nolock
 */
 struct GsAffinityQueue {
 	std::mutex mMutexData;
 	gs_affinity_map_t mAffinityMap;
-	gs_affinity_list_t mAffinityList;
 	gs_affinity_in_progress_t mAffinityInProgress; /**< special locking semantics */
+	gs_prio_set_t mPrioSet;
+	gs_prio_vec_t mPrioVec;
 };
 
 /** nodestroy
@@ -427,6 +448,18 @@ int gs_affinity_queue_request_dequeue_and_acquire(
 	uint32_t TimeoutMs,
 	struct GsWorkerRequestData *oValRequest,
 	struct GsAffinityToken *ioAffinityToken);
+int gs_affinity_queue_prio_zero_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock);
+int gs_affinity_queue_prio_increment_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock);
+int gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	std::unique_lock<std::mutex> *Lock,
+	gs_worker_id_t *oWorkerLowestPrioId);
 int gs_affinity_token_acquire_raw_nolock(
 	struct GsAffinityToken *ioAffinityToken,
 	gs_worker_id_t WorkerId,

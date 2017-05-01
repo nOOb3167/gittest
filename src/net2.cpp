@@ -943,10 +943,17 @@ int gs_affinity_queue_create(
 
 	struct GsAffinityQueue *AffinityQueue = new GsAffinityQueue();
 
-	for (size_t i = 0; i < NumWorkers; i++)
-		AffinityQueue->mAffinityList.push_back(i);
-
 	AffinityQueue->mAffinityInProgress.resize(NumWorkers, GS_AFFINITY_IN_PROGRESS_NONE);
+
+	for (size_t i = 0; i < NumWorkers; i++) {
+		struct GsPrioData PrioData = {};
+		PrioData.mPrio = 0;
+		PrioData.mWorkerId = i;
+		AffinityQueue->mPrioSet.insert(PrioData);
+	}
+
+	for (gs_prio_set_t::iterator it = AffinityQueue->mPrioSet.begin(); it != AffinityQueue->mPrioSet.end(); it++)
+		AffinityQueue->mPrioVec.push_back(it);
 
 	if (oAffinityQueue)
 		*oAffinityQueue = AffinityQueue;
@@ -982,18 +989,22 @@ int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 		auto it = AffinityQueue->mAffinityMap.find(ConnectionId);
 
 		if (it != AffinityQueue->mAffinityMap.end()) {
-			/* acquire to worker currently already holding lease for ConnectionId */
+			/* - acquire to worker currently already holding lease for ConnectionId */
 			WorkerIdReady = it->second;
+			/* - priority inert - no worker handles more or fewer connids */
+			/* - connid registration inert - should have already been associated with affinity map */
 		}
 		else {
-			/* acquire to worker any */
-			// FIXME: TODO: it would be nice if affinitylist were priority sorted
-			//   by queue length. currently just selecting the first list element.
-			WorkerIdReady = AffinityQueue->mAffinityList.front();
-			// move to back of list as a form of load balancing
-			AffinityQueue->mAffinityList.pop_front();
-			AffinityQueue->mAffinityList.push_back(WorkerIdReady);
-
+			/* - acquire to worker with lowest prio aka handling the fewest connids */
+			/* - priority raised - WorkerIdReady handles one more connid */
+			if (!!(r = gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
+				AffinityQueue,
+				&lock,
+				&WorkerIdReady)))
+			{
+				GS_GOTO_CLEAN();
+			}
+			/* - connid registration performed - WorkerIdReady now handling ConnectionId */
 			AffinityQueue->mAffinityMap[ConnectionId] = WorkerIdReady;
 		}
 
@@ -1044,8 +1055,17 @@ int gs_affinity_queue_worker_completed_all_requests(
 				it++;
 		}
 
+		/* update prio accordingly to number of connid leases (ex zero) */
+
+		if (!!(r = gs_affinity_queue_prio_zero_nolock(
+			AffinityQueue,
+			WorkerId,
+			&lock)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
 		// FIXME: TODO: implement work stealing
-		// FIXME: TODO: also put the empty worker at the start of the list
 	}
 
 clean:
@@ -1095,6 +1115,89 @@ int gs_affinity_queue_request_dequeue_and_acquire(
 
 	if (oValRequest)
 		*oValRequest = Request;
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_prio_zero_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock)
+{
+	int r = 0;
+
+	{
+		GS_ASSERT(Lock->owns_lock());
+
+		gs_prio_set_t::iterator it;
+		struct GsPrioData PrioData = {};
+
+		it = AffinityQueue->mPrioVec.at(WorkerId);
+		PrioData = *it;
+		PrioData.mPrio = 0;
+		AffinityQueue->mPrioSet.erase(it);
+		AffinityQueue->mPrioVec.at(WorkerId) = AffinityQueue->mPrioSet.insert(PrioData);
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_prio_increment_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock)
+{
+	int r = 0;
+
+	{
+		GS_ASSERT(Lock->owns_lock());
+
+		gs_prio_set_t::iterator it;
+		struct GsPrioData PrioData = {};
+		
+		it = AffinityQueue->mPrioVec.at(WorkerId);
+		PrioData = *it;
+		PrioData.mPrio += 1;
+		AffinityQueue->mPrioSet.erase(it);
+		AffinityQueue->mPrioVec.at(WorkerId) = AffinityQueue->mPrioSet.insert(PrioData);
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	std::unique_lock<std::mutex> *Lock,
+	gs_worker_id_t *oWorkerLowestPrioId)
+{
+	int r = 0;
+
+	gs_worker_id_t WorkerLowestPrioId = 0;
+
+	{
+		GS_ASSERT(Lock->owns_lock());
+
+		GS_ASSERT(! AffinityQueue->mPrioSet.empty());
+
+		WorkerLowestPrioId = AffinityQueue->mPrioSet.begin()->mWorkerId;
+
+		if (!!(r = gs_affinity_queue_prio_increment_nolock(
+			AffinityQueue,
+			WorkerLowestPrioId,
+			Lock)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+
+	if (oWorkerLowestPrioId)
+		*oWorkerLowestPrioId = WorkerLowestPrioId;
 
 clean:
 
