@@ -440,6 +440,7 @@ int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 	gs_connection_surrogate_id_t ConnectionId);
 int gs_affinity_queue_worker_completed_all_requests(
 	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerDataVec *WorkerDataVec,
 	gs_worker_id_t WorkerId);
 int gs_affinity_queue_request_dequeue_and_acquire(
 	struct GsAffinityQueue *AffinityQueue,
@@ -456,10 +457,19 @@ int gs_affinity_queue_prio_increment_nolock(
 	struct GsAffinityQueue *AffinityQueue,
 	gs_worker_id_t WorkerId,
 	std::unique_lock<std::mutex> *Lock);
+int gs_affinity_queue_prio_decrement_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock);
 int gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
 	struct GsAffinityQueue *AffinityQueue,
 	std::unique_lock<std::mutex> *Lock,
 	gs_worker_id_t *oWorkerLowestPrioId);
+int gs_affinity_queue_helper_worker_double_lock(
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t DstWorkerId,
+	gs_worker_id_t SrcWorkerId,
+	std::unique_lock<std::mutex> ioDoubleLock[2]);
 int gs_affinity_token_acquire_raw_nolock(
 	struct GsAffinityToken *ioAffinityToken,
 	gs_worker_id_t WorkerId,
@@ -576,6 +586,14 @@ int gs_worker_request_dequeue_all_opt_cpp(
 	std::deque<struct GsWorkerRequestData> *oValRequestData);
 int gs_worker_request_dequeue_discard_until_reconnect(
 	struct GsWorkerData *pThis);
+int gs_worker_request_dequeue_steal_except_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t DstWorkerId,
+	gs_worker_id_t SrcWorkerId,
+	gs_connection_surrogate_id_t ExceptId,
+	std::unique_lock<std::mutex> *LockQueue,
+	std::unique_lock<std::mutex> LockWorker[2]);
 
 int gs_worker_packet_enqueue(
 	struct GsWorkerData *pThis,

@@ -2,6 +2,8 @@
 #pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
 #endif /* _MSC_VER */
 
+#include <algorithm>
+
 #include <gittest/misc.h>
 #include <gittest/log.h>
 #include <gittest/net2.h>
@@ -749,6 +751,114 @@ int gs_worker_request_dequeue_discard_until_reconnect(
 	return 0;
 }
 
+/** FIXME: likely error prone code. depends a lot on GsWorkerRequestData request semantics
+*/
+int gs_worker_request_dequeue_steal_except_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t DstWorkerId,
+	gs_worker_id_t SrcWorkerId,
+	gs_connection_surrogate_id_t ExceptId,
+	std::unique_lock<std::mutex> *LockQueue,
+	std::unique_lock<std::mutex> LockWorker[2])
+{
+	int r = 0;
+
+	struct GsWorkerData *DstWorker = gs_worker_data_vec_id(WorkerDataVec, DstWorkerId);
+	struct GsWorkerData *SrcWorker = gs_worker_data_vec_id(WorkerDataVec, SrcWorkerId);
+
+	{
+		GS_ASSERT(LockWorker[0].owns_lock() && LockWorker[1].owns_lock());
+
+		/* there can be no PACKET request connid sequences split across a RECONNECT type request, right?
+		   because having received a RECONNECT type request means we are sequenced after
+		   the reconnect (ie are in a new reconnect cycle), and connections established (and any packages received from them)
+		   after a reconnect have IDs distinct from any connections of the previous reconnect cycle. */
+
+		gs_connection_surrogate_id_t StealId = ExceptId;
+		std::deque<GsWorkerRequestData>::iterator ItStealBound = SrcWorker->mWorkerQueue->begin();
+		std::vector<GsWorkerRequestData> TmpVec;
+		
+		/* find last EXIT or RECONNECT request (bound) - bound at begin() if none found */
+		// FIXME: search in reverse order for efficiency
+
+		for (std::deque<GsWorkerRequestData>::iterator it = ItStealBound;
+			it != SrcWorker->mWorkerQueue->end();
+			it++)
+		{
+			if (it->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_EXIT ||
+				it->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
+				it->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
+			{
+				ItStealBound = it;
+			}
+		}
+
+		/* choose a PACKET request ID, present in src queue, different from 'ExceptId', from
+		   requests after StealBound. move all those requests to destination.
+		   this is done in three steps
+		     - iterate src from bound to end, pushing steals to dst queue, nonsteals to tmp queue
+		     - force-resize src queue to just before bound
+		     - push whole tmp queue to src
+			     as an optimization, no action on empty tmp queue
+			   recall prio needs to be adjusted if queues were manipulated
+		*/
+
+		for (std::deque<GsWorkerRequestData>::iterator StealIt = ItStealBound;
+			StealIt != SrcWorker->mWorkerQueue->end();
+			StealIt++)
+		{
+			if (StealIt->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET && StealIt->mId != ExceptId) {
+				if (StealId == ExceptId)
+					StealId = StealIt->mId;
+				if (StealId != ExceptId)
+					DstWorker->mWorkerQueue->push_back(*StealIt);
+			}
+			else {
+				TmpVec.push_back(*StealIt);
+			}
+		}
+
+		if (TmpVec.empty()) {
+			/* we AINT stealing nothing */
+		}
+		else {
+			/* we are actually stealing */
+
+			SrcWorker->mWorkerQueue->resize(GS_MAX(0, std::distance(SrcWorker->mWorkerQueue->begin(), ItStealBound) - 1));
+
+			for (size_t i = 0; i < TmpVec.size(); i++)
+				SrcWorker->mWorkerQueue->push_back(TmpVec[i]);
+
+			/* fixup prio */
+
+			{
+				GS_ASSERT(LockQueue->owns_lock());
+
+				if (!!(r = gs_affinity_queue_prio_increment_nolock(
+					AffinityQueue,
+					DstWorkerId,
+					&LockWorker[0])))
+				{
+					GS_GOTO_CLEAN();
+				}
+
+				if (!!(r = gs_affinity_queue_prio_decrement_nolock(
+					AffinityQueue,
+					DstWorkerId,
+					&LockWorker[1])))
+				{
+					GS_GOTO_CLEAN();
+				}
+			}
+		}
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_worker_packet_enqueue(
 	struct GsWorkerData *pThis,
 	struct GsIntrTokenSurrogate *IntrToken,
@@ -1017,8 +1127,13 @@ clean:
 	return r;
 }
 
+/**
+    NOTE: TAKES HOLD OF MULTIPLE LOCKS
+	  lock order: AffinityQueue lock, multiple WorkerData locks (computed)
+*/
 int gs_affinity_queue_worker_completed_all_requests(
 	struct GsAffinityQueue *AffinityQueue,
+	struct GsWorkerDataVec *WorkerDataVec,
 	gs_worker_id_t WorkerId)
 {
 	/* NOTE: it might be sufficient to perform lease releasing (or work stealing)
@@ -1055,7 +1170,7 @@ int gs_affinity_queue_worker_completed_all_requests(
 				it++;
 		}
 
-		/* update prio accordingly to number of connid leases (ex zero) */
+		/* update prio wrt number of connection leases (ex zero) */
 
 		if (!!(r = gs_affinity_queue_prio_zero_nolock(
 			AffinityQueue,
@@ -1065,7 +1180,40 @@ int gs_affinity_queue_worker_completed_all_requests(
 			GS_GOTO_CLEAN();
 		}
 
-		// FIXME: TODO: implement work stealing
+		{
+			GS_ASSERT(! AffinityQueue->mPrioSet.empty());
+			struct GsPrioData PrioHighest = *AffinityQueue->mPrioSet.end();
+			if (PrioHighest.mPrio > 1) {
+				/* NOTE: even though prio is greater than one, we may still
+				         end up stealing nothing (in current design prio
+						 can end up overestimated) */
+				// FIXME: is this correct? or need to take AffinityQueue lock simultaneously with these
+				std::unique_lock<std::mutex> DoubleLock[2];
+				const gs_worker_id_t DstWorkerId = WorkerId;
+				const gs_worker_id_t SrcWorkerId = PrioHighest.mWorkerId;
+				if (!!(r = gs_affinity_queue_helper_worker_double_lock(
+					WorkerDataVec,
+					DstWorkerId,
+					SrcWorkerId,
+					DoubleLock)))
+				{
+					GS_GOTO_CLEAN();
+				}
+				const gs_connection_surrogate_id_t SrcInProgress = AffinityQueue->mAffinityInProgress.at(SrcWorkerId);
+				/* do remember that InProgress can potentially be GS_AFFINITY_IN_PROGRESS_NONE */
+				if (!!(r = gs_worker_request_dequeue_steal_except_nolock(
+					AffinityQueue,
+					WorkerDataVec,
+					DstWorkerId,
+					SrcWorkerId,
+					SrcInProgress,
+					&lock,
+					DoubleLock)))
+				{
+					GS_GOTO_CLEAN();
+				}
+			}
+		}
 	}
 
 clean:
@@ -1171,6 +1319,31 @@ clean:
 	return r;
 }
 
+int gs_affinity_queue_prio_decrement_nolock(
+	struct GsAffinityQueue *AffinityQueue,
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *Lock)
+{
+	int r = 0;
+
+	{
+		GS_ASSERT(Lock->owns_lock());
+
+		gs_prio_set_t::iterator it;
+		struct GsPrioData PrioData = {};
+		
+		it = AffinityQueue->mPrioVec.at(WorkerId);
+		PrioData = *it;
+		PrioData.mPrio -= 1;
+		AffinityQueue->mPrioSet.erase(it);
+		AffinityQueue->mPrioVec.at(WorkerId) = AffinityQueue->mPrioSet.insert(PrioData);
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
 	struct GsAffinityQueue *AffinityQueue,
 	std::unique_lock<std::mutex> *Lock,
@@ -1202,6 +1375,22 @@ int gs_affinity_queue_prio_acquire_lowest_and_increment_nolock(
 clean:
 
 	return r;
+}
+
+/** Acquire in consistent order (ascending mutex pointer)
+	for deadlock avoidance purposes.
+*/
+int gs_affinity_queue_helper_worker_double_lock(
+	struct GsWorkerDataVec *WorkerDataVec,
+	gs_worker_id_t DstWorkerId,
+	gs_worker_id_t SrcWorkerId,
+	std::unique_lock<std::mutex> ioDoubleLock[2])
+{
+	struct GsWorkerData *W0 = gs_worker_data_vec_id(WorkerDataVec, DstWorkerId);
+	struct GsWorkerData *W1 = gs_worker_data_vec_id(WorkerDataVec, SrcWorkerId);
+	ioDoubleLock[0] = std::move(std::unique_lock<std::mutex>(*GS_MIN(W0->mWorkerDataMutex.get(), W1->mWorkerDataMutex.get())));
+	ioDoubleLock[1] = std::move(std::unique_lock<std::mutex>(*GS_MAX(W0->mWorkerDataMutex.get(), W1->mWorkerDataMutex.get())));
+	return 0;
 }
 
 int gs_affinity_token_acquire_raw_nolock(
