@@ -438,10 +438,11 @@ int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 	struct GsWorkerDataVec *WorkerDataVec,
 	struct GsWorkerRequestData *valRequestData,
 	gs_connection_surrogate_id_t ConnectionId);
-int gs_affinity_queue_worker_completed_all_requests(
+int gs_affinity_queue_worker_completed_all_requests_somelock(
 	struct GsAffinityQueue *AffinityQueue,
 	struct GsWorkerDataVec *WorkerDataVec,
-	gs_worker_id_t WorkerId);
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *LockAffinityQueue);
 int gs_affinity_queue_request_dequeue_and_acquire(
 	struct GsAffinityQueue *AffinityQueue,
 	struct GsWorkerData *WorkerData,

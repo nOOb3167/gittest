@@ -1129,12 +1129,15 @@ clean:
 
 /**
     NOTE: TAKES HOLD OF MULTIPLE LOCKS
-	  lock order: AffinityQueue lock, multiple WorkerData locks (computed)
+	  - LockAffinityQueue locked by parent
+	  - multiple WorkerData locks (computed)
+	  in above lock order
 */
-int gs_affinity_queue_worker_completed_all_requests(
+int gs_affinity_queue_worker_completed_all_requests_somelock(
 	struct GsAffinityQueue *AffinityQueue,
 	struct GsWorkerDataVec *WorkerDataVec,
-	gs_worker_id_t WorkerId)
+	gs_worker_id_t WorkerId,
+	std::unique_lock<std::mutex> *LockAffinityQueue)
 {
 	/* NOTE: it might be sufficient to perform lease releasing (or work stealing)
 	*        once all requests have been completed ie recv queue empty.
@@ -1159,7 +1162,7 @@ int gs_affinity_queue_worker_completed_all_requests(
 	int r = 0;
 
 	{
-		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+		GS_ASSERT(LockAffinityQueue->owns_lock());
 
 		/* release all connection leases held by WorkerId */
 
@@ -1175,7 +1178,7 @@ int gs_affinity_queue_worker_completed_all_requests(
 		if (!!(r = gs_affinity_queue_prio_zero_nolock(
 			AffinityQueue,
 			WorkerId,
-			&lock)))
+			LockAffinityQueue)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -1207,7 +1210,7 @@ int gs_affinity_queue_worker_completed_all_requests(
 					DstWorkerId,
 					SrcWorkerId,
 					SrcInProgress,
-					&lock,
+					LockAffinityQueue,
 					DoubleLock)))
 				{
 					GS_GOTO_CLEAN();
