@@ -733,22 +733,20 @@ int gs_worker_request_dequeue_all_opt_cpp(
 int gs_worker_request_dequeue_discard_until_reconnect(
 	struct GsWorkerData *pThis)
 {
-	// FIXME: (PERFORMANCE) avoid retaking the lock every time
-	//   should be while(true) { wait; while(nonempty); }
 	while (true) {
-		{
-			std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
-			pThis->mWorkerDataCond->wait(lock, [&]() { return !pThis->mWorkerQueue->empty(); });
+		std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+		pThis->mWorkerDataCond->wait(lock, [&]() { return !pThis->mWorkerQueue->empty(); });
+		while (! pThis->mWorkerQueue->empty()) {
 			struct GsWorkerRequestData &Request = pThis->mWorkerQueue->front();
-			if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
-				Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
+			if (! (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_PREPARE ||
+				   Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT))
 			{
-				break;
+				pThis->mWorkerQueue->pop_front();
 			}
-			pThis->mWorkerQueue->pop_front();
+			else
+				return 0;
 		}
 	}
-	return 0;
 }
 
 /** FIXME: likely error prone code. depends a lot on GsWorkerRequestData request semantics
