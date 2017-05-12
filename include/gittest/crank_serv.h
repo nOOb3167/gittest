@@ -76,17 +76,7 @@ int serv_state_service_request_blobs2(
 	git_repository *Repository,
 	const GsFrameType &FrameTypeResponse);
 
-int serv_state_crank2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	gs_worker_id_t WorkerId,
-	struct GsAffinityQueue *AffinityQueue,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	struct GsExtraWorker **ioExtraWorker);
+int serv_state_crank2(struct GsCrankData *CrankData);
 
 int gs_net_full_create_connection_server(
 	uint32_t ServPort,
@@ -96,12 +86,7 @@ int gs_net_full_create_connection_server(
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	struct GsFullConnection **oConnectionServer);
 
-int gs_store_worker_cb_crank_t_server(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ioExtraWorker,
-	gs_worker_id_t WorkerId);
+int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData);
 
 int gs_extra_host_create_cb_create_t_server(
 	struct GsExtraHostCreate *ExtraHostCreate,

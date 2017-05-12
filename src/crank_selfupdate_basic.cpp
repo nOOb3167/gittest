@@ -148,19 +148,12 @@ int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWor
 	return 0;
 }
 
-int crank_selfupdate_basic(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	gs_worker_id_t WorkerId,
-	struct GsExtraWorker **ioExtraWorker,
-	uint32_t *oHaveUpdate,
-	std::string *oBufferUpdate)
+int crank_selfupdate_basic(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
-	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) StoreWorker;
-	GsExtraWorkerSelfUpdateBasic *pIoExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ioExtraWorker;
+	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) CrankData->mStoreWorker;
+	GsExtraWorkerSelfUpdateBasic *pIoExtraWorker = (GsExtraWorkerSelfUpdateBasic *) CrankData->mExtraWorker;
 
 	uint32_t HaveUpdate = 0;
 	std::string BufferUpdate;
@@ -207,24 +200,20 @@ int crank_selfupdate_basic(
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&pStoreWorker->base.mIntrToken,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
 		pIoExtraWorker->mId,
 		BufferLatest.data(), BufferLatest.size())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		pStoreWorker->base.mAffinityQueue,
 		&AffinityToken,
 		&PacketBlobOid,
-		NULL,
-		ioExtraWorker)))
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -254,24 +243,20 @@ int crank_selfupdate_basic(
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&pStoreWorker->base.mIntrToken,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
 		pIoExtraWorker->mId,
 		BufferBlobs.data(), BufferBlobs.size())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		pStoreWorker->base.mAffinityQueue,
 		&AffinityToken,
 		&PacketBlob,
-		NULL,
-		ioExtraWorker)))
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -324,15 +309,12 @@ int crank_selfupdate_basic(
 			GS_GOTO_CLEAN();
 	}
 
-	if (oHaveUpdate)
-		*oHaveUpdate = HaveUpdate;
-
-	if (oBufferUpdate)
-		oBufferUpdate->swap(BufferUpdate);
-
 	GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
 
 noclean:
+
+	pStoreWorker->resultHaveUpdate = HaveUpdate;
+	pStoreWorker->resultBufferUpdate.swap(BufferUpdate);
 
 clean :
 	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
@@ -441,44 +423,13 @@ clean:
 	return r;
 }
 
-int gs_store_worker_cb_crank_t_selfupdate_basic(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ioExtraWorker,
-	gs_worker_id_t WorkerId)
+int gs_store_worker_cb_crank_t_selfupdate_basic(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
-	GsStoreWorkerSelfUpdateBasic *pStoreWorker = (GsStoreWorkerSelfUpdateBasic *) StoreWorker;
-	GsExtraWorkerSelfUpdateBasic *pExtraWorker = (GsExtraWorkerSelfUpdateBasic *) *ioExtraWorker;
-
-	uint32_t HaveUpdate = false;
-	std::string BufferUpdate;
-
-	if (pStoreWorker->base.magic != GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC)
-		GS_ERR_CLEAN(1);
-
-	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_SELFUPDATE_BASIC_MAGIC)
-		GS_ERR_CLEAN(1);
-
 	/* oneshot - not ran inside a loop */
-	if (!!(r = crank_selfupdate_basic(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		WorkerId,
-		ioExtraWorker,
-		&HaveUpdate,
-		&BufferUpdate)))
-	{
-		GS_ERR_NO_CLEAN(r);
-	}
-
-noclean:
-
-	pStoreWorker->resultHaveUpdate = HaveUpdate;
-	pStoreWorker->resultBufferUpdate.swap(BufferUpdate);
+	if (!!(r = crank_selfupdate_basic(CrankData)))
+		GS_GOTO_CLEAN();
 
 clean:
 

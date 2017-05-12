@@ -140,56 +140,16 @@ clean:
 	return r;
 }
 
-int clnt_state_need_tree_head_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker)
+int clnt_state_need_tree_head_work(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
 	sp<git_oid> TreeHeadOid(new git_oid);
 
-	git_repository * const RepositoryT = *State->mRepositoryT;
+	struct GsStoreWorkerClient *pStoreWorker = (struct GsStoreWorkerClient *) CrankData->mStoreWorker;
+	struct GsExtraWorkerClient *pExtraWorker = (struct GsExtraWorkerClient *) CrankData->mExtraWorker;
 
-	std::string Buffer;
-	uint32_t Offset = 0;
-
-	git_oid CommitHeadOidT = {};
-	git_oid TreeHeadOidT = {};
-
-	if (!!(r = clnt_state_need_tree_head_noown2(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		WorkerId,
-		RepositoryT,
-		TreeHeadOid.get(),
-		ioExtraWorker)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_TREELIST, a,
-		{ a.mTreeHeadOid = TreeHeadOid; });
-
-clean:
-
-	return r;
-}
-
-int clnt_state_need_tree_head_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	git_oid *oTreeHeadOid,
-	struct GsExtraWorkerClient **ioExtraWorker)
-{
-	int r = 0;
+	struct ClntState * const State = pStoreWorker->mClntState.get();
 
 	std::string Buffer;
 	GsPacket *Packet = NULL;
@@ -203,28 +163,30 @@ int clnt_state_need_tree_head_noown2(
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
 	if (!!(r = aux_frame_full_write_request_latest_commit_tree(gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&StoreWorker->base.mIntrToken,
-		(*ioExtraWorker)->mId,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
+		pExtraWorker->mId,
 		Buffer.data(), Buffer.size())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		StoreWorker->base.mAffinityQueue,
 		&AffinityToken,
 		&Packet,
-		NULL,
-		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -235,17 +197,20 @@ int clnt_state_need_tree_head_noown2(
 	if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, GS_PAYLOAD_OID_LEN)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, oTreeHeadOid->id, GIT_OID_RAWSZ)))
+	if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, TreeHeadOid->id, GIT_OID_RAWSZ)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_latest_commit_tree_oid(RepositoryT, StoreWorker->mRefNameMainBuf, &CommitHeadOidT, &TreeHeadOidT)))
+	if (!!(r = clnt_latest_commit_tree_oid(*State->mRepositoryT, pStoreWorker->mRefNameMainBuf, &CommitHeadOidT, &TreeHeadOidT)))
 		GS_GOTO_CLEAN();
 
-	if (git_oid_cmp(&TreeHeadOidT, oTreeHeadOid) == 0) {
+	if (git_oid_cmp(&TreeHeadOidT, TreeHeadOid.get()) == 0) {
 		char buf[GIT_OID_HEXSZ] = {};
 		git_oid_fmt(buf, &CommitHeadOidT);
 		GS_LOG(I, PF, "[clnt] Have latest [%.*s]\n", (int)GIT_OID_HEXSZ, buf);
 	}
+
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_TREELIST, a,
+		{ a.mTreeHeadOid = TreeHeadOid; });
 
 clean:
 	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
@@ -253,57 +218,17 @@ clean:
 	return r;
 }
 
-int clnt_state_need_treelist_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker)
+int clnt_state_need_treelist_work(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
 	sp<std::vector<git_oid> > Treelist(new std::vector<git_oid>);
 	sp<std::vector<git_oid> > MissingTreelist(new std::vector<git_oid>);
 
-	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<git_oid> &TreeHeadOid = State->mTreeHeadOid;
+	struct GsStoreWorkerClient *pStoreWorker = (struct GsStoreWorkerClient *) CrankData->mStoreWorker;
+	struct GsExtraWorkerClient *pExtraWorker = (struct GsExtraWorkerClient *) CrankData->mExtraWorker;
 
-	if (!!(r = clnt_state_need_treelist_noown2(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		WorkerId,
-		RepositoryT,
-		TreeHeadOid.get(),
-		Treelist.get(),
-		MissingTreelist.get(),
-		ioExtraWorker)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_BLOBLIST, a,
-		{ a.mTreelist = Treelist;
-		  a.mMissingTreelist = MissingTreelist; });
-
-clean:
-
-	return r;
-}
-
-int clnt_state_need_treelist_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	git_oid *TreeHeadOid,
-	std::vector<git_oid> *oTreelist,
-	std::vector<git_oid> *oMissingTreelist,
-	struct GsExtraWorkerClient **ioExtraWorker)
-{
-	int r = 0;
+	struct ClntState * const State = pStoreWorker->mClntState.get();
 
 	std::string Buffer;
 	GsPacket *Packet = NULL;
@@ -316,30 +241,32 @@ int clnt_state_need_treelist_noown2(
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
 	GS_BYPART_DATA_VAR(OidVector, BypartTreelist);
-	GS_BYPART_DATA_INIT(OidVector, BypartTreelist, oTreelist);
+	GS_BYPART_DATA_INIT(OidVector, BypartTreelist, Treelist.get());
 
-	if (!!(r = aux_frame_full_write_request_treelist(TreeHeadOid->id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeBuffer)))
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = aux_frame_full_write_request_treelist(State->mTreeHeadOid->id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&StoreWorker->base.mIntrToken,
-		(*ioExtraWorker)->mId,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
+		pExtraWorker->mId,
 		Buffer.data(), Buffer.size())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		StoreWorker->base.mAffinityQueue,
 		&AffinityToken,
 		&Packet,
-		NULL,
-		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -353,8 +280,12 @@ int clnt_state_need_treelist_noown2(
 	if (!!(r = aux_frame_read_oid_vec(Packet->data, LengthLimit, Offset, &Offset, &BypartTreelist, gs_bypart_cb_OidVector)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_missing_trees(RepositoryT, oTreelist, oMissingTreelist)))
+	if (!!(r = clnt_missing_trees(*State->mRepositoryT, Treelist.get(), MissingTreelist.get())))
 		GS_GOTO_CLEAN();
+
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_BLOBLIST, a,
+		{ a.mTreelist = Treelist;
+		  a.mMissingTreelist = MissingTreelist; });
 
 clean:
 	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
@@ -362,79 +293,23 @@ clean:
 	return r;
 }
 
-int clnt_state_need_bloblist_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker)
+int clnt_state_need_bloblist_work(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
 	sp<std::vector<git_oid> > MissingBloblist(new std::vector<git_oid>);
+	sp<GsPacketWithOffset> PacketTreeWO(new GsPacketWithOffset);
 
-	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
+	struct GsStoreWorkerClient *pStoreWorker = (struct GsStoreWorkerClient *) CrankData->mStoreWorker;
+	struct GsExtraWorkerClient *pExtraWorker = (struct GsExtraWorkerClient *) CrankData->mExtraWorker;
 
-	GsPacket *PacketTree = NULL;
-
-	uint32_t OffsetSizeBufferTree;
-	uint32_t OffsetObjectBufferTree;
-
-	sp<GsPacketWithOffset> TmpTreePacketWithOffset(new GsPacketWithOffset);
-
-	if (!!(r = clnt_state_need_bloblist_noown2(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		WorkerId,
-		RepositoryT,
-		MissingTreelist.get(),
-		MissingBloblist.get(),
-		&PacketTree,
-		&OffsetSizeBufferTree,
-		&OffsetObjectBufferTree,
-		ioExtraWorker)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	TmpTreePacketWithOffset->mPacket = PacketTree;
-	TmpTreePacketWithOffset->mOffsetSize = OffsetSizeBufferTree;
-	TmpTreePacketWithOffset->mOffsetObject = OffsetObjectBufferTree;
-
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE, a,
-		{ a.mMissingBloblist = MissingBloblist;
-		  a.mTreePacketWithOffset = TmpTreePacketWithOffset; });
-
-clean:
-
-	return r;
-}
-
-int clnt_state_need_bloblist_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *oMissingBloblist,
-	struct GsPacket **oPacketTree,
-	uint32_t *oOffsetSizeBufferTree,
-	uint32_t *oOffsetObjectBufferTree,
-	struct GsExtraWorkerClient **ioExtraWorker)
-{
-	int r = 0;
+	struct ClntState * const State = pStoreWorker->mClntState.get();
 
 	std::string Buffer;
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
-	GsPacket *PacketTree = NULL;
-
-	GsStrided MissingTreelistStrided = {};
+	struct GsStrided MissingTreelistStrided = {};
 
 	uint32_t BufferTreeLen = 0;
 
@@ -443,16 +318,22 @@ int clnt_state_need_bloblist_noown2(
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
-	if (!!(r = gs_strided_for_oid_vec_cpp(MissingTreelist, &MissingTreelistStrided)))
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_strided_for_oid_vec_cpp(State->mMissingTreelist.get(), &MissingTreelistStrided)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_full_write_request_trees(MissingTreelistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&StoreWorker->base.mIntrToken,
-		(*ioExtraWorker)->mId,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
+		pExtraWorker->mId,
 		Buffer.data(), Buffer.size())))
 	{
 		GS_GOTO_CLEAN();
@@ -460,44 +341,50 @@ int clnt_state_need_bloblist_noown2(
 
 	/* NOTE: NOALLOC - PacketTree Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		StoreWorker->base.mAffinityQueue,
 		&AffinityToken,
-		&PacketTree,
-		NULL,
-		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
+		&PacketTreeWO->mPacket,
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = aux_frame_ensure_frametype(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
+	if (!!(r = aux_frame_ensure_frametype(PacketTreeWO->mPacket->data, PacketTreeWO->mPacket->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_TREES))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size_limit(PacketTree->data, PacketTree->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(PacketTreeWO->mPacket->data, PacketTreeWO->mPacket->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketTree Offsets use start */
 
-	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketTree->data, LengthLimit, Offset, &Offset,
-		&BufferTreeLen, oOffsetSizeBufferTree, oOffsetObjectBufferTree)))
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketTreeWO->mPacket->data, LengthLimit, Offset, &Offset,
+		NULL, &PacketTreeWO->mOffsetSize, &PacketTreeWO->mOffsetObject)))
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	if (!!(r = gs_packet_with_offset_get_veclen(PacketTreeWO.get(), &BufferTreeLen)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: proper handling for this condition / malformed request or response
+	//   presumably server did not send all the requested trees
+	GS_ASSERT(BufferTreeLen == State->mMissingTreelist->size());
 
 	if (!!(r = clnt_missing_blobs_bare(
-		RepositoryT,
-		PacketTree->data, LengthLimit, *oOffsetSizeBufferTree,
-		PacketTree->data, LengthLimit, *oOffsetObjectBufferTree, MissingTreelist->size(), oMissingBloblist)))
+		*State->mRepositoryT,
+		PacketTreeWO->mPacket->data, LengthLimit, PacketTreeWO->mOffsetSize,
+		PacketTreeWO->mPacket->data, LengthLimit, PacketTreeWO->mOffsetObject,
+		BufferTreeLen,
+		MissingBloblist.get())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (oPacketTree)
-		*oPacketTree = PacketTree;
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE, a,
+		{ a.mMissingBloblist = MissingBloblist;
+		  a.mTreePacketWithOffset = PacketTreeWO; });
 
 clean:
 	GS_RELEASE_F(&AffinityToken, gs_affinity_token_release);
@@ -505,98 +392,49 @@ clean:
 	return r;
 }
 
-int clnt_state_need_written_blob_and_tree_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker)
+int clnt_state_need_written_blob_and_tree_work(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
 	sp<std::vector<git_oid> > WrittenBlob(new std::vector<git_oid>);
 	sp<std::vector<git_oid> > WrittenTree(new std::vector<git_oid>);
+	sp<GsPacketWithOffset> PacketBlobWO(new GsPacketWithOffset);
 
-	git_repository * const RepositoryT = *State->mRepositoryT;
-	const sp<std::vector<git_oid> > &MissingTreelist = State->mMissingTreelist;
-	const sp<std::vector<git_oid> > &MissingBloblist = State->mMissingBloblist;
-	const sp<GsPacketWithOffset> &PacketTreeWithOffset = State->mTreePacketWithOffset;
-	GsPacket * &PacketTree = PacketTreeWithOffset->mPacket;
-	const uint32_t &OffsetSizeBufferTree = PacketTreeWithOffset->mOffsetSize;
-	const uint32_t &OffsetObjectBufferTree = PacketTreeWithOffset->mOffsetObject;
+	struct GsStoreWorkerClient *pStoreWorker = (struct GsStoreWorkerClient *) CrankData->mStoreWorker;
+	struct GsExtraWorkerClient *pExtraWorker = (struct GsExtraWorkerClient *) CrankData->mExtraWorker;
 
-	if (!!(r = clnt_state_need_written_blob_and_tree_noown2(
-		WorkerDataRecv,
-		WorkerDataSend,
-		StoreWorker,
-		WorkerId,
-		RepositoryT,
-		MissingTreelist.get(),
-		MissingBloblist.get(),
-		PacketTree,
-		OffsetSizeBufferTree,
-		OffsetObjectBufferTree,
-		WrittenBlob.get(),
-		WrittenTree.get(),
-		ioExtraWorker)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_UPDATED_REF, a,
-		{ a.mWrittenBlob = WrittenBlob;
-		  a.mWrittenTree = WrittenTree; });
-
-clean:
-
-	return r;
-}
-
-int clnt_state_need_written_blob_and_tree_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *MissingBloblist,
-	struct GsPacket * PacketTree,
-	uint32_t OffsetSizeBufferTree,
-	uint32_t OffsetObjectBufferTree,
-	std::vector<git_oid> *oWrittenBlob,
-	std::vector<git_oid> *oWrittenTree,
-	struct GsExtraWorkerClient **ioExtraWorker)
-{
-	int r = 0;
+	struct ClntState * const State = pStoreWorker->mClntState.get();
 
 	std::string Buffer;
 	uint32_t Offset = 0;
 	uint32_t LengthLimit = 0;
 
-	GsPacket *PacketBlob = NULL;
+	struct GsStrided MissingBloblistStrided = {};
 
-	GsStrided MissingBloblistStrided = {};
-
-	uint32_t BufferBlobLen;
-	uint32_t OffsetSizeBufferBlob;
-	uint32_t OffsetObjectBufferBlob;
+	uint32_t BufferBlobLen = 0;
+	uint32_t BufferTreeLen = 0;
 
 	struct GsAffinityToken AffinityToken = {};
 
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
 
-	if (!!(r = gs_strided_for_oid_vec_cpp(MissingBloblist, &MissingBloblistStrided)))
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_strided_for_oid_vec_cpp(State->mMissingBloblist.get(), &MissingBloblistStrided)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_frame_full_write_request_blobs(MissingBloblistStrided, gs_bysize_cb_String, &BysizeBuffer)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_worker_packet_enqueue(
-		WorkerDataSend,
-		&StoreWorker->base.mIntrToken,
-		(*ioExtraWorker)->mId,
+		CrankData->mWorkerDataSend,
+		&CrankData->mStoreWorker->mIntrToken,
+		pExtraWorker->mId,
 		Buffer.data(), Buffer.size())))
 	{
 		GS_GOTO_CLEAN();
@@ -604,52 +442,63 @@ int clnt_state_need_written_blob_and_tree_noown2(
 
 	/* NOTE: NOALLOC - PacketBlob Lifetime start */
 
-	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-		WorkerDataRecv,
-		WorkerDataSend,
-		WorkerId,
+	if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+		CrankData,
 		GS_SERV_AUX_ARBITRARY_TIMEOUT_MS,
-		StoreWorker->base.mAffinityQueue,
 		&AffinityToken,
-		&PacketBlob,
-		NULL,
-		GS_EXTRA_WORKER_PP_BASE_CAST(ioExtraWorker, CLIENT))))
+		&PacketBlobWO->mPacket,
+		NULL)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = aux_frame_ensure_frametype(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
+	if (!!(r = aux_frame_ensure_frametype(PacketBlobWO->mPacket->data, PacketBlobWO->mPacket->dataLength, Offset, &Offset, GS_FRAME_TYPE_DECL(RESPONSE_BLOBS))))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_frame_read_size_limit(PacketBlob->data, PacketBlob->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
+	if (!!(r = aux_frame_read_size_limit(PacketBlobWO->mPacket->data, PacketBlobWO->mPacket->dataLength, Offset, &Offset, GS_FRAME_SIZE_LEN, &LengthLimit)))
 		GS_GOTO_CLEAN();
 
 	/* NOTE: NOALLOC - PacketBlob Offsets use start */
 
-	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketBlob->data, LengthLimit, Offset, &Offset,
-		&BufferBlobLen, &OffsetSizeBufferBlob, &OffsetObjectBufferBlob)))
+	if (!!(r = aux_frame_full_aux_read_paired_vec_noalloc(PacketBlobWO->mPacket->data, LengthLimit, Offset, &Offset,
+		NULL, &PacketBlobWO->mOffsetSize, &PacketBlobWO->mOffsetObject)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
+	if (!!(r = gs_packet_with_offset_get_veclen(PacketBlobWO.get(), &BufferBlobLen)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_packet_with_offset_get_veclen(State->mTreePacketWithOffset.get(), &BufferTreeLen)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: proper handling for this condition / malformed request or response
+	//   presumably server did not send all the requested blobs and trees
+	GS_ASSERT(BufferBlobLen == State->mMissingBloblist->size());
+	GS_ASSERT(BufferTreeLen == State->mMissingTreelist->size());
+
 	if (!!(r = clnt_deserialize_blobs(
-		RepositoryT,
-		PacketBlob->data, LengthLimit, OffsetSizeBufferBlob,
-		PacketBlob->data, LengthLimit, OffsetObjectBufferBlob,
-		MissingBloblist->size(), oWrittenBlob)))
+		*State->mRepositoryT,
+		PacketBlobWO->mPacket->data, LengthLimit, PacketBlobWO->mOffsetSize,
+		PacketBlobWO->mPacket->data, LengthLimit, PacketBlobWO->mOffsetObject,
+		BufferBlobLen, WrittenBlob.get())))
 	{
 		GS_GOTO_CLEAN();
 	}
 
 	// FIXME: using full size (PacketTree->dataLength) instead of LengthLimit of PacketTree (NOT of PacketBlob!)
 	if (!!(r = clnt_deserialize_trees(
-		RepositoryT,
-		PacketTree->data, PacketTree->dataLength, OffsetSizeBufferTree,
-		PacketTree->data, PacketTree->dataLength, OffsetObjectBufferTree,
-		MissingTreelist->size(), oWrittenTree)))
+		*State->mRepositoryT,
+		State->mTreePacketWithOffset->mPacket->data, State->mTreePacketWithOffset->mPacket->dataLength, State->mTreePacketWithOffset->mOffsetSize,
+		State->mTreePacketWithOffset->mPacket->data, State->mTreePacketWithOffset->mPacket->dataLength, State->mTreePacketWithOffset->mOffsetObject,
+		BufferTreeLen, WrittenTree.get())))
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	GS_CLNT_STATE_CODE_SET_ENSURE_NONUCF(State, GS_CLNT_STATE_CODE_NEED_UPDATED_REF, a,
+		{ a.mWrittenBlob = WrittenBlob;
+		  a.mWrittenTree = WrittenTree; });
 
 clean:
 
@@ -711,17 +560,18 @@ clean:
 	return r;
 }
 
-int clnt_state_crank2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker)
+int clnt_state_crank2(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
+	struct GsStoreWorkerClient *pStoreWorker = (GsStoreWorkerClient *) CrankData->mStoreWorker;
+
+	struct ClntState *State = pStoreWorker->mClntState.get();
+
 	uint32_t Code = 0;
+
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
+		GS_ERR_CLEAN(1);
 
 	if (!!(r = clnt_state_code(State, &Code)))
 		GS_GOTO_CLEAN();
@@ -734,7 +584,7 @@ int clnt_state_crank2(
 	{
 		if (!!(r = clnt_state_need_repository_setup2(
 			State,
-			StoreWorker->mRepoMainPathBuf, StoreWorker->mLenRepoMainPath)))
+			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -743,68 +593,36 @@ int clnt_state_crank2(
 
 	case GS_CLNT_STATE_CODE_NEED_TREE_HEAD:
 	{
-		if (!!(r = clnt_state_need_tree_head_setup2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			StoreWorker,
-			WorkerId,
-			State,
-			ioExtraWorker)))
-		{
+		if (!!(r = clnt_state_need_tree_head_work(CrankData)))
 			GS_GOTO_CLEAN();
-		}
 	}
 	break;
 
 	case GS_CLNT_STATE_CODE_NEED_TREELIST:
 	{
-		if (!!(r = clnt_state_need_treelist_setup2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			StoreWorker,
-			WorkerId,
-			State,
-			ioExtraWorker)))
-		{
+		if (!!(r = clnt_state_need_treelist_work(CrankData)))
 			GS_GOTO_CLEAN();
-		}
 	}
 	break;
 
 	case GS_CLNT_STATE_CODE_NEED_BLOBLIST:
 	{
-		if (!!(r = clnt_state_need_bloblist_setup2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			StoreWorker,
-			WorkerId,
-			State,
-			ioExtraWorker)))
-		{
+		if (!!(r = clnt_state_need_bloblist_work(CrankData)))
 			GS_GOTO_CLEAN();
-		}
 	}
 	break;
 
 	case GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE:
 	{
-		if (!!(r = clnt_state_need_written_blob_and_tree_setup2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			StoreWorker,
-			WorkerId,
-			State,
-			ioExtraWorker)))
-		{
+		if (!!(r = clnt_state_need_written_blob_and_tree_work(CrankData)))
 			GS_GOTO_CLEAN();
-		}
 	}
 	break;
 
 	case GS_CLNT_STATE_CODE_NEED_UPDATED_REF:
 	{
 		if (!!(r = clnt_state_need_updated_ref_setup2(
-			StoreWorker,
+			pStoreWorker,
 			State)))
 		{
 			GS_GOTO_CLEAN();
@@ -813,7 +631,7 @@ int clnt_state_crank2(
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{
-		int r2 = gs_helper_api_worker_exit(WorkerDataSend);
+		int r2 = gs_helper_api_worker_exit(CrankData->mWorkerDataSend);
 		GS_ERR_CLEAN(r2);
 	}
 	break;
@@ -1061,40 +879,14 @@ clean:
 	return r;
 }
 
-int gs_store_worker_cb_crank_t_client(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ioExtraWorker,
-	gs_worker_id_t WorkerId)
+int gs_store_worker_cb_crank_t_client(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
-	GsStoreWorkerClient *pStoreWorker = (GsStoreWorkerClient *) StoreWorker;
-	GsExtraWorkerClient **ppIoExtraWorker = (GsExtraWorkerClient **) ioExtraWorker;
-
-	if (pStoreWorker->base.magic != GS_STORE_WORKER_CLIENT_MAGIC)
-		GS_ERR_CLEAN(1);
-
-	if ((*ppIoExtraWorker)->base.magic != GS_EXTRA_WORKER_CLIENT_MAGIC)
-		GS_ERR_CLEAN(1);
-
 	while (true) {
-
-		if (!!(r = clnt_state_crank2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			pStoreWorker,
-			WorkerId,
-			pStoreWorker->mClntState.get(),
-			ppIoExtraWorker)))
-		{
-			GS_ERR_NO_CLEAN(r);
-		}
-
+		if (!!(r = clnt_state_crank2(CrankData)))
+			GS_ERR_CLEAN(r);
 	}
-
-noclean:
 
 clean:
 

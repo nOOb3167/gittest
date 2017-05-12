@@ -73,14 +73,7 @@ int gs_store_worker_selfupdate_basic_create(
 	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker);
 int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWorker);
 
-int crank_selfupdate_basic(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	gs_worker_id_t WorkerId,
-	struct GsExtraWorker **ioExtraWorker,
-	uint32_t *oHaveUpdate,
-	std::string *oBufferUpdate);
+int crank_selfupdate_basic(struct GsCrankData *CrankData);
 
 int gs_net_full_create_connection_selfupdate_basic(
 	uint32_t ServPort,
@@ -89,12 +82,7 @@ int gs_net_full_create_connection_selfupdate_basic(
 	uint32_t *oHaveUpdate,
 	std::string *BufferUpdate);
 
-int gs_store_worker_cb_crank_t_selfupdate_basic(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ioExtraWorker,
-	gs_worker_id_t WorkerId);
+int gs_store_worker_cb_crank_t_selfupdate_basic(struct GsCrankData *CrankData);
 
 int gs_extra_host_create_cb_create_t_selfupdate_basic(
 	struct GsExtraHostCreate *ExtraHostCreate,

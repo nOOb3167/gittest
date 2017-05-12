@@ -195,29 +195,24 @@ clean:
 	return r;
 }
 
-int serv_state_crank2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	gs_worker_id_t WorkerId,
-	struct GsAffinityQueue *AffinityQueue,
-	struct GsIntrTokenSurrogate *IntrToken,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	struct GsExtraWorker **ioExtraWorker)
+int serv_state_crank2(struct GsCrankData *CrankData)
 {
 	int r = 0;
+
+	struct GsStoreWorkerServer *pStoreWorker = (struct GsStoreWorkerServer *) CrankData->mStoreWorker;
 
 	git_repository *Repository = NULL;
 	git_repository *RepositorySelfUpdate = NULL;
 
 	struct GsAffinityToken AffinityToken = {};
 
-	if (!!(r = aux_repository_open(RepoMainPathBuf, &Repository)))
+	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = aux_repository_open(pStoreWorker->mRepoMainPathBuf, &Repository)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(RepoSelfUpdatePathBuf, &RepositorySelfUpdate)))
+	if (!!(r = aux_repository_open(pStoreWorker->mRepoSelfUpdatePathBuf, &RepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	while (true) {
@@ -227,16 +222,12 @@ int serv_state_crank2(
 		GS_LOG(I, S, "waiting for request");
 
 		// FIXME: need some kind of infinite timeout mechanism or alt func
-		if (!!(r = gs_worker_packet_dequeue_timeout_reconnects(
-			WorkerDataRecv,
-			WorkerDataSend,
-			WorkerId,
+		if (!!(r = gs_worker_packet_dequeue_timeout_reconnects2(
+			CrankData,
 			GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS,
-			AffinityQueue,
 			&AffinityToken,
 			&Packet,
-			&IdForSend,
-			ioExtraWorker)))
+			&IdForSend)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -267,7 +258,7 @@ int serv_state_crank2(
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(Repository, pStoreWorker->mRefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
 			GS_OID_STR_MAKE(TreeHeadOid);
@@ -276,7 +267,7 @@ int serv_state_crank2(
 			if (!!(r = aux_frame_full_write_response_latest_commit_tree(TreeHeadOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
+			if (!!(r = gs_worker_packet_enqueue(CrankData->mWorkerDataSend, &CrankData->mStoreWorker->mIntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
 				GS_GOTO_CLEAN();
 		}
 		break;
@@ -309,7 +300,7 @@ int serv_state_crank2(
 			if (!!(r = aux_frame_full_write_response_treelist(TreelistStrided, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
+			if (!!(r = gs_worker_packet_enqueue(CrankData->mWorkerDataSend, &CrankData->mStoreWorker->mIntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
 				GS_GOTO_CLEAN();
 		}
 		break;
@@ -349,7 +340,7 @@ int serv_state_crank2(
 				GS_GOTO_CLEAN();
 			}
 
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
+			if (!!(r = gs_worker_packet_enqueue(CrankData->mWorkerDataSend, &CrankData->mStoreWorker->mIntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
 				GS_GOTO_CLEAN();
 		}
 		break;
@@ -357,9 +348,9 @@ int serv_state_crank2(
 		case GS_FRAME_TYPE_REQUEST_BLOBS:
 		{
 			if (!!(r = serv_state_service_request_blobs2(
-				WorkerDataSend,
+				CrankData->mWorkerDataSend,
 				IdForSend,
-				IntrToken,
+				&CrankData->mStoreWorker->mIntrToken,
 				Packet,
 				OffsetSize,
 				Repository,
@@ -373,9 +364,9 @@ int serv_state_crank2(
 		case GS_FRAME_TYPE_REQUEST_BLOBS_SELFUPDATE:
 		{
 			if (!!(r = serv_state_service_request_blobs2(
-				WorkerDataSend,
+				CrankData->mWorkerDataSend,
 				IdForSend,
-				IntrToken,
+				&CrankData->mStoreWorker->mIntrToken,
 				Packet,
 				OffsetSize,
 				RepositorySelfUpdate,
@@ -400,7 +391,7 @@ int serv_state_crank2(
 			if (!!(r = aux_frame_read_size_ensure(Packet->data, Packet->dataLength, Offset, &Offset, 0)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, RefNameSelfUpdateBuf, &CommitHeadOid, &TreeHeadOid)))
+			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, pStoreWorker->mRefNameSelfUpdateBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
@@ -409,7 +400,7 @@ int serv_state_crank2(
 			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(BlobSelfUpdateOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = gs_worker_packet_enqueue(WorkerDataSend, IntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
+			if (!!(r = gs_worker_packet_enqueue(CrankData->mWorkerDataSend, &CrankData->mStoreWorker->mIntrToken, IdForSend, ResponseBuffer.data(), ResponseBuffer.size())))
 				GS_GOTO_CLEAN();
 		}
 		break;
@@ -530,41 +521,13 @@ clean:
 	return r;
 }
 
-int gs_store_worker_cb_crank_t_server(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ioExtraWorker,
-	gs_worker_id_t WorkerId)
+int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
-	GsStoreWorkerServer *pStoreWorker = (GsStoreWorkerServer *) StoreWorker;
-	GsExtraWorkerServer *pExtraWorker = (GsExtraWorkerServer *) *ioExtraWorker;
-
-	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
-		GS_ERR_CLEAN(1);
-
-	if (pExtraWorker->base.magic != GS_EXTRA_WORKER_SERVER_MAGIC)
-		GS_ERR_CLEAN(1);
-
 	while (true) {
-
-		if (!!(r = serv_state_crank2(
-			WorkerDataRecv,
-			WorkerDataSend,
-			WorkerId,
-			pStoreWorker->base.mAffinityQueue,
-			&pStoreWorker->base.mIntrToken,
-			pStoreWorker->mRefNameMainBuf, pStoreWorker->mLenRefNameMain,
-			pStoreWorker->mRefNameSelfUpdateBuf, pStoreWorker->mLenRefNameSelfUpdate,
-			pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath,
-			pStoreWorker->mRepoSelfUpdatePathBuf, pStoreWorker->mLenRepoSelfUpdatePath,
-			ioExtraWorker)))
-		{
+		if (!!(r = serv_state_crank2(CrankData)))
 			GS_GOTO_CLEAN();
-		}
-
 	}
 
 clean:

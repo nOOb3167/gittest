@@ -381,6 +381,17 @@ int gs_packet_create(
 	return 0;
 }
 
+int gs_packet_with_offset_get_veclen(
+	struct GsPacketWithOffset *PacketWithOffset,
+	uint32_t *oVecLen)
+{
+	GS_ASSERT(
+		GS_FRAME_SIZE_LEN == sizeof(uint32_t) &&
+		PacketWithOffset->mOffsetObject >= PacketWithOffset->mOffsetSize &&
+		(PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) % GS_FRAME_SIZE_LEN == 0);
+	return (PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) / GS_FRAME_SIZE_LEN;
+}
+
 int gs_worker_data_create(struct GsWorkerData **oWorkerData)
 {
 	struct GsWorkerData *WorkerData = new GsWorkerData();
@@ -576,6 +587,16 @@ bool gs_worker_request_isempty(struct GsWorkerData *pThis)
 {
 	{
 		std::unique_lock<std::mutex> lock(*pThis->mWorkerDataMutex);
+		return gs_worker_request_isempty_nolock(pThis, &lock);
+	}
+}
+
+bool gs_worker_request_isempty_nolock(
+	struct GsWorkerData *pThis,
+	std::unique_lock<std::mutex> *Lock)
+{
+	{
+		GS_ASSERT(Lock->owns_lock());
 		return pThis->mWorkerQueue->empty();
 	}
 }
@@ -947,7 +968,7 @@ clean:
 	         either normally or after timeout.
 */
 int gs_worker_packet_dequeue_timeout_reconnects(
-	struct GsWorkerData *pThis,
+	struct GsWorkerDataVec *WorkerDataVec,
 	struct GsWorkerData *WorkerDataSend,
 	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
@@ -959,13 +980,15 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 {
 	int r = 0;
 
-	GsWorkerRequestData Request = {};
+	struct GsWorkerData *WorkerData = gs_worker_data_vec_id(WorkerDataVec, WorkerId);
+
+	struct GsWorkerRequestData Request = {};
 
 	/* attempt dequeuing a request normally.
 	   GS_ERRCODE_TIMEOUT not considered an error and will be handled specially. */
 	r = gs_affinity_queue_request_dequeue_and_acquire(
 		AffinityQueue,
-		pThis,
+		WorkerDataVec,
 		WorkerId,
 		TimeoutMs,
 		&Request,
@@ -976,7 +999,7 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 	/* GS_ERRCODE_TIMEOUT causes a second request dequeue attempt.
 	   In case of, the reconnect protocol is also ran. */
 	if (r == GS_ERRCODE_TIMEOUT)
-		if (!!(r = gs_helper_api_worker_reconnect(pThis, WorkerDataSend, &Request)))
+		if (!!(r = gs_helper_api_worker_reconnect(WorkerData, WorkerDataSend, &Request)))
 			GS_GOTO_CLEAN();
 
 	if (Request.type == GS_SERV_WORKER_REQUEST_DATA_TYPE_RECONNECT_RECONNECT)
@@ -999,6 +1022,25 @@ noclean:
 clean:
 
 	return r;
+}
+
+int gs_worker_packet_dequeue_timeout_reconnects2(
+	struct GsCrankData *CrankData,
+	uint32_t TimeoutMs,
+	struct GsAffinityToken *ioAffinityToken,
+	struct GsPacket **oPacket,
+	gs_connection_surrogate_id_t *oId)
+{
+	return gs_worker_packet_dequeue_timeout_reconnects(
+		CrankData->mWorkerDataVecRecv,
+		CrankData->mWorkerDataSend,
+		CrankData->mWorkerId,
+		TimeoutMs,
+		CrankData->mStoreWorker->mAffinityQueue,
+		ioAffinityToken,
+		oPacket,
+		oId,
+		&CrankData->mExtraWorker);
 }
 
 int gs_worker_data_vec_create(
@@ -1183,7 +1225,7 @@ int gs_affinity_queue_worker_completed_all_requests_somelock(
 
 		{
 			GS_ASSERT(! AffinityQueue->mPrioSet.empty());
-			struct GsPrioData PrioHighest = *AffinityQueue->mPrioSet.end();
+			struct GsPrioData PrioHighest = *(--AffinityQueue->mPrioSet.end());
 			if (PrioHighest.mPrio > 1) {
 				/* NOTE: even though prio is greater than one, we may still
 				         end up stealing nothing (in current design prio
@@ -1224,7 +1266,7 @@ clean:
 
 int gs_affinity_queue_request_dequeue_and_acquire(
 	struct GsAffinityQueue *AffinityQueue,
-	struct GsWorkerData *WorkerData,
+	struct GsWorkerDataVec *WorkerDataVec,
 	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
 	struct GsWorkerRequestData *oValRequest,
@@ -1232,7 +1274,11 @@ int gs_affinity_queue_request_dequeue_and_acquire(
 {
 	int r = 0;
 
-	GsWorkerRequestData Request = {};
+	struct GsWorkerData *WorkerData = gs_worker_data_vec_id(WorkerDataVec, WorkerId);
+
+	struct GsWorkerRequestData Request = {};
+
+	bool QueueIsEmpty = false;
 
 	// FIXME: TODO: maybe make a _nolock version, and call it in scope of this function's lock
 	if (!!(r = gs_affinity_token_release(ioAffinityToken)))
@@ -1251,12 +1297,26 @@ int gs_affinity_queue_request_dequeue_and_acquire(
 			GS_GOTO_CLEAN();
 		}
 
+		QueueIsEmpty = gs_worker_request_isempty_nolock(WorkerData, &lock);
+
 		if (!!(r = gs_affinity_token_acquire_raw_nolock(
 			ioAffinityToken,
 			WorkerId,
 			AffinityQueue,
 			WorkerData,
 			Request)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	}
+
+	if (QueueIsEmpty) {
+		std::unique_lock<std::mutex> lock(AffinityQueue->mMutexData);
+		if (!!(r = gs_affinity_queue_worker_completed_all_requests_somelock(
+			AffinityQueue,
+			WorkerDataVec,
+			WorkerId,
+			&lock)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -2022,7 +2082,9 @@ void gs_worker_thread_func(
 {
 	int r = 0;
 
-	GsExtraWorker *ExtraWorker = NULL;
+	struct GsCrankData *CrankData = NULL;
+
+	struct GsExtraWorker *ExtraWorker = NULL;
 
 	gs_current_thread_name_set_cstr_2("work_", ExtraThreadName);
 
@@ -2037,17 +2099,24 @@ void gs_worker_thread_func(
 		GS_GOTO_CLEAN();
 	}
 
+	if (!!(r = gs_crank_data_create(
+		WorkerDataVecRecv,
+		WorkerDataSend,
+		StoreWorker,
+		WorkerId,
+		ExtraWorker,
+		&CrankData)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
 	do {
-		r = StoreWorker->cb_crank_t(
-			gs_worker_data_vec_id(WorkerDataVecRecv, WorkerId),
-			WorkerDataSend,
-			StoreWorker,
-			&ExtraWorker,
-			WorkerId);
+		r = StoreWorker->cb_crank_t(CrankData);
 	} while (r == GS_ERRCODE_RECONNECT);
 	/* NOTE: other return codes handled by fallthrough */
 
 clean:
+	GS_DELETE_F(CrankData, gs_crank_data_destroy);
 	GS_DELETE_VF(ExtraWorker, cb_destroy_t);
 
 	if (r == 0)
@@ -2151,6 +2220,34 @@ clean:
 	}
 
 	return r;
+}
+
+int gs_crank_data_create(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
+	struct GsExtraWorker *ExtraWorker,
+	struct GsCrankData **oCrankData)
+{
+	struct GsCrankData *CrankData = new GsCrankData();
+
+	CrankData->mWorkerDataVecRecv = WorkerDataVecRecv;
+	CrankData->mWorkerDataSend = WorkerDataSend;
+	CrankData->mStoreWorker = StoreWorker;
+	CrankData->mWorkerId = WorkerId;
+	CrankData->mExtraWorker = ExtraWorker;
+
+	if (oCrankData)
+		*oCrankData = CrankData;
+
+	return 0;
+}
+
+int gs_crank_data_destroy(struct GsCrankData *CrankData)
+{
+	GS_DELETE(&CrankData);
+	return 0;
 }
 
 int gs_full_connection_create(

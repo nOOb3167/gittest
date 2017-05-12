@@ -134,78 +134,10 @@ int clnt_state_need_repository_setup2(
 int clnt_state_need_repository_noown2(
 	const char *RepoMainOpenPathBuf, size_t LenRepoMainOpenPath,
 	git_repository **oRepositoryT);
-int clnt_state_need_tree_head_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_tree_head_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	git_oid *oTreeHeadOid,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_treelist_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_treelist_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	git_oid *TreeHeadOid,
-	std::vector<git_oid> *oTreelist,
-	std::vector<git_oid> *oMissingTreelist,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_bloblist_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_bloblist_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *oMissingBloblist,
-	struct GsPacket **oPacketTree,
-	uint32_t *oOffsetSizeBufferTree,
-	uint32_t *oOffsetObjectBufferTree,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_written_blob_and_tree_setup2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker);
-int clnt_state_need_written_blob_and_tree_noown2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	git_repository *RepositoryT,
-	std::vector<git_oid> *MissingTreelist,
-	std::vector<git_oid> *MissingBloblist,
-	struct GsPacket * PacketTree,
-	uint32_t OffsetSizeBufferTree,
-	uint32_t OffsetObjectBufferTree,
-	std::vector<git_oid> *oWrittenBlob,
-	std::vector<git_oid> *oWrittenTree,
-	struct GsExtraWorkerClient **ioExtraWorker);
+int clnt_state_need_tree_head_work(struct GsCrankData *CrankData);
+int clnt_state_need_treelist_work(struct GsCrankData *CrankData);
+int clnt_state_need_bloblist_work(struct GsCrankData *CrankData);
+int clnt_state_need_written_blob_and_tree_work(struct GsCrankData *CrankData);
 int clnt_state_need_updated_ref_setup2(
 	struct GsStoreWorkerClient *StoreWorker,
 	ClntState *State);
@@ -214,13 +146,7 @@ int clnt_state_need_updated_ref_noown2(
 	git_repository *RepositoryT,
 	git_oid *TreeHeadOid,
 	git_oid *oUpdatedRefOid);
-int clnt_state_crank2(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorkerClient *StoreWorker,
-	gs_worker_id_t WorkerId,
-	ClntState *State,
-	struct GsExtraWorkerClient **ioExtraWorker);
+int clnt_state_crank2(struct GsCrankData *CrankData);
 
 int gs_extra_host_create_client_create(
 	uint32_t ServPort,
@@ -248,12 +174,7 @@ int gs_net_full_create_connection_client(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	struct GsFullConnection **oConnectionClient);
 
-int gs_store_worker_cb_crank_t_client(
-	struct GsWorkerData *WorkerDataRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	struct GsExtraWorker **ExtraWorker,
-	gs_worker_id_t WorkerId);
+int gs_store_worker_cb_crank_t_client(struct GsCrankData *CrankData);
 
 int gs_extra_host_create_cb_create_t_client(
 	struct GsExtraHostCreate *ExtraHostCreate,

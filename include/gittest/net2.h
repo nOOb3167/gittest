@@ -179,6 +179,9 @@ struct GsPacket {
 
 /** manual-init struct
     value struct
+
+	@sa
+	   ::gs_packet_with_offset_get_veclen
 */
 struct GsPacketWithOffset {
 	struct GsPacket *mPacket;
@@ -362,12 +365,7 @@ struct GsStoreWorker
 {
 	uint32_t magic;
 
-	int(*cb_crank_t)(
-		struct GsWorkerData *WorkerDataRecv,
-		struct GsWorkerData *WorkerDataSend,
-		struct GsStoreWorker *StoreWorker,
-		struct GsExtraWorker **ioExtraWorker,
-		gs_worker_id_t WorkerId);
+	int(*cb_crank_t)(struct GsCrankData *CrankData);
 	int(*cb_destroy_t)(struct GsStoreWorker *StoreWorker);
 
 	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
@@ -375,6 +373,19 @@ struct GsStoreWorker
 	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
 
 	uint32_t mNumWorkers;
+};
+
+/** @sa
+       ::gs_crank_data_create
+	   ::gs_crank_data_destroy
+*/
+struct GsCrankData
+{
+	struct GsWorkerDataVec *mWorkerDataVecRecv;
+	struct GsWorkerData *mWorkerDataSend;
+	struct GsStoreWorker *mStoreWorker;
+	gs_worker_id_t mWorkerId;
+	struct GsExtraWorker *mExtraWorker; /**< mutable */
 };
 
 /**
@@ -445,7 +456,7 @@ int gs_affinity_queue_worker_completed_all_requests_somelock(
 	std::unique_lock<std::mutex> *LockAffinityQueue);
 int gs_affinity_queue_request_dequeue_and_acquire(
 	struct GsAffinityQueue *AffinityQueue,
-	struct GsWorkerData *WorkerData,
+	struct GsWorkerDataVec *WorkerDataVec,
 	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
 	struct GsWorkerRequestData *oValRequest,
@@ -518,6 +529,9 @@ int gs_packet_surrogate_release_ownership(struct GsPacketSurrogate *ioPacketSurr
 int gs_packet_create(
 	struct GsPacket **oPacket,
 	struct GsPacketSurrogate *valPacketSurrogate);
+int gs_packet_with_offset_get_veclen(
+	struct GsPacketWithOffset *PacketWithOffset,
+	uint32_t *oVecLen);
 
 int gs_worker_data_create(struct GsWorkerData **oWorkerData);
 int gs_worker_data_destroy(struct GsWorkerData *WorkerData);
@@ -555,6 +569,9 @@ int gs_worker_request_data_type_disconnect_make(
 	gs_connection_surrogate_id_t Id,
 	struct GsWorkerRequestData *outValWorkerRequest);
 bool gs_worker_request_isempty(struct GsWorkerData *pThis);
+bool gs_worker_request_isempty_nolock(
+	struct GsWorkerData *pThis,
+	std::unique_lock<std::mutex> *Lock);
 int gs_worker_request_enqueue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *valRequestData);
@@ -607,7 +624,7 @@ int gs_worker_packet_dequeue_(
 	gs_connection_surrogate_id_t *oId);
 
 int gs_worker_packet_dequeue_timeout_reconnects(
-	struct GsWorkerData *pThis,
+	struct GsWorkerDataVec *WorkerDataVec,
 	struct GsWorkerData *WorkerDataSend,
 	gs_worker_id_t WorkerId,
 	uint32_t TimeoutMs,
@@ -616,6 +633,12 @@ int gs_worker_packet_dequeue_timeout_reconnects(
 	struct GsPacket **oPacket,
 	gs_connection_surrogate_id_t *oId,
 	struct GsExtraWorker **ioExtraWorkerCond);
+int gs_worker_packet_dequeue_timeout_reconnects2(
+	struct GsCrankData *CrankData,
+	uint32_t TimeoutMs,
+	struct GsAffinityToken *ioAffinityToken,
+	struct GsPacket **oPacket,
+	gs_connection_surrogate_id_t *oId);
 
 int gs_worker_data_vec_create(
 	uint32_t NumWorkers,
@@ -704,6 +727,15 @@ int gs_net_full_create_connection(
 	struct GsStoreWorker     *StoreWorker,
 	struct GsFullConnection **oConnection,
 	const char *ExtraThreadName);
+
+int gs_crank_data_create(
+	struct GsWorkerDataVec *WorkerDataVecRecv,
+	struct GsWorkerData *WorkerDataSend,
+	struct GsStoreWorker *StoreWorker,
+	gs_worker_id_t WorkerId,
+	struct GsExtraWorker *ExtraWorker,
+	struct GsCrankData **oCrankData);
+int gs_crank_data_destroy(struct GsCrankData *CrankData);
 
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
