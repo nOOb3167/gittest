@@ -794,9 +794,7 @@ int gs_worker_request_dequeue_steal_except_nolock(
 		   the reconnect (ie are in a new reconnect cycle), and connections established (and any packages received from them)
 		   after a reconnect have IDs distinct from any connections of the previous reconnect cycle. */
 
-		gs_connection_surrogate_id_t StealId = ExceptId;
 		std::deque<GsWorkerRequestData>::iterator ItStealBound = SrcWorker->mWorkerQueue->begin();
-		std::vector<GsWorkerRequestData> TmpVec;
 		
 		/* find last EXIT or RECONNECT request (bound) - bound at begin() if none found */
 		// FIXME: search in reverse order for efficiency
@@ -819,37 +817,55 @@ int gs_worker_request_dequeue_steal_except_nolock(
 		     - iterate src from bound to end, pushing steals to dst queue, nonsteals to tmp queue
 		     - force-resize src queue to just before bound
 		     - push whole tmp queue to src
-			     as an optimization, no action on empty tmp queue
-			   recall prio needs to be adjusted if queues were manipulated
+			 recall prio needs to be adjusted if queues were manipulated
 		*/
 
-		for (std::deque<GsWorkerRequestData>::iterator StealIt = ItStealBound;
+		std::deque<GsWorkerRequestData>::iterator StealIt = ItStealBound;
+		gs_connection_surrogate_id_t StealId;
+		bool FoundStealableRequest = false;
+
+		std::vector<GsWorkerRequestData> TmpVec;
+
+		/* == choose the PACKET request ID (also improve the steal bound from last EXIT or RECONNECT to first stolen request) == */
+
+		for (/* empty */;
 			StealIt != SrcWorker->mWorkerQueue->end();
 			StealIt++)
 		{
 			if (StealIt->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET && StealIt->mId != ExceptId) {
-				if (StealId == ExceptId)
-					StealId = StealIt->mId;
-				if (StealId != ExceptId)
-					DstWorker->mWorkerQueue->push_back(*StealIt);
-			}
-			else {
-				TmpVec.push_back(*StealIt);
+				StealId = StealIt->mId;
+				ItStealBound = StealIt;
+				FoundStealableRequest = true;
+				break;
 			}
 		}
 
-		if (TmpVec.empty()) {
-			/* we AINT stealing nothing */
-		}
-		else {
-			/* we are actually stealing */
+		/* == can confirm early whether anything will be actually stolen == */
+
+		if (FoundStealableRequest) {
+
+			/* == iterate src from bound to end, pushing steals to dst queue, nonsteals to tmp queue == */
+
+			for (/* empty */;
+				StealIt != SrcWorker->mWorkerQueue->end();
+				StealIt++)
+			{
+				if (StealIt->type == GS_SERV_WORKER_REQUEST_DATA_TYPE_PACKET && StealIt->mId == StealId)
+					DstWorker->mWorkerQueue->push_back(*StealIt);
+				else
+					TmpVec.push_back(*StealIt);
+			}
+
+			/* == force-resize src queue to just before bound == */
 
 			SrcWorker->mWorkerQueue->resize(GS_MAX(0, std::distance(SrcWorker->mWorkerQueue->begin(), ItStealBound) - 1));
+
+			/* == push whole tmp queue to src == */
 
 			for (size_t i = 0; i < TmpVec.size(); i++)
 				SrcWorker->mWorkerQueue->push_back(TmpVec[i]);
 
-			/* fixup prio */
+			/* == fixup prio == */
 
 			{
 				GS_ASSERT(LockQueue->owns_lock());
@@ -864,7 +880,7 @@ int gs_worker_request_dequeue_steal_except_nolock(
 
 				if (!!(r = gs_affinity_queue_prio_decrement_nolock(
 					AffinityQueue,
-					DstWorkerId,
+					SrcWorkerId,
 					&LockWorker[1])))
 				{
 					GS_GOTO_CLEAN();
