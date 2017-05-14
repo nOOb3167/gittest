@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <gittest/misc.h>
 #include <gittest/gittest.h>
 
 #define GS_SELFUPDATE_ARG_UPDATEMODE "--gsselfupdate"
@@ -13,85 +14,10 @@
 #define GS_SELFUPDATE_ARG_VERSUB "--xversub"
 
 #define GS_STR_PARENT_EXPECTED_SUFFIX "gittest_clnt.exe"
-#define GS_STR_PARENT_EXPECTED_EXTENSION ".exe"
+#define GS_STR_PARENT_EXPECTED_EXTENSION GS_STR_EXECUTABLE_EXPECTED_EXTENSION
 #define GS_STR_PARENT_EXTRA_SUFFIX "_helper"
 
-#define GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_PATHNAME "../data"
-#define GS_SELFUPDATE_CONFIG_DEFAULT_RELATIVE_FILENAME "gittest_config_serv.conf"
-
-#define GS_MAGIC_CRASH_EXPR() { int *X = NULL; *X = 1234; }
-
-#define GS_AUX_CONFIG_COMMON_VAR_UINT32_NONUCF(KEYVAL, COMVARS, NAME)                  \
-	{                                                                                  \
-		uint32_t Conf ## NAME = 0;                                                     \
-		if (!!(r = aux_config_key_uint32((KEYVAL), "Conf" # NAME, & Conf ## NAME))) \
-			goto clean;                                                                \
-		(COMVARS).NAME = Conf ## NAME;                                                 \
-	}
-
-#define GS_AUX_CONFIG_COMMON_VAR_STRING_NONUCF(KEYVAL, COMVARS, NAME)                                         \
-		{                                                                                                     \
-		std::string Conf ## NAME;                                                                             \
-		if (!!(r = aux_config_key_ex((KEYVAL), "Conf" # NAME, & Conf ## NAME)))                            \
-			goto clean;                                                                                       \
-		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME))) \
-			goto clean;                                                                                       \
-		}
-
-#define GS_AUX_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KEYVAL, COMVARS, NAME)                                                    \
-	{                                                                                                                    \
-		std::string Conf ## NAME;                                                                                        \
-		if (!!(r = aux_config_key_ex_interpret_relative_current_executable((KEYVAL), "Conf" # NAME, & Conf ## NAME))) \
-			goto clean;                                                                                                  \
-		if (!!(r = aux_char_from_string_alloc(Conf ## NAME, &(COMVARS).NAME ## Buf, &(COMVARS).Len ## NAME)))            \
-			goto clean;                                                                                                  \
-	}
-
-
-struct GsAuxConfigCommonVars {
-	uint32_t ServPort;
-	char *ServHostNameBuf; size_t LenServHostName;
-	char *RefNameMainBuf; size_t LenRefNameMain;
-	char *RefNameSelfUpdateBuf; size_t LenRefNameSelfUpdate;
-	char *RepoMainPathBuf; size_t LenRepoMainPath;
-	char *RepoSelfUpdatePathBuf; size_t LenRepoSelfUpdatePath;
-	char *RepoMasterUpdatePathBuf; size_t LenRepoMasterUpdatePath;
-	char *RepoMasterUpdateCheckoutPathBuf; size_t LenRepoMasterUpdateCheckoutPath;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
-
-/* junk */
-
-#if 0
-int gs_build_current_executable_relative_filename_tr2_(
-	const char *RelativeBuf, size_t LenRelativeBuf,
-	char *ioCombinedBuf, size_t CombinedBufSize, size_t *LenCombinedBuf);
-#endif /* 0 */
-
-#if 0
-int gs_build_path_interpret_relative_current_executable_tr2_(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
-#endif /* 0 */
-
 /* to be implemented platform neutrally */
-
-int aux_config_read_default_everything(std::map<std::string, std::string> *oKeyVal);
-int aux_config_read_builtin(std::map<std::string, std::string> *oKeyVal);
-int aux_config_read_builtin_or_relative_current_executable(
-	const char *ExpectedLocationBuf, size_t LenExpectedLocation,
-	const char *ExpectedNameBuf, size_t LenExpectedName,
-	std::map<std::string, std::string> *oKeyVal);
-int aux_config_key_ex_interpret_relative_current_executable(
-	const confmap_t &KeyVal, const char *Key, std::string *oVal);
-int aux_config_get_common_vars(
-	const confmap_t &KeyVal,
-	GsAuxConfigCommonVars *oCommonVars);
-
-int gs_build_path_interpret_relative_current_executable(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
 
 int gs_build_child_filename(
 	const char *ParentFileNameBuf, size_t LenParentFileName,
@@ -110,21 +36,6 @@ int aux_selfupdate_main_mode_main();
 int aux_selfupdate_main(int argc, char **argv, const char *DefVerSub, uint32_t *oHaveUpdateShouldQuit);
 
 /* to be implemented per platform */
-
-int gs_file_exist(
-	const char *FileNameBuf, size_t LenFileName,
-	size_t *oIsExist);
-
-int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
-
-int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
-
-int gs_get_current_executable_directory(
-	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
-
-int gs_build_current_executable_relative_filename(
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
 
 int aux_selfupdate_create_child(
 	const char *FileNameChildBuf, size_t LenFileNameChild,

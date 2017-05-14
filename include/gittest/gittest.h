@@ -31,19 +31,6 @@ int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist
 int tree_toposort(git_repository *Repository, git_tree *Tree, topolist_t *oNodeList);
 
 int aux_gittest_init();
-size_t aux_config_decode_hex_char_(const char *pHexChar, size_t *oIsError);
-int aux_config_decode_hex_pairwise_swapped(const std::string &BufferSwapped, std::string *oDecoded);
-int aux_config_parse_find_next_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew);
-int aux_config_parse_skip_newline(const char *DataStart, uint32_t DataLength, uint32_t Offset, uint32_t *OffsetNew);
-int aux_config_parse(
-	const char *BufferBuf, size_t LenBuffer,
-	std::map<std::string, std::string> *oKeyVal);
-int aux_config_read_fullpath(
-	const char *PathFullBuf, size_t LenPathFull,
-	std::map<std::string, std::string> *oKeyVal);
-const char * aux_config_key(const confmap_t &KeyVal, const char *Key);
-int aux_config_key_ex(const confmap_t &KeyVal, const char *Key, std::string *oVal);
-int aux_config_key_uint32(const confmap_t &KeyVal, const char *Key, uint32_t *oVal);
 void aux_uint32_to_LE(uint32_t a, char *oBuf, size_t bufsize);
 void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize);
 void aux_topolist_print(const topolist_t &NodeListTopo);

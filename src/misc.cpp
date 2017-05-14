@@ -123,6 +123,60 @@ clean:
 	return r;
 }
 
+int gs_path_kludge_filenameize(char *ioPathBuf, size_t *oLenPath)
+{
+	char *sep = strrchr(ioPathBuf, '/');
+	sep = sep ? sep : strrchr(ioPathBuf, '\\');
+	if (sep) {
+		sep++; /* skip separator */
+		size_t len = ioPathBuf + strlen(ioPathBuf) - sep;
+		memmove(ioPathBuf, sep, len);
+		memset(ioPathBuf + len, '\0', 1);
+	}
+	*oLenPath = strlen(ioPathBuf);
+	return 0;
+}
+
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf)
+{
+	int r = 0;
+
+	size_t PossiblyRelativePathIsAbsolute = 0;
+
+	if (!!(r = gs_path_is_absolute(
+		PossiblyRelativePathBuf, LenPossiblyRelativePath,
+		&PossiblyRelativePathIsAbsolute)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (PossiblyRelativePathIsAbsolute) {
+
+		if (!!(r = gs_buf_copy_zero_terminate(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	} else {
+
+		if (!!(r = gs_build_current_executable_relative_filename(
+			PossiblyRelativePathBuf, LenPossiblyRelativePath,
+			ioPathBuf, PathBufSize, oLenPathBuf)))
+		{
+			GS_GOTO_CLEAN();
+		}
+
+	}
+
+clean:
+
+	return r;
+}
+
 void gs_current_thread_name_set_cstr(
 	const char *NameCStr)
 {

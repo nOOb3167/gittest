@@ -305,6 +305,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   SET(GITTEST_LIB_HEADERS
     include/gittest/gittest.h
     include/gittest/cbuf.h
+    include/gittest/config.h
     include/gittest/log.h
     include/gittest/misc.h
     include/gittest/bypart.h
@@ -315,6 +316,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
 
   SET(GITTEST_LIB_SOURCES
     src/cbuf.cpp
+    src/config.cpp
     src/log.cpp
     src/log_unified.cpp
     src/misc.cpp

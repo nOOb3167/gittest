@@ -6,7 +6,6 @@
 #include <sqlite3.h>
 
 #include <gittest/misc.h>
-#include <gittest/gittest_selfupdate.h>
 
 #include <gittest/log.h>
 

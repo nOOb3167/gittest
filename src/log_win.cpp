@@ -7,7 +7,6 @@
 
 #include <windows.h>
 
-#include <gittest/gittest_selfupdate.h> // gs_get_current_executable_filename
 #include <gittest/misc.h> // gs_build_modified_filename
 
 #include <gittest/log.h>
@@ -142,8 +141,8 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 
 	if (!!(r = gs_build_modified_filename(
 		CurrentFileNameBuf, LenCurrentFileName,
-		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
-		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
+		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
+		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
 		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),
 		LogFileNameBuf, sizeof LogFileNameBuf, &LenLogFileName)))

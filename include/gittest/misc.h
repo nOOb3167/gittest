@@ -19,6 +19,8 @@
 *   and only then attempt to trigger reevaluation.
 */
 
+#define GS_STR_EXECUTABLE_EXPECTED_EXTENSION ".exe"
+
 #if defined (_MSC_VER)
 #define GS_THREAD_LOCAL_DESIGNATOR __declspec( thread )
 #else
@@ -70,8 +72,6 @@
 #define GS_SP_SET_RAW_NULLING(VARNAME_SP, VARNAME_PRAW, TYPENAME) \
 	do { VARNAME_SP = std::shared_ptr<TYPENAME>(VARNAME_PRAW); VARNAME_PRAW = NULL; } while(0)
 
-typedef ::std::map<::std::string, ::std::string> confmap_t;
-
 // FIXME: evil? two character identifier inside header..
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -97,11 +97,19 @@ int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);
 
+int gs_path_kludge_filenameize(char *ioPathBuf, size_t *ioLenPath);
+
+int gs_build_path_interpret_relative_current_executable(
+	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
+	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
+
 void gs_current_thread_name_set_cstr(
 	const char *NameCStr);
 void gs_current_thread_name_set_cstr_2(
 	const char *BaseNameCStr,
 	const char *optExtraNameCStr);
+
+/* to be implemented per platform */
 
 void gs_current_thread_name_set(
 	const char *NameBuf,
@@ -116,6 +124,19 @@ int gs_path_append_abs_rel(
 	const char *RelativeBuf, size_t LenRelative,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
 
-int gs_path_kludge_filenameize(char *ioPathBuf, size_t *ioLenPath);
+int gs_file_exist(
+	const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsExist);
+
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
+
+int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
+
+int gs_get_current_executable_directory(
+	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
 
 #endif /* _GITTEST_MISC_H_ */

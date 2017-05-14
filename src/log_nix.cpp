@@ -3,7 +3,6 @@
 
 #include <signal.h>
 
-#include <gittest/gittest_selfupdate.h>
 #include <gittest/misc.h>
 #include <gittest/misc_nix.h>
 #include <gittest/log.h>
@@ -276,8 +275,8 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 	/* FIXME: some of these defines */
 	if (!!(r = gs_build_modified_filename(
 		CurrentFileNameBuf, LenCurrentFileName,
-		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
-		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
+		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
+		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
 		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),
 		LogFileNameBuf, sizeof LogFileNameBuf, &LenLogFileName)))

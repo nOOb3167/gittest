@@ -7,6 +7,7 @@
 #include <git2/sys/memes.h>
 
 #include <gittest/misc.h>
+#include <gittest/config.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>

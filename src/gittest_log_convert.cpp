@@ -4,7 +4,6 @@
 
 #include <gittest/misc.h>
 #include <gittest/log.h>
-#include <gittest/gittest_selfupdate.h>
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 

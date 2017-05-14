@@ -4,6 +4,8 @@
 #include <thread>  // std::this_thread
 #include <chrono>
 
+#include <gittest/misc.h>
+#include <gittest/config.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/net2.h>

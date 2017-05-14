@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif /* _MSC_VER */
+
 #include <cstddef>
 
 #include <windows.h>
@@ -19,14 +23,57 @@ typedef struct {
 
 #pragma pack(pop)
 
-static EXCEPTION_DISPOSITION NTAPI ignore_handler(
+static EXCEPTION_DISPOSITION NTAPI gs_win_ignore_handler(
 	EXCEPTION_RECORD *rec,
 	void *frame,
 	CONTEXT *ctx,
 	void *disp);
 
+int gs_win_path_directory(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
+int gs_win_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute);
+int gs_win_path_canonicalize(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
 
-int gs_win_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute) {
+EXCEPTION_DISPOSITION NTAPI gs_win_ignore_handler(
+	EXCEPTION_RECORD *rec,
+	void *frame,
+	CONTEXT *ctx,
+	void *disp)
+{
+	return ExceptionContinueExecution;
+}
+
+int gs_win_path_directory(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
+{
+	int r = 0;
+
+	char Drive[_MAX_DRIVE] = {};
+	char Dir[_MAX_DIR] = {};
+	char FName[_MAX_FNAME] = {};
+	char Ext[_MAX_EXT] = {};
+
+	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
+	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
+	_splitpath(InputPathBuf, Drive, Dir, FName, Ext);
+
+	if (!!(r = _makepath_s(ioOutputPathBuf, OutputPathBufSize, Drive, Dir, NULL, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_win_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute)
+{
 	int r = 0;
 
 	size_t IsAbsolute = false;
@@ -48,13 +95,26 @@ clean:
 	return r;
 }
 
-EXCEPTION_DISPOSITION NTAPI ignore_handler(
-	EXCEPTION_RECORD *rec,
-	void *frame,
-	CONTEXT *ctx,
-	void *disp)
+int gs_win_path_canonicalize(
+	const char *InputPathBuf, size_t LenInputPath,
+	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath)
 {
-	return ExceptionContinueExecution;
+	int r = 0;
+
+	/** required length for PathCanonicalize **/
+	if (OutputPathBufSize < MAX_PATH || LenInputPath > MAX_PATH)
+		GS_ERR_CLEAN(1);
+
+	/** this does fucking nothing (ex retains mixed slash backslash) **/
+	if (! PathCanonicalize(ioOutputPathBuf, InputPathBuf))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_buf_strnlen(ioOutputPathBuf, OutputPathBufSize, oLenOutputPath)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
 }
 
 void gs_current_thread_name_set(
@@ -85,7 +145,7 @@ void gs_current_thread_name_set(
 
 	EXCEPTION_REGISTRATION_RECORD rec = {};
 	rec.Next = tib->ExceptionList;
-	rec.Handler = ignore_handler;
+	rec.Handler = gs_win_ignore_handler;
 
 	tib->ExceptionList = &rec;
 
@@ -152,16 +212,126 @@ clean:
 	return r;
 }
 
-int gs_path_kludge_filenameize(char *ioPathBuf, size_t *oLenPath)
+int gs_file_exist(
+	const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsExist)
 {
-	char *sep = strrchr(ioPathBuf, '/');
-	sep = sep ? sep : strrchr(ioPathBuf, '\\');
-	if (sep) {
-		sep++; /* skip separator */
-		size_t len = ioPathBuf + strlen(ioPathBuf) - sep;
-		memmove(ioPathBuf, sep, len);
-		memset(ioPathBuf + len, '\0', 1);
+	int r = 0;
+
+	int IsExist = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	/* https://blogs.msdn.microsoft.com/oldnewthing/20071023-00/?p=24713/ */
+	/* INVALID_FILE_ATTRIBUTES if file does not exist, apparently */
+	IsExist = !(INVALID_FILE_ATTRIBUTES == GetFileAttributes(FileNameBuf));
+
+	if (oIsExist)
+		*oIsExist = IsExist;
+
+clean:
+
+	return r;
+}
+
+int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName) {
+	int r = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	/* https://blogs.msdn.microsoft.com/oldnewthing/20071023-00/?p=24713/ */
+	/* INVALID_FILE_ATTRIBUTES if file does not exist, apparently */
+	if (INVALID_FILE_ATTRIBUTES == GetFileAttributes(FileNameBuf))
+		GS_ERR_CLEAN(1);
+
+clean:
+
+	return r;
+}
+
+int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName) {
+	int r = 0;
+
+	DWORD LenFileName = 0;
+
+	LenFileName = GetModuleFileName(NULL, ioFileNameBuf, FileNameSize);
+	if (!(LenFileName != 0 && LenFileName < FileNameSize))
+		GS_ERR_CLEAN(1);
+
+	if (oLenFileName)
+		*oLenFileName = LenFileName;
+
+clean:
+
+	return r;
+}
+
+int gs_get_current_executable_directory(
+	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir)
+{
+	int r = 0;
+
+	size_t LenCurrentExecutable = 0;
+	char CurrentExecutableBuf[512] = {};
+
+	if (!!(r = gs_get_current_executable_filename(
+		CurrentExecutableBuf, sizeof CurrentExecutableBuf, &LenCurrentExecutable)))
+	{
+		GS_GOTO_CLEAN();
 	}
-	*oLenPath = strlen(ioPathBuf);
-	return 0;
+
+	if (!!(r = gs_win_path_directory(
+		CurrentExecutableBuf, LenCurrentExecutable,
+		ioCurrentExecutableDirBuf, CurrentExecutableDirSize, oLenCurrentExecutableDir)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_build_current_executable_relative_filename(
+	const char *RelativeBuf, size_t LenRelative,
+	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined)
+{
+	int r = 0;
+
+	size_t LenPathCurrentExecutableDir = 0;
+	char PathCurrentExecutableDirBuf[512] = {};
+	size_t LenPathModification = 0;
+	char PathModificationBuf[512] = {};
+
+	/* get directory */
+	if (!!(r = gs_get_current_executable_directory(
+		PathCurrentExecutableDirBuf, sizeof PathCurrentExecutableDirBuf, &LenPathCurrentExecutableDir)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	/* ensure relative and append */
+
+	if (!!(r = gs_path_append_abs_rel(
+		PathCurrentExecutableDirBuf, LenPathCurrentExecutableDir,
+		RelativeBuf, LenRelative,
+		PathModificationBuf, sizeof PathModificationBuf, &LenPathModification)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	/* canonicalize into output */
+
+	if (!!(r = gs_win_path_canonicalize(
+		PathModificationBuf, LenPathModification,
+		ioCombinedBuf, CombinedBufSize, oLenCombined)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
 }
