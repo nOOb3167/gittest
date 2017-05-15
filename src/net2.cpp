@@ -484,6 +484,33 @@ int gs_extra_worker_replace(
 	return 0;
 }
 
+int gs_store_ntwk_init(
+	uint32_t Magic,
+	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsStoreNtwk *ioStoreNtwk)
+{
+	int r = 0;
+
+	ioStoreNtwk->magic = Magic;
+	ioStoreNtwk->cb_destroy_t = CbDestroy;
+	ioStoreNtwk->mIntrToken = valIntrTokenSurrogate;
+	ioStoreNtwk->mCtrlCon = CtrlCon;
+	ioStoreNtwk->mAffinityQueue = AffinityQueue;
+
+	if (!!(r = clnt_state_reconnect_make_default(&ioStoreNtwk->mStateReconnect)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_connection_surrogate_map_create(&ioStoreNtwk->mConnectionSurrogateMap)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate)

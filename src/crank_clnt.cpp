@@ -688,18 +688,17 @@ int gs_store_ntwk_client_create(
 
 	struct GsStoreNtwkClient *StoreNtwk = new GsStoreNtwkClient();
 
-	StoreNtwk->base.magic = GS_STORE_NTWK_CLIENT_MAGIC;
-	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_client;
-	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = CtrlCon;
-	StoreNtwk->base.mAffinityQueue = AffinityQueue;
+	if (!!(r = gs_store_ntwk_init(
+		GS_STORE_NTWK_CLIENT_MAGIC,
+		gs_store_ntwk_cb_destroy_t_client,
+		valIntrTokenSurrogate,
+		CtrlCon,
+		AffinityQueue,
+		&StoreNtwk->base)))
+	{
+		GS_GOTO_CLEAN();
+	}
 	
-	if (!!(r = clnt_state_reconnect_make_default(&StoreNtwk->base.mStateReconnect)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_connection_surrogate_map_create(&StoreNtwk->base.mConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
-
 	if (oStoreNtwk)
 		*oStoreNtwk = StoreNtwk;
 

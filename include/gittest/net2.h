@@ -340,6 +340,7 @@ struct GsExtraWorker
        GsStoreNtwkClient
 	   GsStoreNtwkServer
 	   GsStoreNtwkSelfUpdateBasic
+	   ::gs_store_ntwk_init
 */
 struct GsStoreNtwk
 {
@@ -548,6 +549,14 @@ int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers
 int gs_extra_worker_replace(
 	struct GsExtraWorker **ioExtraWorker,
 	struct GsExtraWorker *Replacement);
+
+int gs_store_ntwk_init(
+	uint32_t Magic,
+	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
+	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
+	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
+	struct GsStoreNtwk *ioStoreNtwk);
 
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,

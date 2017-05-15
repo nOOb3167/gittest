@@ -55,17 +55,16 @@ int gs_store_ntwk_selfupdate_basic_create(
 
 	struct GsStoreNtwkSelfUpdateBasic *StoreNtwk = new GsStoreNtwkSelfUpdateBasic();
 
-	StoreNtwk->base.magic = GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC;
-	StoreNtwk->base.cb_destroy_t = gs_store_ntwk_cb_destroy_t_selfupdate_basic;
-	StoreNtwk->base.mIntrToken = valIntrTokenSurrogate;
-	StoreNtwk->base.mCtrlCon = CtrlCon;
-	StoreNtwk->base.mAffinityQueue = AffinityQueue;
-
-	if (!!(r = clnt_state_reconnect_make_default(&StoreNtwk->base.mStateReconnect)))
+	if (!!(r = gs_store_ntwk_init(
+		GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC,
+		gs_store_ntwk_cb_destroy_t_selfupdate_basic,
+		valIntrTokenSurrogate,
+		CtrlCon,
+		AffinityQueue,
+		&StoreNtwk->base)))
+	{
 		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_connection_surrogate_map_create(&StoreNtwk->base.mConnectionSurrogateMap)))
-		GS_GOTO_CLEAN();
+	}
 
 	if (oStoreNtwk)
 		*oStoreNtwk = StoreNtwk;
