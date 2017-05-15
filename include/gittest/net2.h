@@ -328,6 +328,7 @@ struct GsExtraHostCreate
 	   GsExtraWorkerServer
 	   GsExtraWorkerSelfUpdateBasic
 	   ::gs_extra_worker_replace
+	   ::gs_extra_worker_pp_base_cast
 */
 struct GsExtraWorker
 {
@@ -360,7 +361,6 @@ struct GsStoreNtwk
        GsStoreWorkerClient
 	   GsStoreWorkerServer
 	   GsStoreWorkerSelfUpdateBasic
-	   ::gs_store_worker_pp_base_cast
 */
 struct GsStoreWorker
 {

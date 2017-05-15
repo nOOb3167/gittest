@@ -484,6 +484,14 @@ int gs_extra_worker_replace(
 	return 0;
 }
 
+struct GsExtraWorker **gs_extra_worker_pp_base_cast(
+	struct GsExtraWorker **PtrPtrExtraWorker,
+	uint32_t ExpectedMagic)
+{
+	GS_ASSERT((*PtrPtrExtraWorker)->magic == ExpectedMagic);
+	return PtrPtrExtraWorker;
+}
+
 int gs_store_ntwk_init(
 	uint32_t Magic,
 	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
@@ -2173,14 +2181,6 @@ clean:
 		GS_GOTO_CLEAN();
 
 	/* NOTE: void return */
-}
-
-struct GsExtraWorker **gs_extra_worker_pp_base_cast(
-	struct GsExtraWorker **PtrPtrExtraWorker,
-	uint32_t ExpectedMagic)
-{
-	GS_ASSERT((*PtrPtrExtraWorker)->magic == ExpectedMagic);
-	return PtrPtrExtraWorker;
 }
 
 int gs_net_full_create_connection(
