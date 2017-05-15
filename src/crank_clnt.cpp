@@ -748,13 +748,18 @@ int gs_store_worker_client_create(
 	if (!!(r = clnt_state_make_default(State.get())))
 		GS_GOTO_CLEAN();
 
-	StoreWorker->base.magic = GS_STORE_WORKER_CLIENT_MAGIC;
-	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_client;
-	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_client;
-	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
-	StoreWorker->base.mCtrlCon = CtrlCon;
-	StoreWorker->base.mAffinityQueue = AffinityQueue;
-	StoreWorker->base.mNumWorkers = NumWorkers;
+	if (!!(r = gs_store_worker_init(
+		GS_STORE_WORKER_CLIENT_MAGIC,
+		gs_store_worker_cb_crank_t_client,
+		gs_store_worker_cb_destroy_t_client,
+		valIntrTokenSurrogate,
+		CtrlCon,
+		AffinityQueue,
+		NumWorkers,
+		&StoreWorker->base)))
+	{
+		GS_GOTO_CLEAN();
+	}
 	
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;

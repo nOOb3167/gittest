@@ -102,13 +102,18 @@ int gs_store_worker_server_create(
 	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
 		GS_GOTO_CLEAN();
 
-	StoreWorker->base.magic = GS_STORE_WORKER_SERVER_MAGIC;
-	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_server;
-	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_server;
-	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
-	StoreWorker->base.mCtrlCon = CtrlCon;
-	StoreWorker->base.mAffinityQueue = AffinityQueue;
-	StoreWorker->base.mNumWorkers = NumWorkers;
+	if (!!(r = gs_store_worker_init(
+		GS_STORE_WORKER_SERVER_MAGIC,
+		gs_store_worker_cb_crank_t_server,
+		gs_store_worker_cb_destroy_t_server,
+		valIntrTokenSurrogate,
+		CtrlCon,
+		AffinityQueue,
+		NumWorkers,
+		&StoreWorker->base)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
 	StoreWorker->mLenRefNameMain = LenRefNameMain;

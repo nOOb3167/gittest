@@ -519,6 +519,26 @@ clean:
 	return r;
 }
 
+int gs_store_worker_init(
+	uint32_t Magic,
+	int(*CbCrank)(struct GsCrankData *CrankData),
+	int(*CbDestroy)(struct GsStoreWorker *StoreWorker),
+	struct GsIntrTokenSurrogate valIntrToken,
+	struct GsCtrlCon *CtrlCon,
+	struct GsAffinityQueue *AffinityQueue,
+	uint32_t mNumWorkers,
+	struct GsStoreWorker *ioStoreWorker)
+{
+	ioStoreWorker->magic = Magic;
+	ioStoreWorker->cb_crank_t = CbCrank;
+	ioStoreWorker->cb_destroy_t = CbDestroy;
+	ioStoreWorker->mIntrToken = valIntrToken;
+	ioStoreWorker->mCtrlCon = CtrlCon;
+	ioStoreWorker->mAffinityQueue = AffinityQueue;
+	ioStoreWorker->mNumWorkers = mNumWorkers;
+	return 0;
+}
+
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate)

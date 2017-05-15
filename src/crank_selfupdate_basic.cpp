@@ -109,13 +109,18 @@ int gs_store_worker_selfupdate_basic_create(
 	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
 		GS_GOTO_CLEAN();
 
-	StoreWorker->base.magic = GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC;
-	StoreWorker->base.cb_crank_t = gs_store_worker_cb_crank_t_selfupdate_basic;
-	StoreWorker->base.cb_destroy_t = gs_store_worker_cb_destroy_t_selfupdate_basic;
-	StoreWorker->base.mIntrToken = valIntrTokenSurrogate;
-	StoreWorker->base.mCtrlCon = CtrlCon;
-	StoreWorker->base.mAffinityQueue = AffinityQueue;
-	StoreWorker->base.mNumWorkers = NumWorkers;
+	if (!!(r = gs_store_worker_init(
+		GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC,
+		gs_store_worker_cb_crank_t_selfupdate_basic,
+		gs_store_worker_cb_destroy_t_selfupdate_basic,
+		valIntrTokenSurrogate,
+		CtrlCon,
+		AffinityQueue,
+		NumWorkers,
+		&StoreWorker->base)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	StoreWorker->FileNameAbsoluteSelfUpdateBuf = FileNameAbsoluteSelfUpdateBuf;
 	StoreWorker->LenFileNameAbsoluteSelfUpdate = LenFileNameAbsoluteSelfUpdate;
