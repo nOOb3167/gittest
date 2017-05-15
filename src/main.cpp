@@ -348,17 +348,22 @@ clean:
 	return r;
 }
 
-int aux_deserialize_objects_odb(
-	git_odb *OdbT,
+int aux_deserialize_objects(
+	git_repository *RepositoryT,
 	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
 	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
 	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid)
 {
 	int r = 0;
 
+	git_odb *OdbT = NULL;
+
 	std::vector<git_oid> WrittenObjectOid;
 	std::vector<uint32_t> SizeVector;
 	size_t CumulativeSize = 0;
+
+	if (!!(r = git_repository_odb(&OdbT, RepositoryT)))
+		goto clean;
 
 	if (!!(r = aux_deserialize_sizebuffer(DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer, PairedVecLen, &SizeVector, &CumulativeSize)))
 		goto clean;
@@ -378,38 +383,6 @@ int aux_deserialize_objects_odb(
 		oWrittenObjectOid->swap(WrittenObjectOid);
 
 clean:
-
-	return r;
-}
-
-int aux_deserialize_objects(
-	git_repository *RepositoryT,
-	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
-	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
-	uint32_t PairedVecLen, git_otype WrittenObjectType, std::vector<git_oid> *oWrittenObjectOid)
-{
-	int r = 0;
-
-	git_odb *OdbT = NULL;
-
-	std::vector<git_oid> WrittenObjectOid;
-
-	if (!!(r = git_repository_odb(&OdbT, RepositoryT)))
-		goto clean;
-
-	if (!!(r = aux_deserialize_objects_odb(
-		OdbT,
-		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
-		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
-		PairedVecLen, WrittenObjectType, &WrittenObjectOid)))
-	{
-		goto clean;
-	}
-
-	if (oWrittenObjectOid)
-		oWrittenObjectOid->swap(WrittenObjectOid);
-
-clean:
 	if (OdbT)
 		git_odb_free(OdbT);
 
@@ -417,12 +390,12 @@ clean:
 }
 
 int aux_clnt_deserialize_trees(
-	git_odb *OdbT,
+	git_repository *RepositoryT,
 	uint8_t *DataStartSizeBuffer, uint32_t DataLengthSizeBuffer, uint32_t OffsetSizeBuffer,
 	uint8_t *DataStartObjectBuffer, uint32_t DataLengthObjectBuffer, uint32_t OffsetObjectBuffer,
 	uint32_t PairedVecLen, std::vector<git_oid> *oDeserializedTree)
 {
-	return aux_deserialize_objects_odb(OdbT,
+	return aux_deserialize_objects(RepositoryT,
 		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
 		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
 		PairedVecLen, GIT_OBJ_TREE, oDeserializedTree);
@@ -577,7 +550,6 @@ int clnt_missing_blobs_bare(
 	std::vector<git_oid> MissingBloblist;
 
 	git_repository *RepositoryMemory = NULL;
-	git_odb *RepositoryMemoryOdb = NULL;
 	git_odb *RepositoryTOdb = NULL;
 
 	git_oid OidZero = {};
@@ -586,14 +558,11 @@ int clnt_missing_blobs_bare(
 	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
 		goto clean;
 
-	if (!!(r = git_repository_odb(&RepositoryMemoryOdb, RepositoryMemory)))
-		goto clean;
-
 	if (!!(r = git_repository_odb(&RepositoryTOdb, RepositoryT)))
 		goto clean;
 
 	if (!!(r = aux_clnt_deserialize_trees(
-		RepositoryMemoryOdb,
+		RepositoryMemory,
 		DataStartSizeBuffer, DataLengthSizeBuffer, OffsetSizeBuffer,
 		DataStartObjectBuffer, DataLengthObjectBuffer, OffsetObjectBuffer,
 		PairedVecLen, &DeserializedTree)))
@@ -636,9 +605,6 @@ clean:
 
 	if (RepositoryTOdb)
 		git_odb_free(RepositoryTOdb);
-
-	if (RepositoryMemoryOdb)
-		git_odb_free(RepositoryMemoryOdb);
 
 	if (RepositoryMemory)
 		git_repository_free(RepositoryMemory);
