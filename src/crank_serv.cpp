@@ -35,6 +35,67 @@ clean:
 	return r;
 }
 
+int gs_extra_host_create_cb_create_t_server(
+	struct GsExtraHostCreate *ExtraHostCreate,
+	struct GsHostSurrogate *ioHostSurrogate,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	size_t LenExtraWorker,
+	struct GsExtraWorker **oExtraWorkerArr)
+{
+	int r = 0;
+
+	struct GsExtraHostCreateServer *pThis = (struct GsExtraHostCreateServer *) ExtraHostCreate;
+
+	struct GsHostSurrogate Host = {};
+
+	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_SERVER_MAGIC)
+		GS_ERR_CLEAN(1);
+
+	/* create host */
+
+	// FIXME: 128 peerCount, 1 channelLimit
+	if (!!(r = gs_host_surrogate_setup_host_bind_port(pThis->mServPort, 128, &Host)))
+		GS_GOTO_CLEAN();
+
+	/* output */
+
+	for (uint32_t i = 0; i < LenExtraWorker; i++)
+		if (!!(r = gs_extra_worker_server_create(oExtraWorkerArr + i)))
+			GS_GOTO_CLEAN();
+
+	if (ioHostSurrogate)
+		*ioHostSurrogate = Host;
+
+clean:
+
+	return r;
+}
+
+int gs_extra_worker_server_create(
+	struct GsExtraWorker **oExtraWorker)
+{
+	struct GsExtraWorkerServer * pThis = new GsExtraWorkerServer();
+
+	pThis->base.magic = GS_EXTRA_WORKER_SERVER_MAGIC;
+
+	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_server;
+
+	if (oExtraWorker)
+		*oExtraWorker = &pThis->base;
+
+	return 0;
+}
+
+int gs_extra_worker_cb_destroy_t_server(struct GsExtraWorker *ExtraWorker)
+{
+	if (ExtraWorker->magic != GS_EXTRA_WORKER_SERVER_MAGIC)
+		return -1;
+
+	delete ExtraWorker;
+
+	return 0;
+}
+
 int gs_store_ntwk_server_create(
 	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
 	struct GsCtrlCon *CtrlCon,
@@ -131,6 +192,20 @@ clean:
 	if (!!r) {
 		GS_DELETE(&StoreWorker);
 	}
+
+	return r;
+}
+
+int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
+{
+	int r = 0;
+
+	while (true) {
+		if (!!(r = serv_state_crank2(CrankData)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
 
 	return r;
 }
@@ -523,79 +598,4 @@ clean:
 	}
 
 	return r;
-}
-
-int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
-{
-	int r = 0;
-
-	while (true) {
-		if (!!(r = serv_state_crank2(CrankData)))
-			GS_GOTO_CLEAN();
-	}
-
-clean:
-
-	return r;
-}
-
-int gs_extra_host_create_cb_create_t_server(
-	struct GsExtraHostCreate *ExtraHostCreate,
-	struct GsHostSurrogate *ioHostSurrogate,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	size_t LenExtraWorker,
-	struct GsExtraWorker **oExtraWorkerArr)
-{
-	int r = 0;
-
-	struct GsExtraHostCreateServer *pThis = (struct GsExtraHostCreateServer *) ExtraHostCreate;
-
-	struct GsHostSurrogate Host = {};
-
-	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_SERVER_MAGIC)
-		GS_ERR_CLEAN(1);
-
-	/* create host */
-
-	// FIXME: 128 peerCount, 1 channelLimit
-	if (!!(r = gs_host_surrogate_setup_host_bind_port(pThis->mServPort, 128, &Host)))
-		GS_GOTO_CLEAN();
-
-	/* output */
-
-	for (uint32_t i = 0; i < LenExtraWorker; i++)
-		if (!!(r = gs_extra_worker_server_create(oExtraWorkerArr + i)))
-			GS_GOTO_CLEAN();
-
-	if (ioHostSurrogate)
-		*ioHostSurrogate = Host;
-
-clean:
-
-	return r;
-}
-
-int gs_extra_worker_server_create(
-	struct GsExtraWorker **oExtraWorker)
-{
-	struct GsExtraWorkerServer * pThis = new GsExtraWorkerServer();
-
-	pThis->base.magic = GS_EXTRA_WORKER_SERVER_MAGIC;
-
-	pThis->base.cb_destroy_t = gs_extra_worker_cb_destroy_t_server;
-
-	if (oExtraWorker)
-		*oExtraWorker = &pThis->base;
-
-	return 0;
-}
-
-int gs_extra_worker_cb_destroy_t_server(struct GsExtraWorker *ExtraWorker)
-{
-	if (ExtraWorker->magic != GS_EXTRA_WORKER_SERVER_MAGIC)
-		return -1;
-
-	delete ExtraWorker;
-
-	return 0;
 }
