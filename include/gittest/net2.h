@@ -48,7 +48,11 @@
 #define GS_EXTRA_WORKER_PP_BASE_CAST(PTR_PTR_EXTRA_WORKER, EXPECTED_MAGIC_LUMP) \
 	gs_extra_worker_pp_base_cast((struct GsExtraWorker **)(PTR_PTR_EXTRA_WORKER), GS_EXTRA_WORKER_ ## EXPECTED_MAGIC_LUMP ## _MAGIC)
 
+#define GS_AFFINITY_IN_PROGRESS_NONE -1
+
 struct GsConnectionSurrogate;
+struct GsExtraWorker;
+struct GsWorkerData;
 
 typedef uint64_t gs_connection_surrogate_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
@@ -75,11 +79,6 @@ struct GsPrioDataComparator {
 typedef ::std::multiset<GsPrioData, GsPrioDataComparator> gs_prio_set_t;
 typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;
 
-#define GS_AFFINITY_IN_PROGRESS_NONE -1
-
-struct GsExtraWorker;
-struct GsWorkerData;
-
 /** Design:
 	Entries enter this structure on connection (ENet ENET_EVENT_TYPE_CONNECT).
 	Entries leave this structure on disconnection (ENet ENET_EVENT_TYPE_DISCONNECT).
@@ -96,6 +95,7 @@ struct GsWorkerData;
 	   ::gs_connection_surrogate_map_get_try
 	   ::gs_connection_surrogate_map_get
 	   ::gs_connection_surrogate_map_erase
+	   ::gs_connection_surrogate_map_register_bond_transfer_ownership
 */
 struct GsConnectionSurrogateMap {
 	std::atomic<uint64_t> mAtomicCount;
@@ -119,6 +119,9 @@ struct ClntStateReconnect {
 
 /** manual-init struct
     value struct
+
+	@sa
+	   ::gs_aux_aux_aux_cb_last_chance_t
 */
 struct ENetIntrNtwk {
 	struct ENetIntr base;
