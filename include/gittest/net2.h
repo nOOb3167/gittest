@@ -135,6 +135,22 @@ struct GsIntrTokenSurrogate {
 
 /** manual-init struct
     value struct
+
+	@sa
+	  ::gs_addr_surrogate_setup_addr_name_port
+*/
+struct GsAddressSurrogate {
+	ENetAddress mAddr;
+};
+
+/** manual-init struct
+    value struct
+
+	@sa
+	  ::gs_host_surrogate_setup_host_nobind
+	  ::gs_host_surrogate_setup_host_bind_port
+	  ::gs_host_surrogate_connect
+	  ::gs_host_surrogate_connect_wait_blocking
 */
 struct GsHostSurrogate {
 	ENetHost *mHost;
@@ -143,11 +159,21 @@ struct GsHostSurrogate {
 /** manual-init struct
     value struct
 */
-struct GsConnectionSurrogate {
-	uint32_t mIsPrincipalClientConnection;
+struct GsPeerSurrogate {
+	ENetPeer *mPeer;
+};
 
+/** manual-init struct
+    value struct
+
+	@sa
+	  ::gs_connection_surrogate_init
+	  ::gs_connection_surrogate_packet_send
+*/
+struct GsConnectionSurrogate {
 	ENetHost *mHost;
 	ENetPeer *mPeer;
+	uint32_t mIsPrincipalClientConnection;
 };
 
 /** manual-init struct
@@ -519,11 +545,47 @@ int gs_connection_surrogate_map_get(
 int gs_connection_surrogate_map_erase(
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	gs_connection_surrogate_id_t ConnectionSurrogateId);
+int gs_connection_surrogate_map_register_bond_transfer_ownership(
+	struct GsConnectionSurrogate valConnectionSurrogate,
+	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t *oAssignedId);
 
 int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect);
 bool clnt_state_reconnect_have_remaining(struct ClntStateReconnect *StateReconnect);
 int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect);
 
+int gs_address_surrogate_setup_addr_name_port(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsAddressSurrogate *ioAddressSurrogate);
+
+int gs_host_surrogate_setup_host_nobind(
+	uint32_t NumMaxPeers,
+	struct GsHostSurrogate *ioHostSurrogate);
+int gs_host_surrogate_setup_host_bind_port(
+	uint32_t ServPort,
+	uint32_t NumMaxPeers,
+	struct GsHostSurrogate *ioHostSurrogate);
+int gs_host_surrogate_connect(
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsAddressSurrogate *AddressSurrogate,
+	struct GsPeerSurrogate *ioPeerSurrogate);
+int gs_host_surrogate_connect_wait_blocking(
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsPeerSurrogate *PeerSurrogate);
+int gs_host_surrogate_connect_wait_blocking_register(
+	struct GsHostSurrogate *Host,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t *oAssignedId);
+
+int gs_connection_surrogate_init(
+	struct GsHostSurrogate *Host,
+	struct GsPeerSurrogate *Peer,
+	uint32_t IsPrincipalClientConnection,
+	struct GsConnectionSurrogate *ioConnectionSurrogate);
 int gs_connection_surrogate_packet_send(
 	struct GsConnectionSurrogate *ConnectionSurrogate,
 	struct GsPacket *ioPacket);
@@ -675,11 +737,6 @@ int gs_ntwk_reconnect_expend(
 	struct ClntStateReconnect *ioStateReconnect,
 	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
 	struct GsHostSurrogate *ioHostSurrogate);
-int gs_aux_aux_aux_connection_register_transfer_ownership(
-	struct GsConnectionSurrogate valConnectionSurrogate,
-	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t *oAssignedId);
 int gs_aux_aux_aux_cb_last_chance_t(
 	struct ENetIntr *Intr,
 	struct ENetIntrToken *IntrToken);

@@ -908,19 +908,9 @@ int gs_extra_host_create_cb_create_t_client(
 
 	struct GsExtraHostCreateClient *pThis = (struct GsExtraHostCreateClient *) ExtraHostCreate;
 
-	ENetIntrHostCreateFlags FlagsHost = {};
-	ENetHost *host = NULL;
-	ENetAddress addr = {};
-	ENetPeer *peer = NULL;
-	ENetEvent event = {};
-
-	GsConnectionSurrogate ConnectionSurrogate = {};
-
-	struct GsBypartCbDataGsConnectionSurrogateId *ctxstruct = new GsBypartCbDataGsConnectionSurrogateId();
+	struct GsHostSurrogate Host = {};
 
 	gs_connection_surrogate_id_t AssignedId = 0;
-
-	int errService = 0;
 
 	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_CLIENT_MAGIC)
 		GS_ERR_CLEAN(1);
@@ -928,59 +918,31 @@ int gs_extra_host_create_cb_create_t_client(
 	/* create host */
 
 	// FIXME: 128 peerCount, 1 channelLimit
-	if (!(host = enet_host_create_interruptible(NULL, 128, 1, 0, 0, &FlagsHost)))
-		GS_ERR_CLEAN(1);
+	if (!!(r = gs_host_surrogate_setup_host_nobind(128, &Host)))
+		GS_GOTO_CLEAN();
 
-	/* connect host */
+	/* create and register connection */
 
-	if (!!(r = enet_address_set_host(&addr, pThis->mServHostNameBuf)))
-		GS_ERR_CLEAN(1);
-	addr.port = pThis->mServPort;
-
-	if (!(peer = enet_host_connect(host, &addr, 1, 0)))
-		GS_ERR_CLEAN(1);
-
-	/* connect host - wait for completion */
-
-	while (0 <= (errService = enet_host_service(host, &event, GS_TIMEOUT_1SEC))) {
-		if (errService > 0 && event.peer == peer && event.type == ENET_EVENT_TYPE_CONNECT)
-			break;
-	}
-
-	/* a connection event must have been setup above */
-	if (errService < 0 ||
-		event.type != ENET_EVENT_TYPE_CONNECT ||
-		event.peer == NULL)
-	{
-		GS_ERR_CLEAN(1);
-	}
-
-	/* register connection and prepare extra worker data */
-
-	ConnectionSurrogate.mHost = host;
-	ConnectionSurrogate.mPeer = peer;
-	ConnectionSurrogate.mIsPrincipalClientConnection = true;
-
-	if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
-		ConnectionSurrogate,
-		GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
+	if (!!(r = gs_host_surrogate_connect_wait_blocking_register(
+		&Host,
+		pThis->mServPort,
+		pThis->mServHostNameBuf, pThis->mLenServHostName,
 		ioConnectionSurrogateMap,
 		&AssignedId)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
+	/* output */
+
 	for (uint32_t i = 0; i < LenExtraWorker; i++)
 		if (!!(r = gs_extra_worker_client_create(&oExtraWorkerArr[i], AssignedId)))
 			GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
-		ioHostSurrogate->mHost = host;
+		*ioHostSurrogate = Host;
 
 clean:
-	if (!!r) {
-		GS_DELETE(&ctxstruct);
-	}
 
 	return r;
 }

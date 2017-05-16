@@ -312,6 +312,48 @@ clean:
 	return r;
 }
 
+/** Two part connection registration.
+    The connection is assigned an entry with Id within the connection map.
+	That same Id is then bonded to the ENetPeer 'data' field.
+
+   @param valConnectionSurrogate copied / copy-constructed (for shared_ptr use)
+*/
+int gs_connection_surrogate_map_register_bond_transfer_ownership(
+	struct GsConnectionSurrogate valConnectionSurrogate,
+	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t *oAssignedId)
+{
+	int r = 0;
+
+	HeapAllocatedDefaultedOwnedCtxstruct->Tripwire = GS_BYPART_TRIPWIRE_GsConnectionSurrogateId;
+	HeapAllocatedDefaultedOwnedCtxstruct->m0Id = -1;
+
+	/* bond to the peer */
+	valConnectionSurrogate.mPeer->data = HeapAllocatedDefaultedOwnedCtxstruct;
+
+	/* assign entry with id */
+	/* NOTE: valConnectionSurrogate.mPeer->data pointer gets copied into connection map entry.
+	         since data was set to HeapAllocatedDefaultedOwnedCtxstruct, we can assign to its m0Id field. */
+	if (!!(r = gs_connection_surrogate_map_insert(
+		ioConnectionSurrogateMap,
+		valConnectionSurrogate,
+		&HeapAllocatedDefaultedOwnedCtxstruct->m0Id)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (oAssignedId)
+		*oAssignedId = HeapAllocatedDefaultedOwnedCtxstruct->m0Id;
+
+clean:
+	if (!!r) {
+		GS_DELETE(&HeapAllocatedDefaultedOwnedCtxstruct);
+	}
+
+	return r;
+}
+
 int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect) {
 	ClntStateReconnect StateReconnect;
 	StateReconnect.NumReconnections = GS_CONNECT_NUMRECONNECT;
@@ -336,6 +378,144 @@ int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect) {
 clean:
 
 	return r;
+}
+
+int gs_address_surrogate_setup_addr_name_port(
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsAddressSurrogate *ioAddressSurrogate)
+{
+	int r = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(ServHostNameBuf, LenServHostName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = enet_address_set_host(&ioAddressSurrogate->mAddr, ServHostNameBuf)))
+		GS_GOTO_CLEAN();
+
+	ioAddressSurrogate->mAddr.port = ServPort;
+
+clean:
+
+	return r;
+}
+
+int gs_host_surrogate_setup_host_nobind(
+	uint32_t NumMaxPeers,
+	struct GsHostSurrogate *ioHostSurrogate)
+{
+	struct ENetIntrHostCreateFlags FlagsHost = {};
+	if (!(ioHostSurrogate->mHost = enet_host_create_interruptible(NULL, NumMaxPeers, 1, 0, 0, &FlagsHost)))
+		return 1;
+	return 0;
+}
+
+int gs_host_surrogate_setup_host_bind_port(
+	uint32_t ServPort,
+	uint32_t NumMaxPeers,
+	struct GsHostSurrogate *ioHostSurrogate)
+{
+	struct ENetIntrHostCreateFlags FlagsHost = {};
+	ENetAddress addr = {};
+	/* NOTE: ENET_HOST_ANY (0) binds to all interfaces but will also cause host->address to have 0 as host */
+	addr.host = ENET_HOST_ANY;
+	addr.port = ServPort;
+	if (!(ioHostSurrogate->mHost = enet_host_create_interruptible(&addr, NumMaxPeers, 1, 0, 0, &FlagsHost)))
+		return 1;
+	return 0;
+}
+
+int gs_host_surrogate_connect(
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsAddressSurrogate *AddressSurrogate,
+	struct GsPeerSurrogate *ioPeerSurrogate)
+{
+	if (!(ioPeerSurrogate->mPeer = enet_host_connect(HostSurrogate->mHost, &AddressSurrogate->mAddr, 1, 0)))
+		return 1;
+	return 0;
+}
+
+int gs_host_surrogate_connect_wait_blocking(
+	struct GsHostSurrogate *HostSurrogate,
+	struct GsPeerSurrogate *PeerSurrogate)
+{
+	int r = 0;
+
+	int errService = 0;
+	ENetEvent event = {};
+
+	while (0 <= (errService = enet_host_service(HostSurrogate->mHost, &event, GS_TIMEOUT_1SEC))) {
+		if (errService > 0 && event.peer == PeerSurrogate->mPeer && event.type == ENET_EVENT_TYPE_CONNECT)
+			break;
+	}
+
+	/* a connection event must have been setup above */
+	if (errService < 0 ||
+		event.type != ENET_EVENT_TYPE_CONNECT ||
+		event.peer != PeerSurrogate->mPeer)
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_host_surrogate_connect_wait_blocking_register(
+	struct GsHostSurrogate *Host,
+	uint32_t ServPort,
+	const char *ServHostNameBuf, size_t LenServHostName,
+	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+	gs_connection_surrogate_id_t *oAssignedId)
+{
+	int r = 0;
+
+	struct GsBypartCbDataGsConnectionSurrogateId *ctxstruct = new GsBypartCbDataGsConnectionSurrogateId();
+
+	struct GsAddressSurrogate Address = {};
+	struct GsPeerSurrogate Peer = {};
+	struct GsConnectionSurrogate ConnectionSurrogate = {};
+
+	if (!!(r = gs_address_surrogate_setup_addr_name_port(ServPort, ServHostNameBuf, LenServHostName, &Address)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_host_surrogate_connect(Host, &Address, &Peer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_host_surrogate_connect_wait_blocking(Host, &Peer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_connection_surrogate_init(Host, &Peer, true, &ConnectionSurrogate)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_connection_surrogate_map_register_bond_transfer_ownership(
+		ConnectionSurrogate,
+		GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
+		ioConnectionSurrogateMap,
+		oAssignedId)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+	if (!!r) {
+		GS_DELETE(&ctxstruct);
+	}
+
+	return r;
+}
+
+int gs_connection_surrogate_init(
+	struct GsHostSurrogate *Host,
+	struct GsPeerSurrogate *Peer,
+	uint32_t IsPrincipalClientConnection,
+	struct GsConnectionSurrogate *ioConnectionSurrogate)
+{
+	ioConnectionSurrogate->mHost = Host->mHost;
+	ioConnectionSurrogate->mPeer = Peer->mPeer;
+	ioConnectionSurrogate->mIsPrincipalClientConnection = IsPrincipalClientConnection;
+	return 0;
 }
 
 /** Send Packet (remember enet_peer_send required an ownership release) */
@@ -1610,48 +1790,6 @@ clean:
 	return r;
 }
 
-/** Two part connection registration.
-    The connection is assigned an entry with Id within the connection map.
-	That same Id is then bonded to the ENetPeer 'data' field.
-
-   @param valConnectionSurrogate copied / copy-constructed (for shared_ptr use)
-*/
-int gs_aux_aux_aux_connection_register_transfer_ownership(
-	struct GsConnectionSurrogate valConnectionSurrogate,
-	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t *oAssignedId)
-{
-	int r = 0;
-
-	HeapAllocatedDefaultedOwnedCtxstruct->Tripwire = GS_BYPART_TRIPWIRE_GsConnectionSurrogateId;
-	HeapAllocatedDefaultedOwnedCtxstruct->m0Id = -1;
-
-	/* bond to the peer */
-	valConnectionSurrogate.mPeer->data = HeapAllocatedDefaultedOwnedCtxstruct;
-
-	/* assign entry with id */
-	/* NOTE: valConnectionSurrogate.mPeer->data pointer gets copied into connection map entry.
-	         since data was set to HeapAllocatedDefaultedOwnedCtxstruct, we can assign to its m0Id field. */
-	if (!!(r = gs_connection_surrogate_map_insert(
-		ioConnectionSurrogateMap,
-		valConnectionSurrogate,
-		&HeapAllocatedDefaultedOwnedCtxstruct->m0Id)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (oAssignedId)
-		*oAssignedId = HeapAllocatedDefaultedOwnedCtxstruct->m0Id;
-
-clean:
-	if (!!r) {
-		GS_DELETE(&HeapAllocatedDefaultedOwnedCtxstruct);
-	}
-
-	return r;
-}
-
 int gs_aux_aux_aux_cb_last_chance_t(
 	struct ENetIntr *Intr,
 	struct ENetIntrToken *IntrToken)
@@ -1863,13 +2001,15 @@ int gs_ntwk_host_service_event(
 		/* NOTE: raw new, routinely deleted at ENET_EVENT_TYPE_DISCONNECT */
 		struct GsBypartCbDataGsConnectionSurrogateId *ctxstruct = new GsBypartCbDataGsConnectionSurrogateId();
 
+		struct GsPeerSurrogate PeerSurrogate = {};
 		struct GsConnectionSurrogate ConnectionSurrogate = {};
 
-		ConnectionSurrogate.mHost = HostSurrogate->mHost;
-		ConnectionSurrogate.mPeer = Event->event.peer;
-		ConnectionSurrogate.mIsPrincipalClientConnection = false;
+		PeerSurrogate.mPeer = Event->event.peer;
 
-		if (!!(r = gs_aux_aux_aux_connection_register_transfer_ownership(
+		if (!!(r = gs_connection_surrogate_init(HostSurrogate, &PeerSurrogate, false, &ConnectionSurrogate)))
+			GS_GOTO_CLEAN();
+
+		if (!!(r = gs_connection_surrogate_map_register_bond_transfer_ownership(
 			ConnectionSurrogate,
 			GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
 			ioConnectionSurrogateMap,

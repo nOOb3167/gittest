@@ -550,31 +550,25 @@ int gs_extra_host_create_cb_create_t_server(
 
 	struct GsExtraHostCreateServer *pThis = (struct GsExtraHostCreateServer *) ExtraHostCreate;
 
-	ENetAddress addr = {};
-	ENetIntrHostCreateFlags FlagsHost = {};
-	ENetHost *host = NULL;
-
-	int errService = 0;
+	struct GsHostSurrogate Host = {};
 
 	if (pThis->base.magic != GS_EXTRA_HOST_CREATE_SERVER_MAGIC)
 		GS_ERR_CLEAN(1);
 
 	/* create host */
 
-	/* NOTE: ENET_HOST_ANY (0) binds to all interfaces but will also cause host->address to have 0 as host */
-	addr.host = ENET_HOST_ANY;
-	addr.port = pThis->mServPort;
-
 	// FIXME: 128 peerCount, 1 channelLimit
-	if (!(host = enet_host_create_interruptible(&addr, 128, 1, 0, 0, &FlagsHost)))
-		GS_ERR_CLEAN(1);
+	if (!!(r = gs_host_surrogate_setup_host_bind_port(pThis->mServPort, 128, &Host)))
+		GS_GOTO_CLEAN();
+
+	/* output */
 
 	for (uint32_t i = 0; i < LenExtraWorker; i++)
 		if (!!(r = gs_extra_worker_server_create(oExtraWorkerArr + i)))
 			GS_GOTO_CLEAN();
 
 	if (ioHostSurrogate)
-		ioHostSurrogate->mHost = host;
+		*ioHostSurrogate = Host;
 
 clean:
 
