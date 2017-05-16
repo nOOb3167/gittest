@@ -196,35 +196,7 @@ clean:
 	return r;
 }
 
-int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
-{
-	int r = 0;
-
-	while (true) {
-		if (!!(r = serv_state_crank2(CrankData)))
-			GS_GOTO_CLEAN();
-	}
-
-clean:
-
-	return r;
-}
-
-int gs_store_worker_cb_destroy_t_server(struct GsStoreWorker *StoreWorker)
-{
-	struct GsStoreWorkerServer *pThis = (struct GsStoreWorkerServer *) StoreWorker;
-
-	if (!pThis)
-		return 0;
-
-	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_SERVER_MAGIC);
-
-	GS_DELETE(&StoreWorker);
-
-	return 0;
-}
-
-int serv_state_service_request_blobs2(
+int gs_store_worker_server_aux_state_service_request_blobs2(
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
@@ -274,7 +246,7 @@ clean:
 	return r;
 }
 
-int serv_state_crank2(struct GsCrankData *CrankData)
+int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
 {
 	int r = 0;
 
@@ -426,7 +398,7 @@ int serv_state_crank2(struct GsCrankData *CrankData)
 
 		case GS_FRAME_TYPE_REQUEST_BLOBS:
 		{
-			if (!!(r = serv_state_service_request_blobs2(
+			if (!!(r = gs_store_worker_server_aux_state_service_request_blobs2(
 				CrankData->mWorkerDataSend,
 				IdForSend,
 				&CrankData->mStoreWorker->mIntrToken,
@@ -442,7 +414,7 @@ int serv_state_crank2(struct GsCrankData *CrankData)
 
 		case GS_FRAME_TYPE_REQUEST_BLOBS_SELFUPDATE:
 		{
-			if (!!(r = serv_state_service_request_blobs2(
+			if (!!(r = gs_store_worker_server_aux_state_service_request_blobs2(
 				CrankData->mWorkerDataSend,
 				IdForSend,
 				&CrankData->mStoreWorker->mIntrToken,
@@ -505,6 +477,20 @@ clean:
 		git_repository_free(Repository);
 
 	return r;
+}
+
+int gs_store_worker_cb_destroy_t_server(struct GsStoreWorker *StoreWorker)
+{
+	struct GsStoreWorkerServer *pThis = (struct GsStoreWorkerServer *) StoreWorker;
+
+	if (!pThis)
+		return 0;
+
+	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_SERVER_MAGIC);
+
+	GS_DELETE(&StoreWorker);
+
+	return 0;
 }
 
 int gs_net_full_create_connection_server(

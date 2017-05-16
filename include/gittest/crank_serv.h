@@ -77,10 +77,7 @@ int gs_store_worker_server_create(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	struct GsStoreWorkerServer **oStoreWorker);
-int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData);
-int gs_store_worker_cb_destroy_t_server(struct GsStoreWorker *StoreWorker);
-
-int serv_state_service_request_blobs2(
+int gs_store_worker_server_aux_state_service_request_blobs2(
 	struct GsWorkerData *WorkerDataSend,
 	gs_connection_surrogate_id_t IdForSend,
 	struct GsIntrTokenSurrogate *IntrToken,
@@ -88,8 +85,8 @@ int serv_state_service_request_blobs2(
 	uint32_t OffsetSize,
 	git_repository *Repository,
 	const GsFrameType &FrameTypeResponse);
-
-int serv_state_crank2(struct GsCrankData *CrankData);
+int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData);
+int gs_store_worker_cb_destroy_t_server(struct GsStoreWorker *StoreWorker);
 
 int gs_net_full_create_connection_server(
 	uint32_t ServPort,
