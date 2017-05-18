@@ -672,16 +672,14 @@ int gs_extra_host_create_client_create(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&ExtraHostCreate);
+		GS_DELETE(&ExtraHostCreate, GsExtraHostCreateClient);
 	}
 
 	return r;
 }
 
 int gs_store_ntwk_client_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwkClient **oStoreNtwk)
 {
 	int r = 0;
@@ -691,9 +689,7 @@ int gs_store_ntwk_client_create(
 	if (!!(r = gs_store_ntwk_init(
 		GS_STORE_NTWK_CLIENT_MAGIC,
 		gs_store_ntwk_cb_destroy_t_client,
-		valIntrTokenSurrogate,
-		CtrlCon,
-		AffinityQueue,
+		ConnectionCommon,
 		&StoreNtwk->base)))
 	{
 		GS_GOTO_CLEAN();
@@ -704,7 +700,7 @@ int gs_store_ntwk_client_create(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&StoreNtwk);
+		GS_DELETE(&StoreNtwk, GsStoreNtwkClient);
 	}
 
 	return r;
@@ -719,19 +715,17 @@ int gs_store_ntwk_cb_destroy_t_client(struct GsStoreNtwk *StoreNtwk)
 
 	GS_ASSERT(pThis->base.magic == GS_STORE_NTWK_CLIENT_MAGIC);
 
-	GS_DELETE_F(pThis->base.mConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
+	GS_DELETE_F(&pThis->base.mConnectionSurrogateMap, gs_connection_surrogate_map_destroy);
 
-	GS_DELETE(&StoreNtwk);
+	GS_DELETE(&StoreNtwk, GsStoreNtwk);
 
 	return 0;
 }
 
 int gs_store_worker_client_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorkerClient **oStoreWorker)
 {
 	int r = 0;
@@ -742,7 +736,7 @@ int gs_store_worker_client_create(
 
 	sp<ClntState> State(new ClntState());
 
-	if (!!(r = gs_ctrl_con_get_num_workers(CtrlCon, &NumWorkers)))
+	if (!!(r = gs_ctrl_con_get_num_workers(ConnectionCommon->mCtrlCon, &NumWorkers)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_state_make_default(State.get())))
@@ -752,10 +746,8 @@ int gs_store_worker_client_create(
 		GS_STORE_WORKER_CLIENT_MAGIC,
 		gs_store_worker_cb_crank_t_client,
 		gs_store_worker_cb_destroy_t_client,
-		valIntrTokenSurrogate,
-		CtrlCon,
-		AffinityQueue,
 		NumWorkers,
+		ConnectionCommon,
 		&StoreWorker->base)))
 	{
 		GS_GOTO_CLEAN();
@@ -772,7 +764,7 @@ int gs_store_worker_client_create(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&StoreWorker);
+		GS_DELETE(&StoreWorker, GsStoreWorkerClient);
 	}
 
 	return r;
@@ -787,7 +779,7 @@ int gs_store_worker_cb_destroy_t_client(struct GsStoreWorker *StoreWorker)
 
 	GS_ASSERT(pThis->base.magic == GS_STORE_WORKER_CLIENT_MAGIC);
 
-	GS_DELETE(&StoreWorker);
+	GS_DELETE(&StoreWorker, GsStoreWorker);
 
 	return 0;
 }
@@ -802,53 +794,25 @@ int gs_net_full_create_connection_client(
 	int r = 0;
 
 	struct GsFullConnection *ConnectionClient = NULL;
+	struct GsFullConnectionCommonData *ConnectionCommon = NULL;
 
-	ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
-	GsIntrTokenSurrogate      IntrToken = {};
+	struct GsExtraHostCreateClient *ExtraHostCreate = NULL;
+	struct GsStoreNtwkClient       *StoreNtwk       = NULL;
+	struct GsStoreWorkerClient     *StoreWorker     = NULL;
 
-	GsCtrlCon               *CtrlCon = NULL;
-
-	GsAffinityQueue *AffinityQueue = NULL;
-
-	GsExtraHostCreateClient *ExtraHostCreate = NULL;
-	GsStoreNtwkClient       *StoreNtwk       = NULL;
-	GsStoreWorkerClient     *StoreWorker     = NULL;
-
-	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
+	if (!!(r = gs_full_connection_common_data_create(GS_MAGIC_NUM_WORKER_THREADS, &ConnectionCommon)))
 		GS_GOTO_CLEAN();
 
-	if (!(IntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
-		GS_ERR_CLEAN(1);
-
-	if (!!(r = gs_ctrl_con_create(1, GS_MAGIC_NUM_WORKER_THREADS, &CtrlCon)))
+	if (!!(r = gs_extra_host_create_client_create(ServPort, ServHostNameBuf, LenServHostName, &ExtraHostCreate)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_affinity_queue_create(GS_MAGIC_NUM_WORKER_THREADS, &AffinityQueue)))
+	if (!!(r = gs_store_ntwk_client_create(ConnectionCommon, &StoreNtwk)))
 		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_extra_host_create_client_create(
-		ServPort,
-		ServHostNameBuf, LenServHostName,
-		&ExtraHostCreate)))
-	{
-		GS_GOTO_CLEAN();
-	}
-
-	if (!!(r = gs_store_ntwk_client_create(
-		IntrToken,
-		CtrlCon,
-		AffinityQueue,
-		&StoreNtwk)))
-	{
-		GS_GOTO_CLEAN();
-	}
 
 	if (!!(r = gs_store_worker_client_create(
-		IntrToken,
-		CtrlCon,
-		AffinityQueue,
 		RefNameMainBuf, LenRefNameMain,
 		RepoMainPathBuf, LenRepoMainPath,
+		ConnectionCommon,
 		&StoreWorker)))
 	{
 		GS_GOTO_CLEAN();
@@ -856,11 +820,10 @@ int gs_net_full_create_connection_client(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
-		GS_ARGOWN(&AffinityQueue, struct GsAffinityQueue),
 		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
 		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
 		GS_ARGOWN(&StoreWorker, struct GsStoreWorker),
+		GS_ARGOWN(&ConnectionCommon, GsFullConnectionCommonData),
 		&ConnectionClient,
 		"clnt")))
 	{
@@ -872,12 +835,11 @@ int gs_net_full_create_connection_client(
 
 clean:
 	if (!!r) {
-		GS_DELETE_VF(&StoreWorker->base, cb_destroy_t);
-		GS_DELETE_VF(&StoreNtwk->base, cb_destroy_t);
-		GS_DELETE_VF(&ExtraHostCreate->base, cb_destroy_t);
-		GS_DELETE_F(AffinityQueue, gs_affinity_queue_destroy);
-		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
-		GS_DELETE_F(ConnectionClient, gs_full_connection_destroy);
+		GS_DELETE_F(&ConnectionClient, gs_full_connection_destroy);
+		GS_DELETE_BASE_VF(&StoreWorker, cb_destroy_t);
+		GS_DELETE_BASE_VF(&StoreNtwk, cb_destroy_t);
+		GS_DELETE_BASE_VF(&ExtraHostCreate, cb_destroy_t);
+		GS_DELETE_F(&ConnectionCommon, gs_full_connection_common_data_destroy);
 	}
 
 	return r;
@@ -973,7 +935,7 @@ int gs_extra_worker_cb_destroy_t_client(struct GsExtraWorker *ExtraWorker)
 
 	GS_ASSERT(ExtraWorker->magic == GS_EXTRA_WORKER_CLIENT_MAGIC);
 
-	GS_DELETE(&ExtraWorker);
+	GS_DELETE(&ExtraWorker, GsExtraWorker);
 
 	return 0;
 }

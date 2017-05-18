@@ -5,14 +5,6 @@
 
 #include <gittest/misc.h>
 
-void gs_aux_delete_nulling(void **ptr)
-{
-	if (*ptr) {
-		delete *ptr;
-		*ptr = NULL;
-	}
-}
-
 void * gs_aux_argown(void **ptr)
 {
 	void *ret = *ptr;

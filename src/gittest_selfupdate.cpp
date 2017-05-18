@@ -201,7 +201,7 @@ int aux_selfupdate_main_mode_main() {
 
 clean:
 	if (!!r) {
-		GS_DELETE(&FcsClnt);
+		GS_DELETE(&FcsClnt, GsFullConnection);
 	}
 
 	return r;

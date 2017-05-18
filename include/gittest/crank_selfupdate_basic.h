@@ -59,17 +59,13 @@ int gs_extra_host_create_selfupdate_basic_create(
 	struct GsExtraHostCreateSelfUpdateBasic **oExtraHostCreate);
 
 int gs_store_ntwk_selfupdate_basic_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwkSelfUpdateBasic **oStoreNtwk);
 int gs_store_ntwk_cb_destroy_t_selfupdate_basic(struct GsStoreNtwk *StoreNtwk);
 
 int gs_store_worker_selfupdate_basic_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	const char *FileNameAbsoluteSelfUpdateBuf, size_t LenFileNameAbsoluteSelfUpdate,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorkerSelfUpdateBasic **oStoreWorker);
 int gs_store_worker_cb_destroy_t_selfupdate_basic(struct GsStoreWorker *StoreWorker);
 

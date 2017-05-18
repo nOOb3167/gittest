@@ -54,7 +54,7 @@ int startserv() {
 
 clean:
 	if (!!r) {
-		GS_DELETE(&FcsServ);
+		GS_DELETE(&FcsServ, GsFullConnection);
 	}
 
 	return r;

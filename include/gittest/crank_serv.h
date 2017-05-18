@@ -62,20 +62,16 @@ int gs_extra_worker_server_create(
 int gs_extra_worker_cb_destroy_t_server(struct GsExtraWorker *ExtraWorker);
 
 int gs_store_ntwk_server_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwkServer **oStoreNtwk);
 int gs_store_ntwk_cb_destroy_t_server(struct GsStoreNtwk *StoreNtwk);
 
 int gs_store_worker_server_create(
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorkerServer **oStoreWorker);
 int gs_store_worker_server_aux_state_service_request_blobs2(
 	struct GsWorkerData *WorkerDataSend,

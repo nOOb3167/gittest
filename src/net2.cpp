@@ -163,7 +163,7 @@ int gs_helper_api_ntwk_extra_host_create_and_notify(
 clean:
 	if (!!r) {
 		for (size_t i = 0; i < ExtraWorker.size(); i++)
-			GS_DELETE_VF(ExtraWorker[i], cb_destroy_t);
+			GS_DELETE_VF(&ExtraWorker[i], cb_destroy_t);
 	}
 
 	return r;
@@ -186,7 +186,7 @@ int gs_connection_surrogate_map_create(
 int gs_connection_surrogate_map_destroy(
 	struct GsConnectionSurrogateMap *ConnectionSurrogateMap)
 {
-	GS_DELETE(&ConnectionSurrogateMap);
+	GS_DELETE(&ConnectionSurrogateMap, GsConnectionSurrogateMap);
 	return 0;
 }
 
@@ -348,7 +348,7 @@ int gs_connection_surrogate_map_register_bond_transfer_ownership(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&HeapAllocatedDefaultedOwnedCtxstruct);
+		GS_DELETE(&HeapAllocatedDefaultedOwnedCtxstruct, GsBypartCbDataGsConnectionSurrogateId);
 	}
 
 	return r;
@@ -500,7 +500,7 @@ int gs_host_surrogate_connect_wait_blocking_register(
 
 clean:
 	if (!!r) {
-		GS_DELETE(&ctxstruct);
+		GS_DELETE(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId);
 	}
 
 	return r;
@@ -588,7 +588,7 @@ int gs_worker_data_create(struct GsWorkerData **oWorkerData)
 
 int gs_worker_data_destroy(struct GsWorkerData *WorkerData)
 {
-	GS_DELETE(&WorkerData);
+	GS_DELETE(&WorkerData, GsWorkerData);
 	return 0;
 }
 
@@ -613,11 +613,7 @@ int gs_ctrl_con_create(
 
 int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon)
 {
-	if (!CtrlCon)
-		return 0;
-
-	delete CtrlCon;
-
+	GS_DELETE(&CtrlCon, GsCtrlCon);
 	return 0;
 }
 
@@ -658,35 +654,25 @@ int gs_extra_worker_replace(
 	struct GsExtraWorker **ioExtraWorker,
 	struct GsExtraWorker *Replacement)
 {
-	if (ioExtraWorker && (*ioExtraWorker))
-		GS_DELETE_VF(*ioExtraWorker, cb_destroy_t);
+	if (ioExtraWorker)
+		GS_DELETE_VF(ioExtraWorker, cb_destroy_t);
 	*ioExtraWorker = Replacement;
 	return 0;
-}
-
-struct GsExtraWorker **gs_extra_worker_pp_base_cast(
-	struct GsExtraWorker **PtrPtrExtraWorker,
-	uint32_t ExpectedMagic)
-{
-	GS_ASSERT((*PtrPtrExtraWorker)->magic == ExpectedMagic);
-	return PtrPtrExtraWorker;
 }
 
 int gs_store_ntwk_init(
 	uint32_t Magic,
 	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwk *ioStoreNtwk)
 {
 	int r = 0;
 
 	ioStoreNtwk->magic = Magic;
 	ioStoreNtwk->cb_destroy_t = CbDestroy;
-	ioStoreNtwk->mIntrToken = valIntrTokenSurrogate;
-	ioStoreNtwk->mCtrlCon = CtrlCon;
-	ioStoreNtwk->mAffinityQueue = AffinityQueue;
+	ioStoreNtwk->mIntrToken = ConnectionCommon->mIntrToken;
+	ioStoreNtwk->mCtrlCon = ConnectionCommon->mCtrlCon;
+	ioStoreNtwk->mAffinityQueue = ConnectionCommon->mAffinityQueue;
 
 	if (!!(r = clnt_state_reconnect_make_default(&ioStoreNtwk->mStateReconnect)))
 		GS_GOTO_CLEAN();
@@ -703,18 +689,16 @@ int gs_store_worker_init(
 	uint32_t Magic,
 	int(*CbCrank)(struct GsCrankData *CrankData),
 	int(*CbDestroy)(struct GsStoreWorker *StoreWorker),
-	struct GsIntrTokenSurrogate valIntrToken,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	uint32_t mNumWorkers,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorker *ioStoreWorker)
 {
 	ioStoreWorker->magic = Magic;
 	ioStoreWorker->cb_crank_t = CbCrank;
 	ioStoreWorker->cb_destroy_t = CbDestroy;
-	ioStoreWorker->mIntrToken = valIntrToken;
-	ioStoreWorker->mCtrlCon = CtrlCon;
-	ioStoreWorker->mAffinityQueue = AffinityQueue;
+	ioStoreWorker->mIntrToken = ConnectionCommon->mIntrToken;
+	ioStoreWorker->mCtrlCon = ConnectionCommon->mCtrlCon;
+	ioStoreWorker->mAffinityQueue = ConnectionCommon->mAffinityQueue;
 	ioStoreWorker->mNumWorkers = mNumWorkers;
 	return 0;
 }
@@ -736,13 +720,8 @@ clean:
 
 int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate)
 {
-	int r = 0;
-
-	GS_DELETE(&ExtraHostCreate);
-
-clean:
-
-	return r;
+	GS_DELETE(&ExtraHostCreate, GsExtraHostCreate);
+	return 0;
 }
 
 int gs_worker_request_data_type_packet_make(
@@ -1321,7 +1300,7 @@ int gs_worker_data_vec_destroy(
 	struct GsWorkerDataVec *WorkerDataVec)
 {
 	for (size_t i = 0; i < WorkerDataVec->mLen; i++)
-		GS_DELETE_F(WorkerDataVec->mData[i], gs_worker_data_destroy);
+		GS_DELETE_F(&WorkerDataVec->mData[i], gs_worker_data_destroy);
 	delete [] WorkerDataVec->mData;
 	delete WorkerDataVec;
 	return 0;
@@ -1366,7 +1345,7 @@ clean:
 
 int gs_affinity_queue_destroy(struct GsAffinityQueue *AffinityQueue)
 {
-	GS_DELETE(&AffinityQueue);
+	GS_DELETE(&AffinityQueue, GsAffinityQueue);
 	return 0;
 }
 
@@ -2038,7 +2017,7 @@ int gs_ntwk_host_service_event(
 			GS_GOTO_CLEAN();
 
 		/* NOTE: raw delete, routinely new'd at ENET_EVENT_TYPE_CONNECT */
-		GS_DELETE(&ctxstruct);
+		GS_DELETE(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId);
 	}
 	break;
 
@@ -2327,8 +2306,8 @@ void gs_worker_thread_func(
 	/* NOTE: other return codes handled by fallthrough */
 
 clean:
-	GS_DELETE_F(CrankData, gs_crank_data_destroy);
-	GS_DELETE_VF(ExtraWorker, cb_destroy_t);
+	GS_DELETE_F(&CrankData, gs_crank_data_destroy);
+	GS_DELETE_VF(&ExtraWorker, cb_destroy_t);
 
 	if (r == 0)
 		GS_LOG(E, S, "worker implicit exit");
@@ -2345,11 +2324,10 @@ clean:
 
 int gs_net_full_create_connection(
 	uint32_t ServPort,
-	struct GsCtrlCon *CtrlCon, /**< owned */
-	struct GsAffinityQueue *AffinityQueue, /**< owned */
 	struct GsExtraHostCreate *ExtraHostCreate, /**< owned */
 	struct GsStoreNtwk       *StoreNtwk, /**< owned */
 	struct GsStoreWorker     *StoreWorker, /**< owned */
+	struct GsFullConnectionCommonData *ConnectionCommon, /**< owned */
 	struct GsFullConnection **oConnection,
 	const char *ExtraThreadName)
 {
@@ -2396,13 +2374,13 @@ int gs_net_full_create_connection(
 	if (!!(r = gs_full_connection_create(
 		NtwkThread,
 		ThreadWorker,
-		GS_ARGOWN(&WorkerDataVecRecv, struct GsWorkerDataVec),
-		GS_ARGOWN(&WorkerDataSend, struct GsWorkerData),
-		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
-		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
-		GS_ARGOWN(&StoreWorker, struct GsStoreWorker),
-		GS_ARGOWN(&CtrlCon, struct GsCtrlCon),
-		GS_ARGOWN(&AffinityQueue, struct GsAffinityQueue),
+		GS_ARGOWN(&WorkerDataVecRecv, GsWorkerDataVec),
+		GS_ARGOWN(&WorkerDataSend, GsWorkerData),
+		GS_ARGOWN(&ExtraHostCreate, GsExtraHostCreate),
+		GS_ARGOWN(&StoreNtwk, GsStoreNtwk),
+		GS_ARGOWN(&StoreWorker, GsStoreWorker),
+		GS_ARGOWN(&ConnectionCommon->mCtrlCon, GsCtrlCon),
+		GS_ARGOWN(&ConnectionCommon->mAffinityQueue, GsAffinityQueue),
 		&Connection)))
 	{
 		GS_GOTO_CLEAN();
@@ -2413,13 +2391,13 @@ int gs_net_full_create_connection(
 
 clean:
 	if (!!r) {
-		GS_DELETE_F(Connection, gs_full_connection_destroy);
-		GS_DELETE_F(WorkerDataSend, gs_worker_data_destroy);
-		GS_DELETE_F(WorkerDataVecRecv, gs_worker_data_vec_destroy);
-		GS_DELETE_F(CtrlCon, gs_ctrl_con_destroy);
-		GS_DELETE_VF(ExtraHostCreate, cb_destroy_t);
-		GS_DELETE_VF(StoreNtwk, cb_destroy_t);
-		GS_DELETE_VF(StoreWorker, cb_destroy_t);
+		GS_DELETE_F(&Connection, gs_full_connection_destroy);
+		GS_DELETE_F(&WorkerDataSend, gs_worker_data_destroy);
+		GS_DELETE_F(&WorkerDataVecRecv, gs_worker_data_vec_destroy);
+		GS_DELETE_VF(&ExtraHostCreate, cb_destroy_t);
+		GS_DELETE_VF(&StoreNtwk, cb_destroy_t);
+		GS_DELETE_VF(&StoreWorker, cb_destroy_t);
+		GS_DELETE_F(&ConnectionCommon, gs_full_connection_common_data_destroy);
 	}
 
 	return r;
@@ -2449,7 +2427,49 @@ int gs_crank_data_create(
 
 int gs_crank_data_destroy(struct GsCrankData *CrankData)
 {
-	GS_DELETE(&CrankData);
+	GS_DELETE(&CrankData, GsCrankData);
+	return 0;
+}
+
+int gs_full_connection_common_data_create(
+	uint32_t NumWorkers,
+	struct GsFullConnectionCommonData **oConnectionCommon)
+{
+	int r = 0;
+
+	struct GsFullConnectionCommonData *ConnectionCommon = new GsFullConnectionCommonData();
+
+	struct ENetIntrTokenCreateFlags *IntrTokenFlags = NULL;
+
+	if (!(IntrTokenFlags = enet_intr_token_create_flags_create(ENET_INTR_DATA_TYPE_NONE)))
+		GS_GOTO_CLEAN();
+
+	if (!(ConnectionCommon->mIntrToken.mIntrToken = enet_intr_token_create(IntrTokenFlags)))
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_ctrl_con_create(1, NumWorkers, &ConnectionCommon->mCtrlCon)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_affinity_queue_create(NumWorkers, &ConnectionCommon->mAffinityQueue)))
+		GS_GOTO_CLEAN();
+
+	if (oConnectionCommon)
+		*oConnectionCommon = ConnectionCommon;
+
+clean:
+	if (!!r) {
+		GS_DELETE_F(&ConnectionCommon, gs_full_connection_common_data_destroy);
+	}
+
+	return r;
+}
+
+int gs_full_connection_common_data_destroy(struct GsFullConnectionCommonData *ioData)
+{
+	// FIXME: currently no way to destroy token?
+	//   if (ioData->mIntrToken.mIntrToken)
+	GS_DELETE_F(&ioData->mCtrlCon, gs_ctrl_con_destroy);
+	GS_DELETE_F(&ioData->mAffinityQueue, gs_affinity_queue_destroy);
 	return 0;
 }
 
@@ -2492,15 +2512,15 @@ int gs_full_connection_destroy(struct GsFullConnection *Connection)
 	if (!Connection)
 		return 0;
 
-	GS_DELETE_F(Connection->mWorkerDataVecRecv, gs_worker_data_vec_destroy);
-	GS_DELETE_F(Connection->mWorkerDataSend, gs_worker_data_destroy);
-	GS_DELETE_VF(Connection->mExtraHostCreate, cb_destroy_t);
-	GS_DELETE_VF(Connection->mStoreNtwk, cb_destroy_t);
-	GS_DELETE_VF(Connection->mStoreWorker, cb_destroy_t);
-	GS_DELETE_F(Connection->mCtrlCon, gs_ctrl_con_destroy);
-	GS_DELETE_F(Connection->mAffinityQueue, gs_affinity_queue_destroy);
+	GS_DELETE_F(&Connection->mWorkerDataVecRecv, gs_worker_data_vec_destroy);
+	GS_DELETE_F(&Connection->mWorkerDataSend, gs_worker_data_destroy);
+	GS_DELETE_VF(&Connection->mExtraHostCreate, cb_destroy_t);
+	GS_DELETE_VF(&Connection->mStoreNtwk, cb_destroy_t);
+	GS_DELETE_VF(&Connection->mStoreWorker, cb_destroy_t);
+	GS_DELETE_F(&Connection->mCtrlCon, gs_ctrl_con_destroy);
+	GS_DELETE_F(&Connection->mAffinityQueue, gs_affinity_queue_destroy);
 
-	GS_DELETE(&Connection);
+	GS_DELETE(&Connection, GsFullConnection);
 
 	return 0;
 }

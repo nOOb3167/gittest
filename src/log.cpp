@@ -439,11 +439,10 @@ int gs_log_list_free(GsLogList *LogList) {
 		if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
 			goto clean;
 
-		GS_DELETE_F(LogList->mLogUnifiedOpt, gs_log_unified_destroy);
-		LogList->mLogUnifiedOpt = NULL;
+		GS_DELETE_F(&LogList->mLogUnifiedOpt, gs_log_unified_destroy);
 	}
 
-	GS_DELETE(&LogList);
+	GS_DELETE(&LogList, GsLogList);
 
 clean:
 

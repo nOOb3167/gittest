@@ -27,12 +27,60 @@
 #define GS_THREAD_LOCAL_DESIGNATOR __thread
 #endif
 
-#define GS_DELETE(PTR_PTR_ALLOCATED_WITH_NEW) do { gs_aux_delete_nulling((void **) (PTR_PTR_ALLOCATED_WITH_NEW)); } while (0)
-#define GS_DELETE_F(VARNAME, FNAME) do { if (!!((FNAME)((VARNAME)))) { GS_ASSERT(0); } } while (0)
-#define GS_DELETE_VF(VARNAME, VFNAME) do { if (!!((VARNAME)->VFNAME((VARNAME)))) { GS_ASSERT(0); } } while (0)
+/* nulling destruction - delete P */
+#define GS_DELETE(PTR_PTR_ALLOCATED_WITH_NEW, TYPE) \
+  do {                                              \
+    TYPE **ptr_ptr = (PTR_PTR_ALLOCATED_WITH_NEW);  \
+	if (*ptr_ptr) {                                 \
+	  delete *ptr_ptr;                              \
+	  *ptr_ptr = NULL;                              \
+	}                                               \
+  } while (0)
 
-/* distinguished from GS_DELETE_F for documentation purposes */
-#define GS_RELEASE_F(VARNAME, FNAME) GS_DELETE_F(VARNAME, FNAME)
+/* nulling destruction - DELETER(P) */
+#define GS_DELETE_F(PTR_PTR_VARNAME, FNAME)                \
+  do {                                                     \
+    decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
+	if (*ptr_ptr) {                                        \
+      if (!!((FNAME)(*ptr_ptr))) GS_ASSERT(0);             \
+      *ptr_ptr = NULL;                                     \
+	}                                                      \
+  } while (0)
+
+/* nulling destruction - DELETER(&P->base) */
+#define GS_DELETE_BASE_F(PTR_PTR_VARNAME)                  \
+  do {                                                     \
+    decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
+	if (*ptr_ptr) {                                        \
+      if (!!((FNAME)(&(*ptr_ptr)->base))) GS_ASSERT(0);    \
+      *ptr_ptr = NULL;                                     \
+	}                                                      \
+  } while (0)
+
+/* nulling destruction - P->DELETER(P) */
+#define GS_DELETE_VF(PTR_PTR_VARNAME, VFNAME)              \
+  do {                                                     \
+    decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
+	if (*ptr_ptr) {                                        \
+      if (!!((*ptr_ptr)->VFNAME(*ptr_ptr))) GS_ASSERT(0);  \
+      *ptr_ptr = NULL;                                     \
+	}                                                      \
+  } while (0)
+
+/* nulling destruction - (&P->base)->DELETER(&P->base) */
+#define GS_DELETE_BASE_VF(PTR_PTR_VARNAME, VFNAME)         \
+  do {                                                     \
+    decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
+	decltype(*ptr_ptr) ptr = *ptr_ptr;                     \
+	decltype(&ptr->base) ptr_base = (decltype(&ptr->base))(&ptr->base); \
+	if (*ptr_ptr) {                                        \
+      if (!!(ptr_base->VFNAME(ptr_base))) GS_ASSERT(0);    \
+      *ptr_ptr = NULL;                                     \
+	}                                                      \
+  } while (0)
+
+/* non-nulling destruction / release - DELETER(P) */
+#define GS_RELEASE_F(VARNAME, FNAME) do { decltype(VARNAME) ptr = (VARNAME); GS_DELETE_F(&ptr, FNAME); } while (0)
 
 #define GS_ARGOWN(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
 
@@ -76,7 +124,6 @@
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
-void gs_aux_delete_nulling(void **ptr);
 void * gs_aux_argown(void **ptr);
 
 int gs_build_modified_filename(

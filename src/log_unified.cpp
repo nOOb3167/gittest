@@ -145,7 +145,7 @@ int gs_log_unified_destroy(struct GsLogUnified *LogUnified)
 			GS_ASSERT(0);
 	}
 
-	GS_DELETE(&LogUnified);
+	GS_DELETE(&LogUnified, GsLogUnified);
 
 	return 0;
 }

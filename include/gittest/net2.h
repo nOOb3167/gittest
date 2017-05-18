@@ -45,8 +45,13 @@
 #define GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC        0x503C3260
 #define GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C3261
 
-#define GS_EXTRA_WORKER_PP_BASE_CAST(PTR_PTR_EXTRA_WORKER, EXPECTED_MAGIC_LUMP) \
-	gs_extra_worker_pp_base_cast((struct GsExtraWorker **)(PTR_PTR_EXTRA_WORKER), GS_EXTRA_WORKER_ ## EXPECTED_MAGIC_LUMP ## _MAGIC)
+#define GS_PP_BASE_DECL(PTR_VARNAME)                                            \
+  decltype(PTR_VARNAME) * PTR_VARNAME ## PP = &(PTR_VARNAME);                   \
+  /* PTR_VARNAME ## Dummy: at least check that 'base' exists as member field */ \
+  decltype(&(PTR_VARNAME)->base) PTR_VARNAME ## Dummy = &(PTR_VARNAME)->base;   \
+  /* check base is at struct offset zero basically */                           \
+  GS_ASSERT((void *)((PTR_VARNAME)) == (void *)(&(PTR_VARNAME)->base));         \
+  decltype(&(PTR_VARNAME)->base) * PTR_VARNAME ## PPBase = (decltype(&(PTR_VARNAME)->base) *)(&(PTR_VARNAME))
 
 #define GS_AFFINITY_IN_PROGRESS_NONE -1
 
@@ -419,6 +424,17 @@ struct GsCrankData
 	struct GsExtraWorker *mExtraWorker; /**< mutable */
 };
 
+/** @sa
+       ::gs_full_connection_common_data_create
+	   ::gs_full_connection_common_data_destroy
+*/
+struct GsFullConnectionCommonData
+{
+	struct GsIntrTokenSurrogate mIntrToken; /**< owned, stealable */
+	struct GsCtrlCon *mCtrlCon;             /**< owned, stealable */
+	struct GsAffinityQueue *mAffinityQueue; /**< owned, stealable */
+};
+
 /**
 
     WARNING: custom / special destruction protocol
@@ -619,19 +635,15 @@ int gs_extra_worker_replace(
 int gs_store_ntwk_init(
 	uint32_t Magic,
 	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
-	struct GsIntrTokenSurrogate valIntrTokenSurrogate,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwk *ioStoreNtwk);
 
 int gs_store_worker_init(
 	uint32_t Magic,
 	int(*CbCrank)(struct GsCrankData *CrankData),
 	int(*CbDestroy)(struct GsStoreWorker *StoreWorker),
-	struct GsIntrTokenSurrogate valIntrToken,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	uint32_t mNumWorkers,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorker *ioStoreWorker);
 
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
@@ -794,17 +806,12 @@ void gs_worker_thread_func(
 	gs_worker_id_t WorkerId,
 	const char *ExtraThreadName);
 
-struct GsExtraWorker **gs_extra_worker_pp_base_cast(
-	struct GsExtraWorker **PtrPtrExtraWorker,
-	uint32_t ExpectedMagic);
-
 int gs_net_full_create_connection(
 	uint32_t ServPort,
-	struct GsCtrlCon *CtrlCon,
-	struct GsAffinityQueue *AffinityQueue,
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsStoreNtwk       *StoreNtwk,
 	struct GsStoreWorker     *StoreWorker,
+	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsFullConnection **oConnection,
 	const char *ExtraThreadName);
 
@@ -816,6 +823,11 @@ int gs_crank_data_create(
 	struct GsExtraWorker *ExtraWorker,
 	struct GsCrankData **oCrankData);
 int gs_crank_data_destroy(struct GsCrankData *CrankData);
+
+int gs_full_connection_common_data_create(
+	uint32_t NumWorkers,
+	struct GsFullConnectionCommonData **oConnectionCommon);
+int gs_full_connection_common_data_destroy(struct GsFullConnectionCommonData *ioData);
 
 int gs_full_connection_create(
 	sp<std::thread> ThreadNtwk,
