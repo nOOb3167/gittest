@@ -12,7 +12,6 @@
 
 struct GsConnectionSurrogate;
 
-typedef uint64_t gs_connection_surrogate_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
 
 /** manual-init struct

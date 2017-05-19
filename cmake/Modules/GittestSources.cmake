@@ -337,7 +337,9 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   SET(GITTEST_NET_HEADERS
     include/gittest/frame.h
     include/gittest/net2.h
+    include/gittest/net2_fwd.h
     include/gittest/net2_surrogate.h
+    include/gittest/net2_request.h
     include/gittest/crank_clnt.h
     include/gittest/crank_serv.h
     include/gittest/crank_selfupdate_basic.h
@@ -347,6 +349,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/frame.cpp
     src/net2.cpp
     src/net2_surrogate.cpp
+    src/net2_request.cpp
     src/net2_test.cpp
     src/crank_clnt.cpp
     src/crank_serv.cpp
