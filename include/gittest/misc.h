@@ -90,7 +90,10 @@
   GS_ASSERT((void *)((PTR_VARNAME)) == (void *)(&(PTR_VARNAME)->base));         \
   decltype(&(PTR_VARNAME)->base) * PTR_VARNAME ## PPBase = (decltype(&(PTR_VARNAME)->base) *)(&(PTR_VARNAME))
 
-#define GS_ARGOWN(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
+#define GS_ARGOWN_OLD(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
+#define GS_ARGOWN_P(PTR_VARNAME) ( ((decltype(PTR_VARNAME))(gs_aux_argown((void **)&(PTR_VARNAME)))) )
+#define GS_ARGOWN(PTR_PTR_VARNAME) ( (std::remove_reference<decltype(*(PTR_PTR_VARNAME))>::type)(gs_aux_argown((void **)(PTR_PTR_VARNAME))) )
+#define GS_BASE_ARGOWN(PTR_PTR_VARNAME) ( (decltype(&(*(PTR_PTR_VARNAME))->base))(gs_aux_argown((void **)(PTR_PTR_VARNAME))) )
 
 
 #define GS_DEBUG_BREAK() gs_debug_break()

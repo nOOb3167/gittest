@@ -155,7 +155,7 @@ int gs_helper_api_ntwk_extra_host_create_and_notify(
 	for (uint32_t i = 0; i < WorkerDataVecRecv->mLen; i++)
 		if (!!(r = gs_worker_request_enqueue_double_notify(
 			gs_worker_data_vec_id(WorkerDataVecRecv, i),
-			GS_ARGOWN(ExtraWorker.data() + i, GsExtraWorker))))
+			GS_ARGOWN(ExtraWorker.data() + i))))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -491,7 +491,7 @@ int gs_host_surrogate_connect_wait_blocking_register(
 
 	if (!!(r = gs_connection_surrogate_map_register_bond_transfer_ownership(
 		ConnectionSurrogate,
-		GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
+		GS_ARGOWN(&ctxstruct),
 		ioConnectionSurrogateMap,
 		oAssignedId)))
 	{
@@ -1990,7 +1990,7 @@ int gs_ntwk_host_service_event(
 
 		if (!!(r = gs_connection_surrogate_map_register_bond_transfer_ownership(
 			ConnectionSurrogate,
-			GS_ARGOWN(&ctxstruct, GsBypartCbDataGsConnectionSurrogateId),
+			GS_ARGOWN(&ctxstruct),
 			ioConnectionSurrogateMap,
 			&AssignedId)))
 		{
@@ -2374,13 +2374,13 @@ int gs_net_full_create_connection(
 	if (!!(r = gs_full_connection_create(
 		NtwkThread,
 		ThreadWorker,
-		GS_ARGOWN(&WorkerDataVecRecv, GsWorkerDataVec),
-		GS_ARGOWN(&WorkerDataSend, GsWorkerData),
-		GS_ARGOWN(&ExtraHostCreate, GsExtraHostCreate),
-		GS_ARGOWN(&StoreNtwk, GsStoreNtwk),
-		GS_ARGOWN(&StoreWorker, GsStoreWorker),
-		GS_ARGOWN(&ConnectionCommon->mCtrlCon, GsCtrlCon),
-		GS_ARGOWN(&ConnectionCommon->mAffinityQueue, GsAffinityQueue),
+		GS_ARGOWN(&WorkerDataVecRecv),
+		GS_ARGOWN(&WorkerDataSend),
+		GS_ARGOWN(&ExtraHostCreate),
+		GS_ARGOWN(&StoreNtwk),
+		GS_ARGOWN(&StoreWorker),
+		GS_ARGOWN(&ConnectionCommon->mCtrlCon),
+		GS_ARGOWN(&ConnectionCommon->mAffinityQueue),
 		&Connection)))
 	{
 		GS_GOTO_CLEAN();

@@ -820,10 +820,10 @@ int gs_net_full_create_connection_client(
 
 	if (!!(r = gs_net_full_create_connection(
 		ServPort,
-		GS_ARGOWN(&ExtraHostCreate, struct GsExtraHostCreate),
-		GS_ARGOWN(&StoreNtwk, struct GsStoreNtwk),
-		GS_ARGOWN(&StoreWorker, struct GsStoreWorker),
-		GS_ARGOWN(&ConnectionCommon, GsFullConnectionCommonData),
+		GS_BASE_ARGOWN(&ExtraHostCreate),
+		GS_BASE_ARGOWN(&StoreNtwk),
+		GS_BASE_ARGOWN(&StoreWorker),
+		GS_ARGOWN(&ConnectionCommon),
 		&ConnectionClient,
 		"clnt")))
 	{
