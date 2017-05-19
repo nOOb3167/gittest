@@ -82,6 +82,14 @@
 /* non-nulling destruction / release - DELETER(P) */
 #define GS_RELEASE_F(VARNAME, FNAME) do { decltype(VARNAME) ptr = (VARNAME); GS_DELETE_F(&ptr, FNAME); } while (0)
 
+#define GS_PP_BASE_DECL(PTR_VARNAME)                                            \
+  decltype(PTR_VARNAME) * PTR_VARNAME ## PP = &(PTR_VARNAME);                   \
+  /* PTR_VARNAME ## Dummy: at least check that 'base' exists as member field */ \
+  decltype(&(PTR_VARNAME)->base) PTR_VARNAME ## Dummy = &(PTR_VARNAME)->base;   \
+  /* check base is at struct offset zero basically */                           \
+  GS_ASSERT((void *)((PTR_VARNAME)) == (void *)(&(PTR_VARNAME)->base));         \
+  decltype(&(PTR_VARNAME)->base) * PTR_VARNAME ## PPBase = (decltype(&(PTR_VARNAME)->base) *)(&(PTR_VARNAME))
+
 #define GS_ARGOWN(PTR_PTR, TYPE) ((TYPE *)gs_aux_argown((void **)(PTR_PTR)))
 
 

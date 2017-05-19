@@ -45,14 +45,6 @@
 #define GS_STORE_NTWK_SELFUPDATE_BASIC_MAGIC        0x503C3260
 #define GS_STORE_WORKER_SELFUPDATE_BASIC_MAGIC      0x503C3261
 
-#define GS_PP_BASE_DECL(PTR_VARNAME)                                            \
-  decltype(PTR_VARNAME) * PTR_VARNAME ## PP = &(PTR_VARNAME);                   \
-  /* PTR_VARNAME ## Dummy: at least check that 'base' exists as member field */ \
-  decltype(&(PTR_VARNAME)->base) PTR_VARNAME ## Dummy = &(PTR_VARNAME)->base;   \
-  /* check base is at struct offset zero basically */                           \
-  GS_ASSERT((void *)((PTR_VARNAME)) == (void *)(&(PTR_VARNAME)->base));         \
-  decltype(&(PTR_VARNAME)->base) * PTR_VARNAME ## PPBase = (decltype(&(PTR_VARNAME)->base) *)(&(PTR_VARNAME))
-
 #define GS_AFFINITY_IN_PROGRESS_NONE -1
 
 struct GsConnectionSurrogate;
