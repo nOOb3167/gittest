@@ -19,6 +19,8 @@
 
 #include <gittest/frame.h>
 
+#include <gittest/net2_surrogate.h>
+
 #define GS_MAGIC_NUM_WORKER_THREADS 1
 
 #define GS_SERV_AUX_VERYHIGH_TIMEOUT_U32_MS 0xFFFFFFFF
@@ -47,12 +49,8 @@
 
 #define GS_AFFINITY_IN_PROGRESS_NONE -1
 
-struct GsConnectionSurrogate;
 struct GsExtraWorker;
 struct GsWorkerData;
-
-typedef uint64_t gs_connection_surrogate_id_t;
-typedef ::std::map<gs_connection_surrogate_id_t, GsConnectionSurrogate> gs_connection_surrogate_map_t;
 
 typedef uint64_t gs_worker_id_t;
 typedef ::std::map<gs_connection_surrogate_id_t, gs_worker_id_t> gs_affinity_map_t;
@@ -75,29 +73,6 @@ struct GsPrioDataComparator {
 
 typedef ::std::multiset<GsPrioData, GsPrioDataComparator> gs_prio_set_t;
 typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;
-
-/** Design:
-	Entries enter this structure on connection (ENet ENET_EVENT_TYPE_CONNECT).
-	Entries leave this structure on disconnection (ENet ENET_EVENT_TYPE_DISCONNECT).
-	Throughout operation, IDs are dealt out (even to other threads eg worker).
-	There may be attempted ID uses after an entry has already left the structure.
-	Design operations (especially the query/get kind) to handle missing entries.
-
-	@sa
-       ::gs_connection_surrogate_map_create
-	   ::gs_connection_surrogate_map_destroy
-	   ::gs_connection_surrogate_map_clear
-	   ::gs_connection_surrogate_map_insert_id
-	   ::gs_connection_surrogate_map_insert
-	   ::gs_connection_surrogate_map_get_try
-	   ::gs_connection_surrogate_map_get
-	   ::gs_connection_surrogate_map_erase
-	   ::gs_connection_surrogate_map_register_bond_transfer_ownership
-*/
-struct GsConnectionSurrogateMap {
-	std::atomic<uint64_t> mAtomicCount;
-	sp<gs_connection_surrogate_map_t> mConnectionSurrogateMap;
-};
 
 /** Wrapper for a count.
 	Semantically the number of reconnections remaining.
@@ -124,73 +99,6 @@ struct ENetIntrNtwk {
 	struct ENetIntr base;
 
 	struct GsWorkerData *WorkerDataSend;
-};
-
-/** manual-init struct
-    value struct
-*/
-struct GsIntrTokenSurrogate {
-	struct ENetIntrToken *mIntrToken;
-};
-
-/** manual-init struct
-    value struct
-
-	@sa
-	  ::gs_addr_surrogate_setup_addr_name_port
-*/
-struct GsAddressSurrogate {
-	ENetAddress mAddr;
-};
-
-/** manual-init struct
-    value struct
-
-	@sa
-	  ::gs_host_surrogate_setup_host_nobind
-	  ::gs_host_surrogate_setup_host_bind_port
-	  ::gs_host_surrogate_connect
-	  ::gs_host_surrogate_connect_wait_blocking
-*/
-struct GsHostSurrogate {
-	ENetHost *mHost;
-};
-
-/** manual-init struct
-    value struct
-*/
-struct GsPeerSurrogate {
-	ENetPeer *mPeer;
-};
-
-/** manual-init struct
-    value struct
-
-	@sa
-	  ::gs_connection_surrogate_init
-	  ::gs_connection_surrogate_packet_send
-*/
-struct GsConnectionSurrogate {
-	ENetHost *mHost;
-	ENetPeer *mPeer;
-	uint32_t mIsPrincipalClientConnection;
-};
-
-/** manual-init struct
-	value struct
-*/
-struct GsEventSurrogate {
-	ENetEvent event;
-};
-
-/** manual-init struct
-    value struct
-
-	@sa
-	   ::gs_packet_surrogate_release_ownership
-*/
-struct GsPacketSurrogate {
-	ENetPacket *mPacket;
 };
 
 /** @sa
@@ -530,77 +438,10 @@ int gs_affinity_token_acquire_raw_nolock(
 int gs_affinity_token_release(
 	struct GsAffinityToken *ioAffinityToken);
 
-int gs_connection_surrogate_map_create(
-	struct GsConnectionSurrogateMap **oConnectionSurrogateMap);
-int gs_connection_surrogate_map_destroy(
-	struct GsConnectionSurrogateMap *ConnectionSurrogateMap);
-int gs_connection_surrogate_map_clear(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap);
-int gs_connection_surrogate_map_insert_id(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	const struct GsConnectionSurrogate valConnectionSurrogate);
-int gs_connection_surrogate_map_insert(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	const GsConnectionSurrogate valConnectionSurrogate,
-	gs_connection_surrogate_id_t *oConnectionSurrogateId);
-int gs_connection_surrogate_map_get_try(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	struct GsConnectionSurrogate *oConnectionSurrogate,
-	uint32_t *oIsPresent);
-int gs_connection_surrogate_map_get(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t ConnectionSurrogateId,
-	struct GsConnectionSurrogate *oConnectionSurrogate);
-int gs_connection_surrogate_map_erase(
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t ConnectionSurrogateId);
-int gs_connection_surrogate_map_register_bond_transfer_ownership(
-	struct GsConnectionSurrogate valConnectionSurrogate,
-	struct GsBypartCbDataGsConnectionSurrogateId *HeapAllocatedDefaultedOwnedCtxstruct, /**< owned */
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t *oAssignedId);
-
 int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect);
 bool clnt_state_reconnect_have_remaining(struct ClntStateReconnect *StateReconnect);
 int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect);
 
-int gs_address_surrogate_setup_addr_name_port(
-	uint32_t ServPort,
-	const char *ServHostNameBuf, size_t LenServHostName,
-	struct GsAddressSurrogate *ioAddressSurrogate);
-
-int gs_host_surrogate_setup_host_nobind(
-	uint32_t NumMaxPeers,
-	struct GsHostSurrogate *ioHostSurrogate);
-int gs_host_surrogate_setup_host_bind_port(
-	uint32_t ServPort,
-	uint32_t NumMaxPeers,
-	struct GsHostSurrogate *ioHostSurrogate);
-int gs_host_surrogate_connect(
-	struct GsHostSurrogate *HostSurrogate,
-	struct GsAddressSurrogate *AddressSurrogate,
-	struct GsPeerSurrogate *ioPeerSurrogate);
-int gs_host_surrogate_connect_wait_blocking(
-	struct GsHostSurrogate *HostSurrogate,
-	struct GsPeerSurrogate *PeerSurrogate);
-int gs_host_surrogate_connect_wait_blocking_register(
-	struct GsHostSurrogate *Host,
-	uint32_t ServPort,
-	const char *ServHostNameBuf, size_t LenServHostName,
-	struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-	gs_connection_surrogate_id_t *oAssignedId);
-
-int gs_connection_surrogate_init(
-	struct GsHostSurrogate *Host,
-	struct GsPeerSurrogate *Peer,
-	uint32_t IsPrincipalClientConnection,
-	struct GsConnectionSurrogate *ioConnectionSurrogate);
-int gs_connection_surrogate_packet_send(
-	struct GsConnectionSurrogate *ConnectionSurrogate,
-	struct GsPacket *ioPacket);
-int gs_packet_surrogate_release_ownership(struct GsPacketSurrogate *ioPacketSurrogate);
 int gs_packet_create(
 	struct GsPacket **oPacket,
 	struct GsPacketSurrogate *valPacketSurrogate);
