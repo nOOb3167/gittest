@@ -4,9 +4,41 @@
 
 #include <algorithm>
 
+#include <enet/enet.h>
+
 #include <gittest/misc.h>
 #include <gittest/log.h>
 #include <gittest/net2.h>
+
+/** manual-init struct
+    value struct
+
+	@sa
+	   ::gs_aux_aux_aux_cb_last_chance_t
+*/
+struct ENetIntrNtwk {
+	struct ENetIntr base;
+
+	struct GsWorkerData *WorkerDataSend;
+};
+
+static int gs_aux_aux_aux_cb_last_chance_t(
+	struct ENetIntr *Intr,
+	struct ENetIntrToken *IntrToken);
+
+int gs_aux_aux_aux_cb_last_chance_t(
+	struct ENetIntr *Intr,
+	struct ENetIntrToken *IntrToken)
+{
+	int r = 0;
+
+	ENetIntrNtwk *pIntr = (ENetIntrNtwk *) Intr;
+
+	if (! gs_worker_request_isempty(pIntr->WorkerDataSend))
+		return 1;
+
+	return 0;
+}
 
 /** Use as a deleter function of std::thread shared pointers
 	whom are to be detached before destruction.
@@ -169,75 +201,6 @@ clean:
 	return r;
 }
 
-int gs_packet_with_offset_get_veclen(
-	struct GsPacketWithOffset *PacketWithOffset,
-	uint32_t *oVecLen)
-{
-	GS_ASSERT(
-		GS_FRAME_SIZE_LEN == sizeof(uint32_t) &&
-		PacketWithOffset->mOffsetObject >= PacketWithOffset->mOffsetSize &&
-		(PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) % GS_FRAME_SIZE_LEN == 0);
-	return (PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) / GS_FRAME_SIZE_LEN;
-}
-
-int gs_ctrl_con_create(
-	uint32_t NumNtwks,
-	uint32_t NumWorkers,
-	struct GsCtrlCon **oCtrlCon)
-{
-	struct GsCtrlCon *CtrlCon = new GsCtrlCon();
-
-	CtrlCon->mNumNtwks = NumNtwks;
-	CtrlCon->mNumWorkers = NumWorkers;
-	CtrlCon->mExitedSignalLeft = NumNtwks + NumWorkers;
-	CtrlCon->mCtrlConMutex = sp<std::mutex>(new std::mutex);
-	CtrlCon->mCtrlConCondExited = sp<std::condition_variable>(new std::condition_variable);
-
-	if (oCtrlCon)
-		*oCtrlCon = CtrlCon;
-
-	return 0;
-}
-
-int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon)
-{
-	GS_DELETE(&CtrlCon, GsCtrlCon);
-	return 0;
-}
-
-int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon)
-{
-	bool WantNotify = false;
-	{
-		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
-		if (CtrlCon->mExitedSignalLeft)
-			CtrlCon->mExitedSignalLeft -= 1;
-		if (!CtrlCon->mExitedSignalLeft)
-			WantNotify = true;
-	}
-	if (WantNotify)
-		CtrlCon->mCtrlConCondExited->notify_all();
-	return 0;
-}
-
-int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon)
-{
-	{
-		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
-		CtrlCon->mCtrlConCondExited->wait(lock, [&]() { return ! CtrlCon->mExitedSignalLeft; });
-	}
-	return 0;
-}
-
-int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers)
-{
-	{
-		std::unique_lock<std::mutex> lock(*CtrlCon->mCtrlConMutex);
-		*oNumWorkers = CtrlCon->mNumWorkers;
-	}
-	return 0;
-}
-
 int gs_ntwk_reconnect_expend(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsWorkerDataVec *WorkerDataVecRecv,
@@ -275,20 +238,6 @@ int gs_ntwk_reconnect_expend(
 clean:
 
 	return r;
-}
-
-int gs_aux_aux_aux_cb_last_chance_t(
-	struct ENetIntr *Intr,
-	struct ENetIntrToken *IntrToken)
-{
-	int r = 0;
-
-	ENetIntrNtwk *pIntr = (ENetIntrNtwk *) Intr;
-
-	if (! gs_worker_request_isempty(pIntr->WorkerDataSend))
-		return 1;
-
-	return 0;
 }
 
 int gs_ntwk_host_service_worker_disconnect(

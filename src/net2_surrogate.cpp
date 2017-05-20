@@ -140,21 +140,6 @@ int gs_packet_surrogate_release_ownership(struct GsPacketSurrogate *ioPacketSurr
 	return 0;
 }
 
-int gs_packet_create(
-	struct GsPacket **oPacket,
-	struct GsPacketSurrogate *valPacketSurrogate)
-{
-	struct GsPacket *Packet = new GsPacket();
-	Packet->mPacket = *valPacketSurrogate;
-	Packet->data = valPacketSurrogate->mPacket->data;
-	Packet->dataLength = valPacketSurrogate->mPacket->dataLength;
-
-	if (oPacket)
-		*oPacket = Packet;
-
-	return 0;
-}
-
 int gs_connection_surrogate_init(
 	struct GsHostSurrogate *Host,
 	struct GsPeerSurrogate *Peer,

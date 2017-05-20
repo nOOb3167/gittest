@@ -86,10 +86,12 @@ int gs_worker_request_data_type_exit_make(
 int gs_worker_request_data_type_disconnect_make(
 	gs_connection_surrogate_id_t Id,
 	struct GsWorkerRequestData *outValWorkerRequest);
+
 bool gs_worker_request_isempty(struct GsWorkerData *pThis);
 bool gs_worker_request_isempty_nolock(
 	struct GsWorkerData *pThis,
 	std::unique_lock<std::mutex> *Lock);
+
 int gs_worker_request_enqueue(
 	struct GsWorkerData *pThis,
 	struct GsWorkerRequestData *valRequestData);
