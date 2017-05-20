@@ -22,6 +22,7 @@
 #include <gittest/net2_fwd.h>
 #include <gittest/net2_surrogate.h>
 #include <gittest/net2_request.h>
+#include <gittest/net2_crankdata.h>
 
 #define GS_MAGIC_NUM_WORKER_THREADS 1
 
@@ -74,21 +75,6 @@ struct GsPrioDataComparator {
 
 typedef ::std::multiset<GsPrioData, GsPrioDataComparator> gs_prio_set_t;
 typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;
-
-/** Wrapper for a count.
-	Semantically the number of reconnections remaining.
-
-    @sa
-	   ::clnt_state_reconnect_make_default
-	   ::clnt_state_reconnect_have_remaining
-	   ::clnt_state_reconnect_expend
-*/
-struct ClntStateReconnect {
-	uint32_t NumReconnections;
-	uint32_t NumReconnectionsLeft;
-
-	GS_AUX_MARKER_STRUCT_IS_COPYABLE;
-};
 
 /** manual-init struct
     value struct
@@ -171,94 +157,6 @@ struct GsCtrlCon
 	uint32_t mExitedSignalLeft;
 	sp<std::mutex> mCtrlConMutex;
 	sp<std::condition_variable> mCtrlConCondExited;
-};
-
-/** @sa
-       GsExtraHostCreateClient
-	   GsExtraHostCreateServer
-	   GsExtraHostCreateSelfUpdateBasic
-*/
-struct GsExtraHostCreate
-{
-	uint32_t magic;
-
-	int(*cb_create_batch_t)(
-		struct GsExtraHostCreate *ExtraHostCreate,
-		struct GsHostSurrogate *ioHostSurrogate,
-		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
-		size_t LenExtraWorker,
-		struct GsExtraWorker **oExtraWorkerArr);
-	int(*cb_destroy_host_t)(
-		struct GsExtraHostCreate *ExtraHostCreate,
-		struct GsHostSurrogate *ioHostSurrogate);
-	int(*cb_destroy_t)(struct GsExtraHostCreate *ExtraHostCreate);
-};
-
-/** @sa
-       GsExtraWorkerClient
-	   GsExtraWorkerServer
-	   GsExtraWorkerSelfUpdateBasic
-	   ::gs_extra_worker_replace
-	   ::gs_extra_worker_pp_base_cast
-*/
-struct GsExtraWorker
-{
-	uint32_t magic;
-
-	int(*cb_destroy_t)(struct GsExtraWorker *ExtraWorker);
-};
-
-/** @sa
-       GsStoreNtwkClient
-	   GsStoreNtwkServer
-	   GsStoreNtwkSelfUpdateBasic
-	   ::gs_store_ntwk_init
-*/
-struct GsStoreNtwk
-{
-	uint32_t magic;
-
-	int(*cb_destroy_t)(struct GsStoreNtwk *StoreNtwk);
-
-	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
-	struct GsCtrlCon *mCtrlCon;             /**< notowned */
-	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
-
-	struct ClntStateReconnect mStateReconnect; /**< owned (nodestroy) */
-	struct GsConnectionSurrogateMap *mConnectionSurrogateMap; /**< owned */
-};
-
-/** @sa
-       GsStoreWorkerClient
-	   GsStoreWorkerServer
-	   GsStoreWorkerSelfUpdateBasic
-	   ::gs_store_worker_init
-*/
-struct GsStoreWorker
-{
-	uint32_t magic;
-
-	int(*cb_crank_t)(struct GsCrankData *CrankData);
-	int(*cb_destroy_t)(struct GsStoreWorker *StoreWorker);
-
-	struct GsIntrTokenSurrogate mIntrToken; /**< notowned */
-	struct GsCtrlCon *mCtrlCon;             /**< notowned */
-	struct GsAffinityQueue *mAffinityQueue; /**< notowned */
-
-	uint32_t mNumWorkers;
-};
-
-/** @sa
-       ::gs_crank_data_create
-	   ::gs_crank_data_destroy
-*/
-struct GsCrankData
-{
-	struct GsWorkerDataVec *mWorkerDataVecRecv;
-	struct GsWorkerData *mWorkerDataSend;
-	struct GsStoreWorker *mStoreWorker;
-	gs_worker_id_t mWorkerId;
-	struct GsExtraWorker *mExtraWorker; /**< mutable */
 };
 
 /** @sa
@@ -375,10 +273,6 @@ int gs_affinity_token_acquire_raw_nolock(
 int gs_affinity_token_release(
 	struct GsAffinityToken *ioAffinityToken);
 
-int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect);
-bool clnt_state_reconnect_have_remaining(struct ClntStateReconnect *StateReconnect);
-int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect);
-
 int gs_packet_create(
 	struct GsPacket **oPacket,
 	struct GsPacketSurrogate *valPacketSurrogate);
@@ -394,29 +288,6 @@ int gs_ctrl_con_destroy(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_signal_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_wait_exited(struct GsCtrlCon *CtrlCon);
 int gs_ctrl_con_get_num_workers(struct GsCtrlCon *CtrlCon, uint32_t *oNumWorkers);
-
-int gs_extra_worker_replace(
-	struct GsExtraWorker **ioExtraWorker,
-	struct GsExtraWorker *Replacement);
-
-int gs_store_ntwk_init(
-	uint32_t Magic,
-	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
-	struct GsFullConnectionCommonData *ConnectionCommon,
-	struct GsStoreNtwk *ioStoreNtwk);
-
-int gs_store_worker_init(
-	uint32_t Magic,
-	int(*CbCrank)(struct GsCrankData *CrankData),
-	int(*CbDestroy)(struct GsStoreWorker *StoreWorker),
-	uint32_t mNumWorkers,
-	struct GsFullConnectionCommonData *ConnectionCommon,
-	struct GsStoreWorker *ioStoreWorker);
-
-int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
-	struct GsExtraHostCreate *ExtraHostCreate,
-	struct GsHostSurrogate *ioHostSurrogate);
-int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHostCreate);
 
 int gs_ntwk_reconnect_expend(
 	struct GsExtraHostCreate *ExtraHostCreate,
@@ -486,15 +357,6 @@ int gs_net_full_create_connection(
 	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsFullConnection **oConnection,
 	const char *ExtraThreadName);
-
-int gs_crank_data_create(
-	struct GsWorkerDataVec *WorkerDataVecRecv,
-	struct GsWorkerData *WorkerDataSend,
-	struct GsStoreWorker *StoreWorker,
-	gs_worker_id_t WorkerId,
-	struct GsExtraWorker *ExtraWorker,
-	struct GsCrankData **oCrankData);
-int gs_crank_data_destroy(struct GsCrankData *CrankData);
 
 int gs_full_connection_common_data_create(
 	uint32_t NumWorkers,
