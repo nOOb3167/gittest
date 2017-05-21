@@ -21,6 +21,9 @@ struct ClntStateReconnect {
        GsExtraHostCreateClient
 	   GsExtraHostCreateServer
 	   GsExtraHostCreateSelfUpdateBasic
+	   GsExtraHostCreateTest
+	   ::gs_extra_host_create_cb_destroy_host_t_enet_host_destroy
+	   ::gs_extra_host_create_cb_destroy_t_delete
 */
 struct GsExtraHostCreate
 {
@@ -42,7 +45,9 @@ struct GsExtraHostCreate
        GsExtraWorkerClient
 	   GsExtraWorkerServer
 	   GsExtraWorkerSelfUpdateBasic
+	   GsExtraWorkerTest
 	   ::gs_extra_worker_replace
+	   ::gs_extra_worker_cb_destroy_t_delete
 */
 struct GsExtraWorker
 {
@@ -55,7 +60,9 @@ struct GsExtraWorker
        GsStoreNtwkClient
 	   GsStoreNtwkServer
 	   GsStoreNtwkSelfUpdateBasic
+	   GsStoreNtwkTest
 	   ::gs_store_ntwk_init
+	   ::gs_store_ntwk_cb_destroy_t_delete
 */
 struct GsStoreNtwk
 {
@@ -75,7 +82,9 @@ struct GsStoreNtwk
        GsStoreWorkerClient
 	   GsStoreWorkerServer
 	   GsStoreWorkerSelfUpdateBasic
+	   GsStoreWorkerTest
 	   ::gs_store_worker_init
+	   ::gs_store_worker_cb_destroy_t_delete
 */
 struct GsStoreWorker
 {
@@ -116,12 +125,14 @@ int gs_extra_host_create_cb_destroy_t_delete(struct GsExtraHostCreate *ExtraHost
 int gs_extra_worker_replace(
 	struct GsExtraWorker **ioExtraWorker,
 	struct GsExtraWorker *Replacement);
+int gs_extra_worker_cb_destroy_t_delete(struct GsExtraWorker *ExtraWorker);
 
 int gs_store_ntwk_init(
 	uint32_t Magic,
 	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
 	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreNtwk *ioStoreNtwk);
+int gs_store_ntwk_cb_destroy_t_delete(struct GsStoreNtwk *StoreNtwk);
 
 int gs_store_worker_init(
 	uint32_t Magic,
@@ -130,6 +141,7 @@ int gs_store_worker_init(
 	uint32_t mNumWorkers,
 	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorker *ioStoreWorker);
+int gs_store_worker_cb_destroy_t_delete(struct GsStoreWorker *StoreWorker);
 
 int gs_crank_data_create(
 	struct GsWorkerDataVec *WorkerDataVecRecv,

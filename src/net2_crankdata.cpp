@@ -67,6 +67,12 @@ int gs_extra_worker_replace(
 	return 0;
 }
 
+int gs_extra_worker_cb_destroy_t_delete(struct GsExtraWorker *ExtraWorker)
+{
+	GS_DELETE(&ExtraWorker, GsExtraWorker);
+	return 0;
+}
+
 int gs_store_ntwk_init(
 	uint32_t Magic,
 	int(*CbDestroy)(struct GsStoreNtwk *StoreNtwk),
@@ -92,6 +98,12 @@ clean:
 	return r;
 }
 
+int gs_store_ntwk_cb_destroy_t_delete(struct GsStoreNtwk *StoreNtwk)
+{
+	GS_DELETE(&StoreNtwk, GsStoreNtwk);
+	return 0;
+}
+
 int gs_store_worker_init(
 	uint32_t Magic,
 	int(*CbCrank)(struct GsCrankData *CrankData),
@@ -107,6 +119,12 @@ int gs_store_worker_init(
 	ioStoreWorker->mCtrlCon = ConnectionCommon->mCtrlCon;
 	ioStoreWorker->mAffinityQueue = ConnectionCommon->mAffinityQueue;
 	ioStoreWorker->mNumWorkers = mNumWorkers;
+	return 0;
+}
+
+int gs_store_worker_cb_destroy_t_delete(struct GsStoreWorker *StoreWorker)
+{
+	GS_DELETE(&StoreWorker, GsStoreWorker);
 	return 0;
 }
 

@@ -346,6 +346,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/crank_clnt.h
     include/gittest/crank_serv.h
     include/gittest/crank_selfupdate_basic.h
+    include/gittest/crank_test.h
   )
   
   SET(GITTEST_NET_SOURCES
@@ -360,6 +361,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/crank_clnt.cpp
     src/crank_serv.cpp
     src/crank_selfupdate_basic.cpp
+    src/crank_test.cpp
   )
   
   # gittest_selfupdate
