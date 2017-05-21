@@ -36,6 +36,27 @@ clean:
 	return r;
 }
 
+int gs_extra_host_create_init(
+	uint32_t Magic,
+	int (*CbCreateBatch)(
+		struct GsExtraHostCreate *ExtraHostCreate,
+		struct GsHostSurrogate *ioHostSurrogate,
+		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+		size_t LenExtraWorker,
+		struct GsExtraWorker **oExtraWorkerArr),
+	int(*CbDestroyHost)(
+		struct GsExtraHostCreate *ExtraHostCreate,
+		struct GsHostSurrogate *ioHostSurrogate),
+	int(*CbDestroy)(struct GsExtraHostCreate *ExtraHostCreate),
+	struct GsExtraHostCreate *ioExtraHostCreate)
+{
+	ioExtraHostCreate->magic = Magic;
+	ioExtraHostCreate->cb_create_batch_t = CbCreateBatch;
+	ioExtraHostCreate->cb_destroy_host_t = CbDestroyHost;
+	ioExtraHostCreate->cb_destroy_t = CbDestroy;
+	return 0;
+}
+
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate)

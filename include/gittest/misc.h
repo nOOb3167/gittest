@@ -61,7 +61,7 @@
 #define GS_DELETE_VF(PTR_PTR_VARNAME, VFNAME)              \
   do {                                                     \
     decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
-	if (*ptr_ptr) {                                        \
+	if (*ptr_ptr && (*ptr_ptr)->VFNAME) {                  \
       if (!!((*ptr_ptr)->VFNAME(*ptr_ptr))) GS_ASSERT(0);  \
       *ptr_ptr = NULL;                                     \
 	}                                                      \
@@ -73,7 +73,7 @@
     decltype(PTR_PTR_VARNAME) ptr_ptr = (PTR_PTR_VARNAME); \
 	decltype(*ptr_ptr) ptr = *ptr_ptr;                     \
 	decltype(&ptr->base) ptr_base = (decltype(&ptr->base))(&ptr->base); \
-	if (*ptr_ptr) {                                        \
+	if (*ptr_ptr && ptr_base->VFNAME) {                    \
       if (!!(ptr_base->VFNAME(ptr_base))) GS_ASSERT(0);    \
       *ptr_ptr = NULL;                                     \
 	}                                                      \

@@ -22,6 +22,7 @@ struct ClntStateReconnect {
 	   GsExtraHostCreateServer
 	   GsExtraHostCreateSelfUpdateBasic
 	   GsExtraHostCreateTest
+	   ::gs_extra_host_create_init
 	   ::gs_extra_host_create_cb_destroy_host_t_enet_host_destroy
 	   ::gs_extra_host_create_cb_destroy_t_delete
 */
@@ -117,6 +118,19 @@ int clnt_state_reconnect_make_default(struct ClntStateReconnect *oStateReconnect
 bool clnt_state_reconnect_have_remaining(struct ClntStateReconnect *StateReconnect);
 int clnt_state_reconnect_expend(struct ClntStateReconnect *ioStateReconnect);
 
+int gs_extra_host_create_init(
+	uint32_t Magic,
+	int (*CbCreateBatch)(
+		struct GsExtraHostCreate *ExtraHostCreate,
+		struct GsHostSurrogate *ioHostSurrogate,
+		struct GsConnectionSurrogateMap *ioConnectionSurrogateMap,
+		size_t LenExtraWorker,
+		struct GsExtraWorker **oExtraWorkerArr),
+	int(*CbDestroyHost)(
+		struct GsExtraHostCreate *ExtraHostCreate,
+		struct GsHostSurrogate *ioHostSurrogate),
+	int(*CbDestroy)(struct GsExtraHostCreate *ExtraHostCreate),
+	struct GsExtraHostCreate *ioExtraHostCreate);
 int gs_extra_host_create_cb_destroy_host_t_enet_host_destroy(
 	struct GsExtraHostCreate *ExtraHostCreate,
 	struct GsHostSurrogate *ioHostSurrogate);

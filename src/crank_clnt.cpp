@@ -658,10 +658,15 @@ int gs_extra_host_create_client_create(
 
 	struct GsExtraHostCreateClient *ExtraHostCreate = new GsExtraHostCreateClient();
 
-	ExtraHostCreate->base.magic = GS_EXTRA_HOST_CREATE_CLIENT_MAGIC;
-	ExtraHostCreate->base.cb_create_batch_t = gs_extra_host_create_cb_create_t_client;
-	ExtraHostCreate->base.cb_destroy_host_t = gs_extra_host_create_cb_destroy_host_t_enet_host_destroy;
-	ExtraHostCreate->base.cb_destroy_t = gs_extra_host_create_cb_destroy_t_delete;
+	if (!!(r = gs_extra_host_create_init(
+		GS_EXTRA_HOST_CREATE_CLIENT_MAGIC,
+		gs_extra_host_create_cb_create_t_client,
+		gs_extra_host_create_cb_destroy_host_t_enet_host_destroy,
+		gs_extra_host_create_cb_destroy_t_delete,
+		&ExtraHostCreate->base)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 	ExtraHostCreate->mServPort = ServPort;
 	ExtraHostCreate->mServHostNameBuf = ServHostNameBuf;
