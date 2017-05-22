@@ -358,6 +358,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/net2_affinity.cpp
     src/net2_aux.cpp
     src/net2_test.cpp
+    src/net2_test_02.cpp
     src/crank_clnt.cpp
     src/crank_serv.cpp
     src/crank_selfupdate_basic.cpp

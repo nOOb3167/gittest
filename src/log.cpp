@@ -653,6 +653,9 @@ int gs_log_create_common_logs() {
 	GS_LOG_ADD(gs_log_create_ret("ntwk_selfup"));
 	GS_LOG_ADD(gs_log_create_ret("work_selfup"));
 
+	GS_LOG_ADD(gs_log_create_ret("ntwk_test02"));
+	GS_LOG_ADD(gs_log_create_ret("work_test02"));
+
 clean:
 
 	return r;
