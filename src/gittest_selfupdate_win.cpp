@@ -404,7 +404,7 @@ int gs_process_start(
 
 	BOOL Ok = 0;
 
-	if (LenParentCommandLine >= MagicCommandLineLenghtLimit)
+	if (LenParentCommandLine >= ReasonableCommandLineLengthLimit)
 		GS_ERR_CLEAN(1);
 
 	memcpy(CommandLineCopyBuf, ParentCommandLineBuf, LenParentCommandLine);
