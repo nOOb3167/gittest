@@ -1,7 +1,7 @@
 # FIXME: some day find out why FIND_LIBRARY does not pop for Shlwapi on MSVC..
 
 IF (WIN32)
-  SET(SHLWAPI_LIBRARY Shlwapi)
+  SET(SHLWAPI_LIBRARY shlwapi)
 ELSE ()
   FIND_LIBRARY(SHLWAPI_LIBRARY NAMES Shlwapi)
 ENDIF ()
