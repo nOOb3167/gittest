@@ -15,8 +15,8 @@
 #define GS_AFFINITY_IN_PROGRESS_NONE -1
 
 typedef ::std::map<gs_connection_surrogate_id_t, gs_worker_id_t> gs_affinity_map_t;
-typedef ::std::list<gs_worker_id_t> gs_affinity_list_t;
-typedef ::std::vector<gs_connection_surrogate_id_t> gs_affinity_in_progress_t;
+typedef ::std::vector<std::set<gs_connection_surrogate_id_t> >   gs_affinity_reverse_t;     /* worker -> set<conid> */
+typedef ::std::vector<gs_connection_surrogate_id_t>              gs_affinity_in_progress_t; /* worker -> inprogress */
 
 /** manual-init struct
 	value struct
@@ -33,7 +33,7 @@ struct GsPrioDataComparator
 };
 
 typedef ::std::multiset<GsPrioData, GsPrioDataComparator> gs_prio_set_t;
-typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;
+typedef ::std::vector<gs_prio_set_t::iterator> gs_prio_vec_t;                               /* worker -> prioIterator */
 
 /** the lock for mAffinityInProgress field N is GsWorkerDataVec N
     @sa
@@ -49,6 +49,7 @@ struct GsAffinityQueue
 {
 	std::mutex mMutexData;
 	gs_affinity_map_t mAffinityMap;
+	gs_affinity_reverse_t mAffinityReverse;
 	gs_affinity_in_progress_t mAffinityInProgress; /**< special locking semantics */
 	gs_prio_set_t mPrioSet;
 	gs_prio_vec_t mPrioVec;

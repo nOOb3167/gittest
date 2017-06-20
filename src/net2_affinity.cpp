@@ -17,6 +17,9 @@ int gs_affinity_queue_create(
 
 	struct GsAffinityQueue *AffinityQueue = new GsAffinityQueue();
 
+	for (size_t i = 0; i < NumWorkers; i++)
+		AffinityQueue->mAffinityReverse.push_back(std::set<gs_connection_surrogate_id_t>());
+
 	AffinityQueue->mAffinityInProgress.resize(NumWorkers, GS_AFFINITY_IN_PROGRESS_NONE);
 
 	for (size_t i = 0; i < NumWorkers; i++) {
@@ -80,6 +83,7 @@ int gs_affinity_queue_worker_acquire_ready_and_enqueue(
 			}
 			/* - connid registration performed - WorkerIdReady now handling ConnectionId */
 			AffinityQueue->mAffinityMap[ConnectionId] = WorkerIdReady;
+			AffinityQueue->mAffinityReverse[WorkerIdReady].insert(ConnectionId);
 		}
 
 		if (!!(r = gs_worker_request_enqueue(gs_worker_data_vec_id(WorkerDataVec, WorkerIdReady), valRequestData)))
@@ -130,12 +134,10 @@ int gs_affinity_queue_worker_completed_all_requests_somelock(
 
 		/* release all connection leases held by WorkerId */
 
-		for (auto it = AffinityQueue->mAffinityMap.begin(); it != AffinityQueue->mAffinityMap.end(); /* empty */) {
-			if (it->second == WorkerId)
-				AffinityQueue->mAffinityMap.erase(it++);
-			else
-				it++;
-		}
+		std::set<gs_connection_surrogate_id_t> &Reverse = AffinityQueue->mAffinityReverse[WorkerId];
+		for (auto it = Reverse.begin(); it != Reverse.end(); ++it)
+			AffinityQueue->mAffinityMap.erase(*it);
+		Reverse.clear();
 
 		/* update prio wrt number of connection leases (ex zero) */
 
