@@ -29,15 +29,6 @@ class ClntSpawnBase;
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-//int gs_net2_test_stuff_02();
-//if (!!(r = gs_net2_test_stuff_02()))
-//	GS_GOTO_CLEAN();
-//GS_ERR_CLEAN(1);
-
-// BAD DESIGN
-// instead run a thread managing all meterrps as data
-// every second, do a maybeprint
-;// atomic mNumReqs
 class MeterRps
 {
 public:
