@@ -11,6 +11,7 @@
 
 /** @sa
        ::gs_packet_create
+	   ::gs_packet_release
 */
 struct GsPacket {
 	struct GsPacketSurrogate mPacket;
@@ -50,6 +51,8 @@ struct GsCtrlCon
 int gs_packet_create(
 	struct GsPacket **oPacket,
 	struct GsPacketSurrogate *valPacketSurrogate);
+int gs_packet_release(
+	struct GsPacket *ioPacket);
 int gs_packet_with_offset_get_veclen(
 	struct GsPacketWithOffset *PacketWithOffset,
 	uint32_t *oVecLen);

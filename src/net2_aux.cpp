@@ -17,6 +17,23 @@ int gs_packet_create(
 	return 0;
 }
 
+int gs_packet_release(
+	struct GsPacket *ioPacket)
+{
+	int r = 0;
+
+	if (ioPacket->mPacket.mPacket) {
+		enet_packet_destroy(ioPacket->mPacket.mPacket);
+		ioPacket->mPacket.mPacket = NULL;
+		ioPacket->data = NULL;
+		ioPacket->dataLength = 0;
+	}
+
+clean:
+
+	return r;
+}
+
 int gs_packet_with_offset_get_veclen(
 	struct GsPacketWithOffset *PacketWithOffset,
 	uint32_t *oVecLen)

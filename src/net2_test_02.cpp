@@ -458,6 +458,7 @@ public:
 			g_meter_rps.Req(0);
 			//if ((ccc = (ccc + 1)) % 1000 == 0)
 			//	printf("packet\n");
+			GS_RELEASE_F(Packet, gs_packet_release);
 		}
 
 	clean:
