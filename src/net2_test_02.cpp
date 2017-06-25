@@ -406,14 +406,14 @@ public:
 
 		while (true) {
 			for (size_t con = 0; con < RunnerData.NumConnectionPerThread; con++)
-				for (size_t i = 0; i < 200; i++) {
+				for (size_t i = 0; i < 100; i++) {
 					Packet.mPacket = enet_packet_create(BufferMsg.data(), BufferMsg.size(), ENET_PACKET_FLAG_RELIABLE);
 					if (!!(r = enet_peer_send(Peer[con].mPeer, 0, GS_ARGOWN(&Packet.mPacket))))
 						GS_GOTO_CLEAN();
 				}
 			if (!!(r = runner_host_service_n(&Host)))
 				GS_GOTO_CLEAN();
-			//std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
 
 	clean:
