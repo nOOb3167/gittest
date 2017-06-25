@@ -8,6 +8,7 @@ MACRO (GITTEST_SOURCES_SET)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
   GITTEST_SOURCES_SET_COMMON()
   GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED(MISC)
@@ -18,6 +19,7 @@ MACRO (GITTEST_SOURCES_SET)
   GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED(CLNT)
   GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED(REPO_SETUP)
   GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED(LOG_CONVERT)
+  GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED(TEST_02)
   GITTEST_COMMON_ENSURE_PLATFORM()
   GITTEST_AUX_SOURCES_APPEND_PLATFORM(MISC ${GITTEST_PLATFORM_PLAT})
   GITTEST_AUX_SOURCES_APPEND_PLATFORM(LIB ${GITTEST_PLATFORM_PLAT})
@@ -25,8 +27,9 @@ MACRO (GITTEST_SOURCES_SET)
   GITTEST_AUX_SOURCES_APPEND_PLATFORM(SELFUPDATE ${GITTEST_PLATFORM_PLAT})
   GITTEST_AUX_SOURCES_APPEND_PLATFORM(SERV ${GITTEST_PLATFORM_PLAT})
   GITTEST_AUX_SOURCES_APPEND_PLATFORM(CLNT ${GITTEST_PLATFORM_PLAT})
-  GITTEST_AUX_SOURCES_APPEND_PLATFORM(REPO_SETUP ${GITTEST_PLATFORM_PLAT})  
-  GITTEST_AUX_SOURCES_APPEND_PLATFORM(LOG_CONVERT ${GITTEST_PLATFORM_PLAT})  
+  GITTEST_AUX_SOURCES_APPEND_PLATFORM(REPO_SETUP ${GITTEST_PLATFORM_PLAT})
+  GITTEST_AUX_SOURCES_APPEND_PLATFORM(LOG_CONVERT ${GITTEST_PLATFORM_PLAT})
+  GITTEST_AUX_SOURCES_APPEND_PLATFORM(TEST_02 ${GITTEST_PLATFORM_PLAT})
 ENDMACRO ()
 
 
@@ -40,6 +43,7 @@ FUNCTION (GITTEST_SOURCES_DEFINE_COSMETIC_VISUAL_STUDIO_STUFF)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
   GITTEST_COMMON_ENSURE_PLATFORM()
 
@@ -66,6 +70,8 @@ FUNCTION (GITTEST_SOURCES_DEFINE_COSMETIC_VISUAL_STUDIO_STUFF)
     SOURCE_GROUP("Source Files" FILES ${GITTEST_REPO_SETUP_SOURCES})
     SOURCE_GROUP("Header Files" FILES ${GITTEST_LOG_CONVERT_HEADERS})
     SOURCE_GROUP("Source Files" FILES ${GITTEST_LOG_CONVERT_SOURCES})
+    SOURCE_GROUP("Header Files" FILES ${GITTEST_TEST_02_HEADERS})
+    SOURCE_GROUP("Source Files" FILES ${GITTEST_TEST_02_SOURCES})
   
     # add NIX sources unconditionally for SOURCE_GROUP calls.
     
@@ -83,6 +89,7 @@ FUNCTION (GITTEST_SOURCES_DEFINE_COSMETIC_VISUAL_STUDIO_STUFF)
     GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM(CLNT NIX TMPLIST TMPLIST)
     GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM(REPO_SETUP NIX TMPLIST TMPLIST)
     GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM(LOG_CONVERT NIX TMPLIST TMPLIST)
+    GITTEST_AUX_SOURCES_APPEND_SEPARATE_PLATFORM(TEST_02 NIX TMPLIST TMPLIST)
     
     SOURCE_GROUP("Platform Files" FILES ${TMPLIST})
     
@@ -106,6 +113,7 @@ FUNCTION (GITTEST_SOURCES_CREATE_TARGETS)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
 
   ADD_LIBRARY(gittest_lib STATIC
@@ -148,6 +156,11 @@ FUNCTION (GITTEST_SOURCES_CREATE_TARGETS)
     ${GITTEST_LOG_CONVERT_HEADERS}
     ${GITTEST_LOG_CONVERT_SOURCES}
   )
+  
+  ADD_EXECUTABLE(gittest_test_02
+    ${GITTEST_TEST_02_HEADERS}
+    ${GITTEST_TEST_02_SOURCES}
+  )
 ENDFUNCTION ()
 
 
@@ -161,6 +174,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
 
   # explicit suffix definition for executables (prefer .exe even on nix)
@@ -170,6 +184,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   SET_PROPERTY(TARGET gittest_clnt_clone PROPERTY SUFFIX ".exe")
   SET_PROPERTY(TARGET gittest_repo_setup PROPERTY SUFFIX ".exe")
   SET_PROPERTY(TARGET gittest_log_convert PROPERTY SUFFIX ".exe")
+  SET_PROPERTY(TARGET gittest_test_02    PROPERTY SUFFIX ".exe")
   
   # target compile definitions
 
@@ -204,6 +219,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   )
   TARGET_COMPILE_DEFINITIONS(gittest_repo_setup PRIVATE ${GITTEST_DEFINITIONS})
   TARGET_COMPILE_DEFINITIONS(gittest_log_convert PRIVATE ${GITTEST_DEFINITIONS})
+  TARGET_COMPILE_DEFINITIONS(gittest_test_02    PRIVATE ${GITTEST_DEFINITIONS})
   
   # target include dirs
   
@@ -220,6 +236,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   TARGET_INCLUDE_DIRECTORIES(gittest_clnt_clone PRIVATE ${GITTEST_INCLUDE_DIRS})
   TARGET_INCLUDE_DIRECTORIES(gittest_repo_setup PRIVATE ${GITTEST_INCLUDE_DIRS})
   TARGET_INCLUDE_DIRECTORIES(gittest_log_convert PRIVATE ${GITTEST_INCLUDE_DIRS})
+  TARGET_INCLUDE_DIRECTORIES(gittest_test_02 PRIVATE ${GITTEST_INCLUDE_DIRS})
   
   # target libraries
   
@@ -237,6 +254,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   TARGET_LINK_LIBRARIES(gittest_clnt_clone gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
   TARGET_LINK_LIBRARIES(gittest_repo_setup gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
   TARGET_LINK_LIBRARIES(gittest_log_convert gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
+  TARGET_LINK_LIBRARIES(gittest_test_02  gittest_selfupdate gittest_net gittest_lib ${GITTEST_LIBRARIES})
 ENDFUNCTION ()
 
 
@@ -250,10 +268,11 @@ FUNCTION (GITTEST_SOURCES_INSTALL_TARGETS)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
   GITTEST_COMMON_ENSURE_COMPILER()
 
-  INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup gittest_log_convert
+  INSTALL(TARGETS gittest_serv gittest_clnt gittest_clnt_clone gittest_repo_setup gittest_log_convert gittest_test_02
     LIBRARY DESTINATION "lib"
     RUNTIME DESTINATION "bin"
     ARCHIVE DESTINATION "lib"
@@ -269,6 +288,7 @@ FUNCTION (GITTEST_SOURCES_INSTALL_TARGETS)
         "$<TARGET_PDB_FILE:gittest_clnt_clone>"
         "$<TARGET_PDB_FILE:gittest_repo_setup>"
         "$<TARGET_PDB_FILE:gittest_log_convert>"
+        "$<TARGET_PDB_FILE:gittest_test_02>"
         DESTINATION "bin"
       )
   ENDIF ()
@@ -290,6 +310,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_clnt_clone
     gittest_repo_setup
     gittest_log_convert
+    gittest_test_02
   )
   
   # misc
@@ -357,8 +378,6 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/net2_crankdata.cpp
     src/net2_affinity.cpp
     src/net2_aux.cpp
-    src/net2_test.cpp
-    src/net2_test_02.cpp
     src/crank_clnt.cpp
     src/crank_serv.cpp
     src/crank_selfupdate_basic.cpp
@@ -411,6 +430,15 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   
   SET(GITTEST_LOG_CONVERT_SOURCES
     src/gittest_log_convert.cpp
+  )
+
+  # gittest_test_02
+  
+  GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_TEST_02_HEADERS)
+  
+  SET(GITTEST_TEST_02_SOURCES
+    src/net2_test.cpp
+    src/net2_test_02.cpp
   )
 
 ENDMACRO ()

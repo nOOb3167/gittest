@@ -487,7 +487,7 @@ int gs_ntwk_host_service_event(
 
 		PacketSurrogate.mPacket = Event->event.packet;
 
-		GS_LOG(I, S, "ENET_EVENT_TYPE_RECEIVE");
+		GS_LOG(N, S, "ENET_EVENT_TYPE_RECEIVE");
 
 		GS_BYPART_DATA_VAR_CTX_NONUCF(GsConnectionSurrogateId, ctxstruct, Event->event.peer->data);
 
@@ -503,7 +503,7 @@ int gs_ntwk_host_service_event(
 			if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, Offset, &Offset, &FoundFrameType)))
 				GS_GOTO_CLEAN();
 
-			GS_LOG(I, PF, "packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
+			GS_LOG(N, PF, "packet received [%.*s]", (int)GS_FRAME_HEADER_STR_LEN, FoundFrameType.mTypeName);
 		}
 
 		if (!!(r = gs_worker_request_data_type_packet_make(Packet, IdOfRecv, &RequestRecv)))

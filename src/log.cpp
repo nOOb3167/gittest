@@ -20,6 +20,7 @@
 #include <deque>
 #include <sstream>
 #include <stdexcept> // std::runtime_error
+#include <atomic>
 
 #include <gittest/misc.h>
 #include <gittest/cbuf.h>
@@ -59,6 +60,7 @@ struct GsLogTls {
 	GsLogBase *mpCurrentLog;
 };
 
+typedef int (*gs_log_base_func_message_limit_level_t)(GsLogBase *XKlass, uint32_t Level);
 typedef void (*gs_log_base_func_message_log_t)(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
 typedef int  (*gs_log_base_func_dump_t)(GsLogBase *XKlass, GsLogDump *oLogDump);
 /* lowlevel : intended for use within crash handler - dump without synchronization or memory allocation etc */
@@ -73,6 +75,7 @@ struct GsLogBase {
 	GsLogBase *mPreviousLog;
 	struct GsLogUnified *mLogUnifiedOpt;  /**< notowned */
 
+	gs_log_base_func_message_limit_level_t mFuncMessageLimitLevel;
 	gs_log_base_func_message_log_t mFuncMessageLog;
 	gs_log_base_func_dump_t mFuncDump;
 	gs_log_base_func_dump_lowlevel_t mFuncDumpLowLevel;
@@ -83,7 +86,7 @@ struct GsLog {
 	gs_tripwire_t mTripwire;
 
 	sp<cbuf> mMsg;
-	uint32_t mLogLevelLimit;
+	std::atomic<uint32_t> mLogLevelLimit;
 };
 
 static GS_THREAD_LOCAL_DESIGNATOR GsLogTls g_tls_log_global = {};
@@ -112,6 +115,7 @@ int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefi
 
 	/* virtual functions */
 
+	Klass->mFuncMessageLimitLevel = NULL;
 	Klass->mFuncMessageLog = NULL;
 	Klass->mFuncDump = NULL;
 	Klass->mFuncDumpLowLevel = NULL;
@@ -202,6 +206,7 @@ int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit) {
 
 	/* virtual functions */
 
+	Klass->mBase.mFuncMessageLimitLevel = gs_log_message_limit_level;
 	Klass->mBase.mFuncMessageLog = gs_log_message_log;
 	Klass->mBase.mFuncDump = gs_log_dump_and_flush;
 	Klass->mBase.mFuncDumpLowLevel = gs_log_dump_lowlevel;
@@ -213,11 +218,17 @@ clean:
 	return r;
 }
 
-void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
+int gs_log_message_limit_level(GsLogBase *XKlass, uint32_t Level)
+{
 	GsLog *Klass = GS_LOG_CAST(XKlass);
 
 	if (Level > Klass->mLogLevelLimit)
-		return;
+		return 1;
+	return 0;
+}
+
+void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine) {
+	GsLog *Klass = GS_LOG_CAST(XKlass);
 
 	std::lock_guard<std::mutex> lock(*Klass->mBase.mMutexData);
 
@@ -280,6 +291,8 @@ clean:
 
 void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char *MsgBuf, uint32_t MsgSize){
 	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog && !!gs_log_message_limit_level(lg->mpCurrentLog, Level))
+		return;
 	if (lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,
@@ -295,6 +308,8 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
 	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog && !!gs_log_message_limit_level(lg->mpCurrentLog, Level))
+		return;
 	if (lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,
@@ -305,8 +320,11 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 }
 
 void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char *Format, ...) {
-	const size_t sanity_arbitrary_max = 2048;
+	GsLogTls *lg = gs_log_global_get();
+	if (lg->mpCurrentLog && !!gs_log_message_limit_level(lg->mpCurrentLog, Level))
+		return;
 
+	const size_t sanity_arbitrary_max = 2048;
 	char buf[sanity_arbitrary_max] = {};
 	int numwrite = 0;
 
@@ -323,7 +341,6 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
 	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
-	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,

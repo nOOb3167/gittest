@@ -81,6 +81,7 @@ GsLog *gs_log_cast_(void *Log);
 int gs_log_create(const char *Prefix, GsLog **oLog);
 GsLog * gs_log_create_ret(const char *Prefix);
 int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit);
+int gs_log_message_limit_level(GsLogBase *XKlass, uint32_t Level);
 void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
 int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump);
 int gs_log_dump_lowlevel(GsLogBase *XKlass, void *ctx, gs_bypart_cb_t cb);
