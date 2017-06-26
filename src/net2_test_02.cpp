@@ -18,12 +18,12 @@
 #include <gittest/net2.h>
 #include <gittest/crank_test.h>
 
-#define GS_TEST_NUM_WORKERS 1
+#define GS_TEST_NUM_WORKERS 2
 #define GS_TEST_NUM_WORKERS_CLNT 2
 #define GS_TEST_SERV_PORT 3756
 #define GS_TEST_HOST_NAME "localhost"
 
-#define GS_TEST_NUM_METERS 1
+#define GS_TEST_NUM_METERS GS_TEST_NUM_WORKERS
 
 class ClntSpawnBase;
 
@@ -446,7 +446,7 @@ public:
 			{
 				GS_GOTO_CLEAN();
 			}
-			g_meter_rps.Req(0);
+			g_meter_rps.Req(CrankData->mWorkerId);
 			//if ((ccc = (ccc + 1)) % 1000 == 0)
 			//	printf("packet\n");
 			GS_RELEASE_F(Packet, gs_packet_release);
