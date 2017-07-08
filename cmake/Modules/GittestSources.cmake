@@ -391,6 +391,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/crank_serv.cpp
     src/crank_selfupdate_basic.cpp
     src/crank_test.cpp
+    src/net3.cpp
   )
   
   # gittest_selfupdate
