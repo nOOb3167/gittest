@@ -387,7 +387,7 @@ class ClntSpawn02 : public ClntSpawnBase
 public:
 	ClntSpawn02()
 	{
-		if (!!runner_frame_make_skeleton(sizeof(uint32_t), &BufferMsg, &BufferMsgDataOffset))
+		if (!!runner_frame_make_skeleton(sizeof(uint64_t), &BufferMsg, &BufferMsgDataOffset))
 			GS_ASSERT(0);
 	};
 	~ClntSpawn02() {};
