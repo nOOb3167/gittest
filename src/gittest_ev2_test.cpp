@@ -7,24 +7,19 @@
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 
+#include <gittest/misc.h>
+#include <gittest/log.h>
+#include <gittest/gittest.h>
+
 #define GS_EV_CTX_CLNT_MAGIC 0x4E8BF2AD 
+
+GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
 struct GsEvCtxClnt
 {
 	uint32_t mMagic;
 	struct event_base *mBase;
 };
-
-void aux_LE_to_uint32(uint32_t *oA, const char *buf, size_t bufsize)
-{
-	assert(sizeof(uint32_t) == 4 && bufsize == 4);
-	uint32_t w = 0;
-	w |= (buf[0] & 0xFF) << 0;
-	w |= (buf[1] & 0xFF) << 8;
-	w |= (buf[2] & 0xFF) << 16;
-	w |= (buf[3] & 0xFF) << 24;
-	*oA = w;
-}
 
 int gs_ev_evbuffer_get_frame_try(
 	struct evbuffer *Ev,

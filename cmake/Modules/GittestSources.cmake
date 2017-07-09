@@ -9,6 +9,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_repo_setup
     gittest_log_convert
     gittest_test_02
+    gittest_ev2_test
   )
 
   SET(GITTEST_SOURCES_TARGETS
@@ -21,6 +22,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_repo_setup
     gittest_log_convert
     gittest_test_02
+    gittest_ev2_test
   )
   SET(GITTEST_SOURCES_TARGETS_EXE
     gittest_serv
@@ -29,6 +31,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_repo_setup
     gittest_log_convert
     gittest_test_02
+    gittest_ev2_test
   )
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
     STRING(REPLACE "gittest_" "" VV "${VV}")
@@ -211,16 +214,6 @@ FUNCTION (GITTEST_SOURCES_INSTALL_TARGETS)
   )
 ENDFUNCTION ()
 
-FUNCTION (GITTEST_SOURCES_CREATE_TARGETS_MISC)
-  ADD_EXECUTABLE(gittest_ev2_test
-    src/gittest_ev2_test.cpp
-  )
-  TARGET_INCLUDE_DIRECTORIES(gittest_ev2_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${GITTEST_DEP_INCLUDE_DIRS})
-  TARGET_LINK_LIBRARIES(gittest_ev2_test gittest_selfupdate gittest_net gittest_lib ${GITTEST_DEP_LIBRARIES})
-ENDFUNCTION ()
-
 MACRO (GITTEST_SOURCES_SET_COMMON)
   GITTEST_AUX_SOURCES_ENSURE_MAGIC_TARGET_LIST_HAVE(
     gittest_lib
@@ -232,6 +225,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_repo_setup
     gittest_log_convert
     gittest_test_02
+    gittest_ev2_test
   )
   
   # misc
@@ -365,6 +359,14 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   SET(GITTEST_TEST_02_SOURCES
     src/net2_test.cpp
     src/net2_test_02.cpp
+  )
+  
+  # gittest_ev2_test
+
+  GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_EV2_TEST_HEADERS)
+  
+  SET(GITTEST_EV2_TEST_SOURCES
+    src/gittest_ev2_test.cpp
   )
 
 ENDMACRO ()
