@@ -363,10 +363,13 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   
   # gittest_ev2_test
 
-  GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_EV2_TEST_HEADERS)
+  SET(GITTEST_EV2_TEST_HEADERS
+    include/gittest/gittest_ev2_test.h
+  )
   
   SET(GITTEST_EV2_TEST_SOURCES
     src/gittest_ev2_test.cpp
+    src/gittest_ev2_test_s.cpp
   )
 
 ENDMACRO ()
