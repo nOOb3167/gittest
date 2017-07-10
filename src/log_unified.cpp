@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 
 #include <mutex>
 #include <sstream>
@@ -169,6 +170,13 @@ int gs_log_unified_message_log(
 		<< std::endl;
 
 	const std::string &ssstr = ss.str();
+
+	{
+		/* besides to sqlite, write also to stdout (temp as debug aid) */
+		printf("%s", ssstr.c_str());
+		/* fflush MAY be necessary */
+		//fflush(stdout);
+	}
 
 	{
 		std::lock_guard<std::mutex> lock(LogUnified->mMutexData);
