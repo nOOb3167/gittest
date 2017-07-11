@@ -50,7 +50,9 @@ int clnt_state_code(ClntState *State, uint32_t *oCode) {
 		{ Code = GS_CLNT_STATE_CODE_NEED_TREELIST; goto need_treelist; }
 	if (! State->mMissingBloblist || ! State->mTreePacketWithOffset)
 		{ Code = GS_CLNT_STATE_CODE_NEED_BLOBLIST; goto need_bloblist; }
-	if (! State->mWrittenBlob || ! State->mWrittenTree)
+	/* unlike the others, this state in addition needs the right number of elements having been written */
+	if (! State->mWrittenBlob || State->mWrittenBlob->size() < State->mMissingBloblist->size() ||
+		! State->mWrittenTree || State->mWrittenTree->size() < State->mMissingTreelist->size())
 		{ Code = GS_CLNT_STATE_CODE_NEED_WRITTEN_BLOB_AND_TREE; goto need_written_blob_and_tree; }
 	if (! State->mUpdatedRefOid)
 		{ Code = GS_CLNT_STATE_CODE_NEED_UPDATED_REF; goto need_updated_ref; }
