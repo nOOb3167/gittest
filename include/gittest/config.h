@@ -50,6 +50,7 @@ struct GsAuxConfigCommonVars {
 	char *RepoSelfUpdatePathBuf; size_t LenRepoSelfUpdatePath;
 	char *RepoMasterUpdatePathBuf; size_t LenRepoMasterUpdatePath;
 	char *RepoMasterUpdateCheckoutPathBuf; size_t LenRepoMasterUpdateCheckoutPath;
+	uint32_t ServBlobSoftSizeLimit;
 };
 
 size_t aux_config_decode_hex_char_(const char *pHexChar, size_t *oIsError);

@@ -93,6 +93,11 @@ int aux_repository_checkout(
 	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RepoMasterUpdateCheckoutPathBuf, size_t LenRepoMasterUpdateCheckoutPath);
+int aux_objects_until_sizelimit(
+	git_repository *Repository,
+	const git_oid *Oid, size_t NumOid,
+	size_t SoftSizeLimit,
+	size_t *oNumUntilSizeLimit);
 
 int stuff(
 	const char *RefName, size_t LenRefName,

@@ -872,6 +872,41 @@ clean:
 	return r;
 }
 
+int aux_objects_until_sizelimit(
+	git_repository *Repository,
+	const git_oid *Oid, size_t NumOid,
+	size_t SoftSizeLimit,
+	size_t *oNumUntilSizeLimit)
+{
+	int r = 0;
+
+	git_odb *Odb = NULL;
+
+	size_t i = 0;
+	size_t SizeCumulative = 0;
+	
+	if (!!(r = git_repository_odb(&Odb, Repository)))
+		goto clean;
+
+	for (/*dummy*/; i < NumOid; i++) {
+		size_t ObjLen = 0;
+		git_otype ObjType = GIT_OBJ_BAD;
+		if (!!(r = git_odb_read_header(&ObjLen, &ObjType, Odb, Oid + i)))
+			goto clean;
+		if (SizeCumulative + ObjLen >= SoftSizeLimit)
+			break;
+		SizeCumulative += ObjLen;
+	}
+
+	if (oNumUntilSizeLimit)
+		*oNumUntilSizeLimit = i;
+
+clean:
+	git_odb_free(Odb);
+
+	return r;
+}
+
 int stuff(
 	const char *RefName, size_t LenRefName,
 	const char *RepoOpenPath, size_t LenRepoOpenPath,
