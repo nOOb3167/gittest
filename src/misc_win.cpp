@@ -212,6 +212,88 @@ clean:
 	return r;
 }
 
+int gs_build_path_expand_separated(
+	const char *PathBuf, size_t LenPath,
+	const char *ExtBuf, size_t LenExt,
+	const char *SeparatorBuf, size_t LenSeparator,
+	char *ExpandedBuf, size_t ExpandedSize, size_t *oLenExpanded)
+{
+	int r = 0;
+
+	char PatternBuf[1024] = {};
+	size_t LenPattern = 0;
+
+	HANDLE hFind = INVALID_HANDLE_VALUE;
+	WIN32_FIND_DATA FindData = {};
+	DWORD dwError = ERROR_FILE_NOT_FOUND;
+
+	std::string Accum;
+
+	if (!!(r = gs_path_append_abs_rel(
+		PathBuf, LenPath,
+		ExtBuf, LenExt,
+		PatternBuf, sizeof PatternBuf, &LenPattern)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_buf_ensure_haszero(PatternBuf, LenPattern + 1)))
+		GS_GOTO_CLEAN();
+
+	if ((INVALID_HANDLE_VALUE == (hFind = FindFirstFile(PatternBuf, &FindData))) &&
+		(ERROR_FILE_NOT_FOUND != (dwError = GetLastError())))
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	if (INVALID_HANDLE_VALUE != hFind) {
+		DWORD dwError2 = 0;
+
+		do {
+			size_t LenFileName = 0;
+
+			char TmpBuf[1024] = {};
+			size_t LenTmp = 0;
+
+			if (!!(r = gs_buf_strnlen(FindData.cFileName, MAX_PATH, &LenFileName)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = gs_path_append_abs_rel(
+				PathBuf, LenPath,
+				FindData.cFileName, LenFileName,
+				TmpBuf, sizeof TmpBuf, &LenTmp)))
+			{
+				GS_GOTO_CLEAN();
+			}
+
+			Accum.append(TmpBuf, LenTmp);
+			Accum.append(SeparatorBuf, LenSeparator);
+		} while (FindNextFile(hFind, &FindData) != 0);
+
+		if (ERROR_NO_MORE_FILES != (dwError2 = GetLastError()))
+			GS_ERR_CLEAN(1);
+	}
+	else {
+		assert(ERROR_FILE_NOT_FOUND == dwError);
+		Accum.append("");
+	}
+
+	if (Accum.size() + 1 >= ExpandedSize)
+		GS_ERR_CLEAN(1);
+
+	memmove(ExpandedBuf, Accum.data(), Accum.size());
+	memset(ExpandedBuf + Accum.size(), '\0', 1);
+
+	if (oLenExpanded)
+		*oLenExpanded = Accum.size();
+
+clean:
+	if (hFind == INVALID_HANDLE_VALUE)
+		FindClose(hFind);
+
+	return r;
+}
+
 int gs_file_exist(
 	const char *FileNameBuf, size_t LenFileName,
 	size_t *oIsExist)

@@ -182,6 +182,12 @@ int gs_path_append_abs_rel(
 	const char *RelativeBuf, size_t LenRelative,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
 
+int gs_build_path_expand_separated(
+	const char *PathBuf, size_t LenPath,
+	const char *ExtBuf, size_t LenExt,
+	const char *SeparatorBuf, size_t LenSeparator,
+	char *ExpandedBuf, size_t ExpandedSize, size_t *oLenExpanded);
+
 int gs_file_exist(
 	const char *FileNameBuf, size_t LenFileName,
 	size_t *oIsExist);

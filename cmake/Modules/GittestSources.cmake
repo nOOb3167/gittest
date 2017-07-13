@@ -45,6 +45,46 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
   ENDFOREACH()
 ENDMACRO()
 
+
+FUNCTION (GITTEST_SOURCES_SET_GENERATION)
+  # define a config header generator executable target (GsConfigHeaderGen).
+  # unless GITTEST_DISABLE_CONFIG_GENERATION disables config generation,
+  #   (in which case a bundled empty default header is used)
+  #   setup generation of the header from a config file, using the generator target.
+
+  ADD_EXECUTABLE(GsConfigHeaderGen
+    src/gen/config_header_gen.cpp
+  )
+  
+  IF (GITTEST_DISABLE_CONFIG_GENERATION)
+    SET(GS_CONFIG_NAME "GsConfigHeaderDefault.h")
+
+    ADD_CUSTOM_COMMAND(
+      OUTPUT GsConfigHeader.h
+      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
+      COMMAND "${CMAKE_COMMAND}"
+        -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
+        "${CMAKE_CURRENT_BINARY_DIR}/GsConfigHeader.h"
+      COMMENT "Generating Config (Empty default)"
+    )  
+  ELSE ()
+    SET(GS_CONFIG_NAME "GsConfig.conf")
+
+    ADD_CUSTOM_COMMAND(
+      OUTPUT GsConfigHeader.h
+      DEPENDS GsConfigHeaderGen
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
+      COMMAND GsConfigHeaderGen
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
+        "${CMAKE_CURRENT_BINARY_DIR}/GsConfigHeader.h"
+      COMMENT "Generating Config"
+    )  
+  ENDIF ()
+
+ENDFUNCTION ()
+
+
 MACRO (GITTEST_SOURCES_SET)
   GITTEST_SOURCES_SET_COMMON()
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS_LUMP_UPPERS)
@@ -147,10 +187,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
     
   # target compile definitions
 
-  FILE(READ "${CMAKE_SOURCE_DIR}/data/gittest_config_serv.conf" GS_CMAKE_CONFIG_BUILTIN_HEXSTRING HEX)
-  
   SET(GITTEST_DEFINITIONS
-    -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_CONFIG_BUILTIN_HEXSTRING="${GS_CMAKE_CONFIG_BUILTIN_HEXSTRING}"
     # FIXME: WIN hardcoded
     -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_DEBUG_BREAK=GS_CONFIG_DEFS_WIN
     -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_CLEAN_HANDLING=GS_CONFIG_DEFS_NONE
@@ -168,6 +205,7 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
     TARGET_INCLUDE_DIRECTORIES("${VV}"
       PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}            # for Config Header Generator
         ${CMAKE_CURRENT_SOURCE_DIR}/include/
         ${GITTEST_DEP_INCLUDE_DIRS}
     )
@@ -242,6 +280,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/gittest.h
     include/gittest/cbuf.h
     include/gittest/config.h
+    GsConfigHeader.h            # for Config Header Generator
     include/gittest/log.h
     include/gittest/misc.h
     include/gittest/bypart.h

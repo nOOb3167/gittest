@@ -17,7 +17,7 @@ GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 int startserv() {
 	int r = 0;
 
-	confmap_t KeyVal;
+	struct GsConfMap *ConfMap = NULL;;
 
 	GsAuxConfigCommonVars CommonVars = {};
 
@@ -25,10 +25,10 @@ int startserv() {
 
 	log_guard_t log(GS_LOG_GET("serv"));
 
-	if (!!(r = aux_config_read_default_everything(&KeyVal)))
+	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
+	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_net_full_create_connection_server(
@@ -56,6 +56,8 @@ clean:
 	if (!!r) {
 		GS_DELETE(&FcsServ, GsFullConnection);
 	}
+
+	GS_DELETE_F(&ConfMap, gs_conf_map_destroy);
 
 	return r;
 }

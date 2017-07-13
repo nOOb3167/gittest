@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
@@ -545,7 +549,7 @@ int main(int argc, char **argv)
 {
 	int r = 0;
 
-	confmap_t KeyVal;
+	struct GsConfMap *ConfMap = NULL;
 	struct GsAuxConfigCommonVars CommonVars = {};
 
 	std::thread ThreadServ;
@@ -563,10 +567,10 @@ int main(int argc, char **argv)
 	if (!!(r = gs_log_create_common_logs()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_read_default_everything(&KeyVal)))
+	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
+	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	ThreadServ.swap(std::thread(gs_ev2_test_servmain, CommonVars));
@@ -579,6 +583,8 @@ int main(int argc, char **argv)
 clean:
 	if (!!r)
 		GS_ASSERT(0);
+
+	GS_DELETE_F(&ConfMap, gs_conf_map_destroy);
 
 	return EXIT_SUCCESS;
 }

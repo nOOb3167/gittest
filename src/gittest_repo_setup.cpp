@@ -286,7 +286,7 @@ clean:
 int main(int argc, char **argv) {
 	int r = 0;
 
-	confmap_t KeyVal;
+	struct GsConfMap *ConfMap = NULL;
 
 	GsAuxConfigCommonVars CommonVars = {};
 
@@ -298,10 +298,10 @@ int main(int argc, char **argv) {
 
 	GS_LOG_ADD(gs_log_create_ret("repo_setup"));
 
-	if (!!(r = aux_config_read_default_everything(&KeyVal)))
+	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_config_get_common_vars(KeyVal, &CommonVars)))
+	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
 		GS_GOTO_CLEAN();
 
 	{
@@ -320,6 +320,8 @@ int main(int argc, char **argv) {
 	}
 
 clean:
+	GS_DELETE_F(&ConfMap, gs_conf_map_destroy);
+
 	/* always dump logs. not much to do about errors here though */
 	gs_log_crash_handler_dump_global_log_list_suffix("_log", strlen("_log"));
 
