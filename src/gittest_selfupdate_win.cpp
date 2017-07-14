@@ -6,7 +6,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif /* _MSC_VER */
 
-
 #include <cstdlib>
 #include <cassert>
 #include <cstdio>
@@ -14,6 +13,8 @@
 #include <cerrno>
 #include <cstring>
 #include <climits>  // ULLONG_MAX
+
+#include <sstream>
 
 #include <windows.h>
 #include <shlwapi.h> // PathAppend etc
@@ -46,7 +47,7 @@ int gs_win_build_parent_command_line_mode_main(
 
 int gs_win_build_child_command_line(
 	const char *ChildFileNameBuf, size_t LenChildFileName,
-	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
+	const char *HandleCurrentProcessSerializedBuf, size_t LenHandleCurrentProcessSerialized,
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	char *oChildCommandLine, size_t ChildCommandLineSize, size_t *oLenChildCommandLine);
 
@@ -128,36 +129,26 @@ int gs_win_build_parent_command_line_mode_main(
 {
 	int r = 0;
 
-	size_t LenParentCommandLine =
-		(1 /*quote*/ + LenParentFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                       + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_MAIN)                             + 1 /*zero*/);
+	std::string ParentFileName(ParentFileNameBuf, LenParentFileName);
 
-	if (LenParentCommandLine >= ParentCommandLineSize)
-		GS_ERR_CLEAN(1);
+	std::string ArgUpdateMode = GS_SELFUPDATE_ARG_UPDATEMODE;
+	std::string ArgMain = GS_SELFUPDATE_ARG_MAIN;
 
+	std::string quote("\"", 1);
+	std::string space(" ", 1);
+
+	std::stringstream ss;
+	std::string out;
+
+	ss << quote << ParentFileName << quote << space << ArgUpdateMode << space << ArgMain;
+	out = ss.str();
+
+	if (!!(r = gs_buf_copy_zero_terminate_ex(
+		out.c_str(), out.size(),
+		oParentCommandLine, ParentCommandLineSize, oLenParentCommandLine)))
 	{
-		char * const PtrArg0 = oParentCommandLine;
-		char * const PtrArg1 = PtrArg0 + 1 + LenParentFileName + 1 + 1;
-		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
-		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN) + 1;
-
-		GS_ASSERT(PtrArg3 - PtrArg0 == LenParentCommandLine);
-
-		memset(PtrArg0, '"', 1);
-		memcpy(PtrArg0 + 1, ParentFileNameBuf, LenParentFileName);
-		memset(PtrArg0 + 1 + LenParentFileName, '"', 1);
-		memset(PtrArg0 + 1 + LenParentFileName + 1, ' ', 1);
-
-		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
-		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
-
-		memcpy(PtrArg2, GS_SELFUPDATE_ARG_MAIN, strlen(GS_SELFUPDATE_ARG_MAIN));
-		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_MAIN), '\0', 1);
+		GS_GOTO_CLEAN();
 	}
-
-	if (oLenParentCommandLine)
-		*oLenParentCommandLine = LenParentCommandLine;
 
 clean:
 
@@ -166,63 +157,41 @@ clean:
 
 int gs_win_build_child_command_line(
 	const char *ChildFileNameBuf, size_t LenChildFileName,
-	const char *HandleCurrentProcessSerialized, size_t LenHandleCurrentProcessSerialized,
+	const char *HandleCurrentProcessSerializedBuf, size_t LenHandleCurrentProcessSerialized,
 	const char *ParentFileNameBuf, size_t LenParentFileName,
 	char *oChildCommandLine, size_t ChildCommandLineSize, size_t *oLenChildCommandLine)
 {
 	int r = 0;
 
-	/* NOTE: ChildFileNameBuf is both pathstr and pathstrchild */
+	std::string ChildFileName(ChildFileNameBuf, LenChildFileName);
+	std::string HandleCurrentProcessSerialized(HandleCurrentProcessSerializedBuf, LenHandleCurrentProcessSerialized);
+	std::string ParentFileName(ParentFileNameBuf, LenParentFileName);
 
-	size_t LenChildCommandLine =
-		(1 /*quote*/ + LenChildFileName /*pathstr*/ + 1 /*quote*/ + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_UPDATEMODE)                      + 1 /*space*/ +
-		strlen(GS_SELFUPDATE_ARG_CHILD)                           + 1 /*space*/ +
-		LenHandleCurrentProcessSerialized /*handlestr*/           + 1 /*space*/ +
-		1 /*quote*/ + LenParentFileName /*pathstrparent*/ + 1 /*quote*/ + 1 /*space*/ +
-		1 /*quote*/ + LenChildFileName /*pathstrchild*/ + 1 /*quote*/   + 1 /*zero*/);
+	std::string ArgUpdateMode = GS_SELFUPDATE_ARG_UPDATEMODE;
+	std::string ArgChild = GS_SELFUPDATE_ARG_CHILD;
 
-	if (LenChildCommandLine >= ChildCommandLineSize)
-		GS_ERR_CLEAN(1);
+	std::string quote("\"", 1);
+	std::string space(" ", 1);
 
+	std::stringstream ss;
+	std::string out;
+
+	/* NOTE: ChildFileNameBuf used twice */
+
+	ss << quote << ChildFileName << quote << space
+	   << ArgUpdateMode << space
+	   << ArgChild << space
+	   << HandleCurrentProcessSerialized << space
+	   << quote << ParentFileName << quote << space
+	   << quote << ChildFileName << quote;
+	out = ss.str();
+
+	if (!!(r = gs_buf_copy_zero_terminate_ex(
+		out.c_str(), out.size(),
+		oChildCommandLine, ChildCommandLineSize, oLenChildCommandLine)))
 	{
-		char * const PtrArg0 = oChildCommandLine;
-		char * const PtrArg1 = PtrArg0 + 1 + LenChildFileName + 1 + 1;
-		char * const PtrArg2 = PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE) + 1;
-		char * const PtrArg3 = PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD) + 1;
-		char * const PtrArg4 = PtrArg3 + LenHandleCurrentProcessSerialized + 1;
-		char * const PtrArg5 = PtrArg4 + 1 + LenParentFileName + 1 + 1;
-		char * const PtrArg6 = PtrArg5 + 1 + LenChildFileName + 1 + 1;
-
-		GS_ASSERT(PtrArg6 - PtrArg0 == LenChildCommandLine);
-
-		memset(PtrArg0, '"', 1);
-		memcpy(PtrArg0 + 1, ChildFileNameBuf, LenChildFileName);
-		memset(PtrArg0 + 1 + LenChildFileName, '"', 1);
-		memset(PtrArg0 + 1 + LenChildFileName + 1, ' ', 1);
-
-		memcpy(PtrArg1, GS_SELFUPDATE_ARG_UPDATEMODE, strlen(GS_SELFUPDATE_ARG_UPDATEMODE));
-		memset(PtrArg1 + strlen(GS_SELFUPDATE_ARG_UPDATEMODE), ' ', 1);
-
-		memcpy(PtrArg2, GS_SELFUPDATE_ARG_CHILD, strlen(GS_SELFUPDATE_ARG_CHILD));
-		memset(PtrArg2 + strlen(GS_SELFUPDATE_ARG_CHILD), ' ', 1);
-
-		memcpy(PtrArg3, HandleCurrentProcessSerialized, LenHandleCurrentProcessSerialized);
-		memset(PtrArg3 + LenHandleCurrentProcessSerialized, ' ', 1);
-
-		memset(PtrArg4, '"', 1);
-		memcpy(PtrArg4 + 1, ParentFileNameBuf, LenParentFileName);
-		memset(PtrArg4 + 1 + LenParentFileName, '"', 1);
-		memset(PtrArg4 + 1 + LenParentFileName + 1, ' ', 1);
-
-		memset(PtrArg5, '"', 1);
-		memcpy(PtrArg5 + 1, ChildFileNameBuf, LenChildFileName);
-		memset(PtrArg5 + 1 + LenChildFileName, '"', 1);
-		memset(PtrArg5 + 1 + LenChildFileName + 1, '\0', 1);
+		GS_GOTO_CLEAN();
 	}
-
-	if (oLenChildCommandLine)
-		*oLenChildCommandLine = LenChildCommandLine;
 
 clean:
 
