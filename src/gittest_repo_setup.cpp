@@ -8,6 +8,7 @@
 
 #include <gittest/misc.h>
 #include <gittest/config.h>
+#include <gittest/filesys.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>

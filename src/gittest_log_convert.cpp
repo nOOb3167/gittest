@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <gittest/misc.h>
+#include <gittest/filesys.h>
 #include <gittest/log.h>
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();

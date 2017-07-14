@@ -8,7 +8,7 @@
 #include <windows.h>
 
 #include <gittest/misc.h> // gs_build_modified_filename
-
+#include <gittest/filesys.h>
 #include <gittest/log.h>
 
 #define GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_DATA 0x429d83ff

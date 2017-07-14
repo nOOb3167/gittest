@@ -284,9 +284,14 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/log.h
     include/gittest/misc.h
     include/gittest/bypart.h
+    include/gittest/filesys.h
+  )
+  SET(GITTEST_LIB_HEADERS_WIN
+    include/gittest/filesys_win.h
   )
   SET(GITTEST_LIB_HEADERS_NIX
     include/gittest/misc_nix.h
+    include/gittest/filesys_nix.h
   )
 
   SET(GITTEST_LIB_SOURCES
@@ -297,14 +302,17 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/misc.cpp
     src/main.cpp
     src/bypart.cpp
+    src/filesys.cpp
   )
   SET(GITTEST_LIB_SOURCES_WIN
     src/log_win.cpp
     src/misc_win.cpp
+    src/filesys_win.cpp
   )
   SET(GITTEST_LIB_SOURCES_NIX
     src/log_nix.cpp
     src/misc_nix.cpp
+    src/filesys_nix.cpp
   )
   
   # gittest_net

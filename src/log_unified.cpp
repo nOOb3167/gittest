@@ -7,6 +7,7 @@
 #include <sqlite3.h>
 
 #include <gittest/misc.h>
+#include <gittest/filesys.h>
 
 #include <gittest/log.h>
 

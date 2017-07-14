@@ -19,6 +19,7 @@
 #include <shlwapi.h> // PathAppend etc
 
 #include <gittest/misc.h>
+#include <gittest/filesys.h>
 #include <gittest/gittest.h>
 
 #include <gittest/gittest_selfupdate.h>

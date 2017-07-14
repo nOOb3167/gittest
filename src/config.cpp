@@ -13,6 +13,7 @@
 
 #include <gittest/misc.h>
 #include <gittest/config.h>
+#include <gittest/filesys.h>
 
 #include <GsConfigHeader.h>  /* including the generated config header */
 

@@ -137,14 +137,6 @@ using sp = ::std::shared_ptr<T>;
 
 void * gs_aux_argown(void **ptr);
 
-int gs_build_modified_filename(
-	const char *BaseFileNameBuf, size_t LenBaseFileName,
-	const char *ExpectedSuffix, size_t LenExpectedSuffix,
-	const char *ExpectedExtension, size_t LenExpectedExtension,
-	const char *ExtraSuffix, size_t LenExtraSuffix,
-	const char *ExtraExtension, size_t LenExtraExtension,
-	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
-
 int gs_buf_copy_zero_terminate(
 	const char *SrcBuf, size_t LenSrc,
 	char *ioDstBuf, size_t DstBufSize, size_t *oLenDst);
@@ -154,12 +146,6 @@ int gs_buf_strnlen(const char *Buf, size_t BufSize, size_t *oLenBuf);
 int gs_buf_ensure_haszero(const char *Buf, size_t BufSize);
 
 int aux_char_from_string_alloc(const std::string &String, char **oStrBuf, size_t *oLenStr);
-
-int gs_path_kludge_filenameize(char *ioPathBuf, size_t *ioLenPath);
-
-int gs_build_path_interpret_relative_current_executable(
-	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,
-	char *ioPathBuf, size_t PathBufSize, size_t *oLenPathBuf);
 
 void gs_current_thread_name_set_cstr(
 	const char *NameCStr);
@@ -174,33 +160,5 @@ void gs_current_thread_name_set(
 	size_t LenName);
 
 void gs_debug_break();
-
-int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute);
-
-int gs_path_append_abs_rel(
-	const char *AbsoluteBuf, size_t LenAbsolute,
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
-
-int gs_build_path_expand_separated(
-	const char *PathBuf, size_t LenPath,
-	const char *ExtBuf, size_t LenExt,
-	const char *SeparatorBuf, size_t LenSeparator,
-	char *ExpandedBuf, size_t ExpandedSize, size_t *oLenExpanded);
-
-int gs_file_exist(
-	const char *FileNameBuf, size_t LenFileName,
-	size_t *oIsExist);
-
-int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
-
-int gs_get_current_executable_filename(char *ioFileNameBuf, size_t FileNameSize, size_t *oLenFileName);
-
-int gs_get_current_executable_directory(
-	char *ioCurrentExecutableDirBuf, size_t CurrentExecutableDirSize, size_t *oLenCurrentExecutableDir);
-
-int gs_build_current_executable_relative_filename(
-	const char *RelativeBuf, size_t LenRelative,
-	char *ioCombinedBuf, size_t CombinedBufSize, size_t *oLenCombined);
 
 #endif /* _GITTEST_MISC_H_ */
