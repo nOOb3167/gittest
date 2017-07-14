@@ -5,10 +5,10 @@
 
 int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,
-	const char *ExpectedSuffix, size_t LenExpectedSuffix,
-	const char *ExpectedExtension, size_t LenExpectedExtension,
-	const char *ExtraSuffix, size_t LenExtraSuffix,
-	const char *ExtraExtension, size_t LenExtraExtension,
+	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
+	const char *ExpectedExtensionBuf, size_t LenExpectedExtension,
+	const char *ExtraSuffixBuf, size_t LenExtraSuffix,
+	const char *ExtraExtensionBuf, size_t LenExtraExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName);
 int gs_build_path_interpret_relative_current_executable(
 	const char *PossiblyRelativePathBuf, size_t LenPossiblyRelativePath,

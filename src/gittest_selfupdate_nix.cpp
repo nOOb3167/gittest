@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <sstream>
+
 #include <unistd.h>
 #include <sys/types.h>
 
@@ -37,54 +39,39 @@ int gs_nix_build_parent_command_line_mode_main(
 
 	int r = 0;
 
-	const char ArgUpdateModeBuf[] = GS_SELFUPDATE_ARG_UPDATEMODE;
-	size_t LenArgUpdateMode = (sizeof ArgUpdateModeBuf) - 1;
+	std::string ParentFileName(ParentFileNameBuf, LenParentFileName);
 
-	const char ArgMainBuf[] = GS_SELFUPDATE_ARG_MAIN;
-	size_t LenArgMain = (sizeof ArgMainBuf) - 1;
+	std::string ArgUpdateMode = GS_SELFUPDATE_ARG_UPDATEMODE;
+	std::string ArgMain = GS_SELFUPDATE_ARG_MAIN;
 
-	size_t LenParentArgvUnified =
-		(LenParentFileName /*pathstr*/ + 1 /*zero*/ +
-		 LenArgUpdateMode              + 1 /*zero*/ +
-		 LenArgMain                    + 1 /*zero*/);
+	std::string zero("\0", 1);
+
+	std::stringstream ss;
+	std::string out;
 
 	size_t LenArgvPtrs = 3 /*args*/ + 1 /*nullsentinel*/;
 
-	if (LenParentArgvUnified > ParentArgvUnifiedBufSize)
-		GS_GOTO_CLEAN();
+	if (ArgvPtrsSize < LenArgvPtrs)
+		GS_ERR_CLEAN(1);
 
-	if (LenArgvPtrs > ArgvPtrsSize)
-		GS_GOTO_CLEAN();
+	ioArgvPtrs[0] = 0;
+	ss << ParentFileName << zero;
+	ioArgvPtrs[1] = oParentArgvUnifiedBuf + ss.str().size();
+	ss << ArgUpdateMode << zero;
+	ioArgvPtrs[2] = oParentArgvUnifiedBuf + ss.str().size();
+	ss << ArgMain;
+	ioArgvPtrs[3] = NULL;
+	out = ss.str();
 
+	if (!!(r = gs_buf_copy_zero_terminate_ex(
+		out.c_str(), out.size(),
+		oParentArgvUnifiedBuf, ParentArgvUnifiedBufSize, oLenParentArgvUnified)))
 	{
-		char * const PtrArg0 = oParentArgvUnifiedBuf;
-		char * const PtrArg1 = PtrArg0 + LenParentFileName + 1;
-		char * const PtrArg2 = PtrArg1 + LenArgUpdateMode + 1;
-		char * const PtrArg3 = PtrArg2 + LenArgMain + 1;
-
-		GS_ASSERT(PtrArg3 - PtrArg0 == LenParentArgvUnified);
-
-		memcpy(PtrArg0, ParentFileNameBuf, LenParentFileName);
-		memset(PtrArg0 + LenParentFileName, '\0', 1);
-
-		memcpy(PtrArg1, ArgUpdateModeBuf, LenArgUpdateMode);
-		memset(PtrArg1 + LenArgUpdateMode, '\0', 1);
-
-		memcpy(PtrArg2, ArgMainBuf, LenArgMain);
-		memset(PtrArg2 + LenArgMain, '\0', 1);
-
-
-		ioArgvPtrs[0] = PtrArg0;
-		ioArgvPtrs[1] = PtrArg1;
-		ioArgvPtrs[2] = PtrArg2;
-		ioArgvPtrs[3] = NULL;
+		GS_GOTO_CLEAN();
 	}
 
 	if (oLenArgvPtrs)
 		*oLenArgvPtrs = LenArgvPtrs;
-
-	if (oLenParentArgvUnified)
-		*oLenParentArgvUnified = LenParentArgvUnified;
 
 clean:
 
@@ -100,66 +87,44 @@ int gs_nix_build_child_command_line(
 	/* @param ArgvPtrsSize size in elements */
 	int r = 0;
 
-	const char ArgUpdateModeBuf[] = GS_SELFUPDATE_ARG_UPDATEMODE;
-	size_t LenArgUpdateMode = (sizeof ArgUpdateModeBuf) - 1;
+	std::string ChildFileName(ChildFileNameBuf, LenChildFileName);
+	std::string ParentFileName(ParentFileNameBuf, LenParentFileName);
 
-	const char ArgChildBuf[] = GS_SELFUPDATE_ARG_CHILD;
-	size_t LenArgChild = (sizeof ArgChildBuf) - 1;
+	std::string ArgUpdateMode = GS_SELFUPDATE_ARG_UPDATEMODE;
+	std::string ArgChild = GS_SELFUPDATE_ARG_CHILD;
 
-	size_t LenChildArgvUnified =
-		(LenChildFileName /*pathstr*/ + 1 /*zero*/ +
-		LenArgUpdateMode              + 1 /*zero*/ +
-		LenArgChild                   + 1 /*zero*/ +
-		LenParentFileName /*pathstrparent*/ + 1 /*zero*/ +
-		LenChildFileName /*pathstrchild*/   + 1 /*zero*/);
+	std::string zero("\0", 1);
+
+	std::stringstream ss;
+	std::string out;
 
 	size_t LenArgvPtrs = 5 /*args*/ + 1 /*nullsentinel*/;
 
-	if (LenChildArgvUnified >= ChildArgvUnifiedBufSize)
+	if (ArgvPtrsSize < LenArgvPtrs)
 		GS_ERR_CLEAN(1);
 
-	if (LenArgvPtrs > ArgvPtrsSize)
-		GS_GOTO_CLEAN();
+	ioArgvPtrs[0] = 0;
+	ss << ChildFileName << zero;
+	ioArgvPtrs[1] = oChildArgvUnifiedBuf + ss.str().size();
+	ss << ArgUpdateMode << zero;
+	ioArgvPtrs[2] = oChildArgvUnifiedBuf + ss.str().size();
+	ss << ArgChild << zero;
+	ioArgvPtrs[3] = oChildArgvUnifiedBuf + ss.str().size();
+	ss << ParentFileName << zero;
+	ioArgvPtrs[4] = oChildArgvUnifiedBuf + ss.str().size();
+	ss << ChildFileName;
+	ioArgvPtrs[5] = NULL;
+	out = ss.str();
 
+	if (!!(r = gs_buf_copy_zero_terminate_ex(
+		out.c_str(), out.size(),
+		oChildArgvUnifiedBuf, ChildArgvUnifiedBufSize, oLenChildArgvUnified)))
 	{
-		char * const PtrArg0 = oChildArgvUnifiedBuf;
-		char * const PtrArg1 = PtrArg0 + LenChildFileName + 1;
-		char * const PtrArg2 = PtrArg1 + LenArgUpdateMode + 1;
-		char * const PtrArg3 = PtrArg2 + LenArgChild + 1;
-		char * const PtrArg4 = PtrArg3 + LenParentFileName + 1;
-		char * const PtrArg5 = PtrArg4 + LenChildFileName + 1;
-
-		GS_ASSERT(PtrArg5 - PtrArg0 == LenChildArgvUnified);
-
-		memcpy(PtrArg0, ChildFileNameBuf, LenChildFileName);
-		memset(PtrArg0 + LenChildFileName, '\0', 1);
-
-		memcpy(PtrArg1, ArgUpdateModeBuf, LenArgUpdateMode);
-		memset(PtrArg1 + LenArgUpdateMode, '\0', 1);
-
-		memcpy(PtrArg2, ArgChildBuf, LenArgChild);
-		memset(PtrArg2 + LenArgChild, '\0', 1);
-
-		memcpy(PtrArg3, ParentFileNameBuf, LenParentFileName);
-		memset(PtrArg3 + LenParentFileName, '\0', 1);
-
-		memcpy(PtrArg4, ChildFileNameBuf, LenChildFileName);
-		memset(PtrArg4 + LenChildFileName, '\0', 1);
-
-
-		ioArgvPtrs[0] = PtrArg0;
-		ioArgvPtrs[1] = PtrArg1;
-		ioArgvPtrs[2] = PtrArg2;
-		ioArgvPtrs[3] = PtrArg3;
-		ioArgvPtrs[4] = PtrArg4;
-		ioArgvPtrs[5] = NULL;
+		GS_GOTO_CLEAN();
 	}
 
 	if (oLenArgvPtrs)
 		*oLenArgvPtrs = LenArgvPtrs;
-
-	if (oLenChildArgvUnified)
-		*oLenChildArgvUnified = LenChildArgvUnified;
 
 clean:
 
