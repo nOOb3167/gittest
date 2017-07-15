@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#include <gittest/misc_nix.h>
+#include <gittest/misc.h>
+#include <gittest/filesys.h>
+#include <gittest/filesys_nix.h>
 #include <gittest/gittest_selfupdate.h>
 
 int gs_nix_build_parent_command_line_mode_main(

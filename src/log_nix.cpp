@@ -4,7 +4,8 @@
 #include <signal.h>
 
 #include <gittest/misc.h>
-#include <gittest/misc_nix.h>
+#include <gittest/filesys.h>
+#include <gittest/filesys_nix.h>
 #include <gittest/log.h>
 
 #define GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_DATA 0x429d83ff

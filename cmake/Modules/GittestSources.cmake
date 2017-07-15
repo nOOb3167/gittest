@@ -290,7 +290,6 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/filesys_win.h
   )
   SET(GITTEST_LIB_HEADERS_NIX
-    include/gittest/misc_nix.h
     include/gittest/filesys_nix.h
   )
 

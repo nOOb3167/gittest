@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <deque>
 #include <map>
 #include <set>
 #include <list>
@@ -21,6 +22,7 @@
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
 #include <git2/sys/mempack.h>     /* in-memory backend */
 
+#include <gittest/bypart.h>
 #include <gittest/gittest.h>
 
 /*
@@ -29,6 +31,127 @@ fresh repositories have no "refs/heads/master" ref
 = resetting the git repo (nuke loose objects but packs remain) =
 git gc --prune=all
 */
+
+struct GsReachRefsCbCtx
+{
+	git_repository       *Repository;
+	toposet_t            *MarkSet;
+	std::vector<git_oid> *ReachableOid;
+};
+
+static int gs_reach_refs_cb(git_reference *Ref, void *ctx);
+
+int gs_reach_oid(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, const git_oid *Oid)
+{
+	if (MarkSet->find(Oid) == MarkSet->end()) {
+		MarkSet->insert(Oid);
+		ReachableOid->push_back(*Oid);
+	}
+	return 0;
+}
+
+int gs_reach_tree_blobs(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, git_tree *Tree)
+{
+	int r = 0;
+
+	git_odb *Odb = NULL;
+
+	if (!!(r = git_repository_odb(&Odb, Repository)))
+		GS_GOTO_CLEAN();
+
+	for (uint32_t j = 0; j < git_tree_entrycount(Tree); j++) {
+		const git_tree_entry *Entry = git_tree_entry_byindex(Tree, j);
+		const git_oid *EntryOid = git_tree_entry_id(Entry);
+		const git_otype EntryType = git_tree_entry_type(Entry);
+		if (EntryType == GIT_OBJ_TREE)
+			continue;
+		GS_ASSERT(EntryType == GIT_OBJ_BLOB);
+		if (!!(r = gs_reach_oid(Repository, MarkSet, ReachableOid, EntryOid)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
+	git_odb_free(Odb);
+
+	return r;
+}
+
+int gs_reach_commit_tree(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, git_commit *Commit)
+{
+	int r = 0;
+
+	git_tree *Tree = NULL;
+
+	topolist_t NodeList;
+
+	if (!!(r = git_commit_tree(&Tree, Commit)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = tree_toposort(Repository, Tree, &NodeList)))
+		GS_GOTO_CLEAN();
+
+	for (topolist_t::iterator it = NodeList.begin(); it != NodeList.end(); ++it) {
+		if (!!(r = gs_reach_oid(Repository, MarkSet, ReachableOid, git_tree_id(*it))))
+			GS_GOTO_CLEAN();
+		if (!!(r = gs_reach_tree_blobs(Repository, MarkSet, ReachableOid, *it)))
+			GS_GOTO_CLEAN();
+	}
+
+clean:
+	for (topolist_t::iterator it = NodeList.begin(); it != NodeList.end(); ++it)
+		git_tree_free(*it);
+
+	return r;
+}
+
+int gs_reach_refs_cb(git_reference *Ref, void *ctx)
+{
+	int r = 0;
+
+	struct GsReachRefsCbCtx *Ctx = (struct GsReachRefsCbCtx *) ctx;
+
+	git_reference *RefResolved = NULL;
+	git_commit    *Commit = NULL;
+
+	if (!!(r = git_reference_resolve(&RefResolved, Ref)))
+		GS_GOTO_CLEAN();
+
+	GS_ASSERT(git_reference_type(RefResolved) == GIT_REF_OID);
+
+	if (!!(r = git_commit_lookup(&Commit, Ctx->Repository, git_reference_target(RefResolved))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_reach_oid(Ctx->Repository, Ctx->MarkSet, Ctx->ReachableOid, git_commit_id(Commit))))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_reach_commit_tree(Ctx->Repository, Ctx->MarkSet, Ctx->ReachableOid, Commit)))
+		GS_GOTO_CLEAN();
+
+clean:
+	git_commit_free(Commit);
+	git_reference_free(RefResolved);
+
+	return r;
+}
+
+int gs_reach_refs(git_repository *Repository, std::vector<git_oid> *ReachableOid)
+{
+	int r = 0;
+
+	toposet_t MarkSet;
+
+	struct GsReachRefsCbCtx Ctx = {};
+	Ctx.Repository = Repository;
+	Ctx.MarkSet = &MarkSet;
+	Ctx.ReachableOid = ReachableOid;
+
+	if (!!(r = git_reference_foreach(Repository, gs_reach_refs_cb, &Ctx)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
 
 /* takes ownership of 'Tree' on success (list responsible for disposal) */
 int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist_t *NodeList, git_tree *Tree) {
