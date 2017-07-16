@@ -413,6 +413,7 @@ int gs_config_parse(
 	const char *DataStart = BufferBuf;
 	uint32_t DataLength = (uint32_t) LenBuffer;
 
+	const char hashsign = '#';
 	const char equals = '=';
 	const char hdr_nulterm_expected[] = GS_CONFIG_HEADER_STRING;
 	const size_t hdr_raw_size = sizeof(hdr_nulterm_expected) - 1;
@@ -443,22 +444,30 @@ int gs_config_parse(
 
 		std::string line(DataStart + OldOffset, DataStart + Offset);
 
-		/* split extracted line into KKK and VVV parts by equal sign */
+		if (line.size() && line[0] == hashsign) {
+			/* comment */
 
-		size_t equalspos = line.npos;
-		if ((equalspos = line.find_first_of(equals, 0)) == line.npos)
-		{ r = 1; goto clean; }
-		std::string key(line.data() + 0, line.data() + equalspos);
-		std::string val(line.data() + equalspos + 1, line.data() + line.size());
+			if (!!(r = gs_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
+				goto clean;
+		}
+		else {
+			/* split extracted line into KKK and VVV parts by equal sign */
 
-		/* record the gotten key value pair */
+			size_t equalspos = line.npos;
+			if ((equalspos = line.find_first_of(equals, 0)) == line.npos)
+			{ r = 1; goto clean; }
+			std::string key(line.data() + 0, line.data() + equalspos);
+			std::string val(line.data() + equalspos + 1, line.data() + line.size());
 
-		KeyVal->mMap[key] = val;
+			/* record the gotten key value pair */
 
-		/* skip to the next line (or end of buffer) */
+			KeyVal->mMap[key] = val;
 
-		if (!!(r = gs_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
-			goto clean;
+			/* skip to the next line (or end of buffer) */
+
+			if (!!(r = gs_config_parse_skip_newline(DataStart, DataLength, Offset, &Offset)))
+				goto clean;
+		}
 	}
 
 	if (oKeyVal)
