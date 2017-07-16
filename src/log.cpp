@@ -293,7 +293,7 @@ void gs_log_tls_SZ(const char *CppFile, int CppLine, uint32_t Level, const char 
 	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog && !!gs_log_message_limit_level(lg->mpCurrentLog, Level))
 		return;
-	if (lg->mpCurrentLog->mLogUnifiedOpt)
+	if (lg->mpCurrentLog && lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,
 			lg->mpCurrentLog->mPrefix.c_str(),
@@ -310,7 +310,7 @@ void gs_log_tls_S(const char *CppFile, int CppLine, uint32_t Level, const char *
 	GsLogTls *lg = gs_log_global_get();
 	if (lg->mpCurrentLog && !!gs_log_message_limit_level(lg->mpCurrentLog, Level))
 		return;
-	if (lg->mpCurrentLog->mLogUnifiedOpt)
+	if (lg->mpCurrentLog && lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,
 			lg->mpCurrentLog->mPrefix.c_str(),
@@ -341,7 +341,7 @@ void gs_log_tls_PF(const char *CppFile, int CppLine, uint32_t Level, const char 
 	size_t MsgSize = strnlen(buf, sanity_arbitrary_max);
 	GS_ASSERT(MsgSize < sanity_arbitrary_max);
 
-	if (lg->mpCurrentLog->mLogUnifiedOpt)
+	if (lg->mpCurrentLog && lg->mpCurrentLog->mLogUnifiedOpt)
 		gs_log_unified_message_log(
 			lg->mpCurrentLog->mLogUnifiedOpt,
 			lg->mpCurrentLog->mPrefix.c_str(),
