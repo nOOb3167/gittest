@@ -663,6 +663,7 @@ int gs_config_get_common_vars(
 	GS_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdatePath);
 	GS_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, RepoMasterUpdateCheckoutPath);
 	GS_CONFIG_COMMON_VAR_UINT32_NONUCF(KeyVal, CommonVars, ServBlobSoftSizeLimit);
+	GS_CONFIG_COMMON_VAR_STRING_INTERPRET_RELATIVE_CURRENT_EXECUTABLE_NONUCF(KeyVal, CommonVars, MaintenanceBkpPath);
 
 	if (oCommonVars)
 		*oCommonVars = CommonVars;

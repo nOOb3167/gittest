@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstring>
 
+#include <algorithm>
+
 #include <git2.h>
 #include <git2/sys/memes.h>
 
@@ -19,10 +21,12 @@
 #define GS_REPO_SETUP_ARG_COMMIT_SELFUPDATE     "--xcommit_selfupdate"
 #define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
 #define GS_REPO_SETUP_ARG_CREATE_MASTER_UPDATE  "--xcreate_master_update"
+#define GS_REPO_SETUP_ARG_MAINTENANCE           "--xmaintenance"
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHardcodedSanityCheck) {
+int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHardcodedSanityCheck)
+{
 	int r = 0;
 
 	git_repository *Repository = NULL;
@@ -34,10 +38,7 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHar
 
 	GS_LOG(I, PF, "Repository initializing [%.*s]", LenRepoPath, RepoPathBuf);
 
-	if (OptHardcodedSanityCheck && (strstr(RepoPathBuf, OptHardcodedSanityCheck) == NULL))
-		GS_ERR_CLEAN(1);
-
-	if (std::string(RepoPathBuf, LenRepoPath).find("RepoMasterUpdate") == std::string::npos)
+	if (OptHardcodedSanityCheck && std::string(RepoPathBuf, LenRepoPath).find(OptHardcodedSanityCheck) == std::string::npos)
 		GS_ERR_CLEAN_L(1, E, PF, "Repository path suspicious [%.*s]", (int)LenRepoPath, RepoPathBuf);
 
 	errR = git_repository_open_ext(NULL, RepoPathBuf, GIT_REPOSITORY_OPEN_NO_SEARCH, NULL);
@@ -215,13 +216,50 @@ clean:
 	return r;
 }
 
+int gs_repo_setup_main_mode_maintenance(
+	const char *RepoPathBuf, size_t LenRepoPath,
+	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
+{
+	int r = 0;
+
+	git_repository *Repository = NULL;
+
+	std::vector<git_oid> ReachableOid;
+
+	GS_BYPART_DATA_VAR(OidVector, BypartReachableOid);
+	GS_BYPART_DATA_INIT(OidVector, BypartReachableOid, &ReachableOid);
+
+	GS_ASSERT(!gs_buf_ensure_haszero(RepoPathBuf, LenRepoPath + 1) &&
+			  !gs_buf_ensure_haszero(MaintenanceBkpPathBuf, LenMaintenanceBkpPath + 1));
+
+	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_reach_refs(Repository, gs_bypart_cb_OidVector, &BypartReachableOid)))
+		GS_GOTO_CLEAN();
+
+	std::sort(ReachableOid.begin(), ReachableOid.end(), oid_comparator_v_t());
+
+	if (!!(r = git_memes_thunderdome(RepoPathBuf, ReachableOid.data(), ReachableOid.size(), MaintenanceBkpPathBuf, MaintenanceBkpPathBuf)))
+		GS_GOTO_CLEAN();
+
+clean:
+	git_repository_free(Repository);
+
+	return r;
+}
+
 int gs_repo_setup_main(
 	int argc, char **argv,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *RefNameMainBuf, size_t LenRefNameMain)
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
 {
 	int r = 0;
 
@@ -272,6 +310,16 @@ int gs_repo_setup_main(
 		{
 			GS_GOTO_CLEAN();
 		}
+	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_MAINTENANCE) == 0) {
+		GS_LOG(I, S, "maintenance start");
+		if (argc != 2)
+			GS_ERR_CLEAN(1);
+		if (!!(r = gs_repo_setup_main_mode_maintenance(
+			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
+			MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+		{
+			GS_GOTO_CLEAN();
+		}
 	} else {
 		GS_LOG(I, PF, "unrecognized argument [%.s]", argv[2]);
 		GS_ERR_CLEAN(1);
@@ -314,7 +362,8 @@ int main(int argc, char **argv) {
 			CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
 			CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
 			CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
-			CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain)))
+			CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+			CommonVars.MaintenanceBkpPathBuf, CommonVars.LenMaintenanceBkpPath)))
 		{
 			GS_GOTO_CLEAN();
 		}

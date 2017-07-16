@@ -12,6 +12,7 @@
 #include <git2.h>
 
 #include <gittest/misc.h>
+#include <gittest/bypart.h>
 
 #define GS_OID_STR_VAR(VARNAME) \
 	char VARNAME ## Str [GIT_OID_HEXSZ + 1] = {};
@@ -24,8 +25,16 @@ struct oid_comparator_t {
 	}
 };
 
+struct oid_comparator_v_t {
+	bool operator()(const git_oid &a, const git_oid &b) {
+		return git_oid_cmp(&a, &b) < 0;
+	}
+};
+
 typedef ::std::set<const git_oid *, oid_comparator_t> toposet_t;
 typedef ::std::list<git_tree *> topolist_t;
+
+int gs_reach_refs(git_repository *Repository, gs_bypart_cb_t cb, void *ctx);
 
 int tree_toposort_visit(git_repository *Repository, toposet_t *MarkSet, topolist_t *NodeList, git_tree *Tree);
 int tree_toposort(git_repository *Repository, git_tree *Tree, topolist_t *oNodeList);

@@ -10,18 +10,17 @@
 
 #include <algorithm>
 #include <vector>
-#include <deque>
 #include <map>
 #include <set>
 #include <list>
 #include <string>
 #include <utility>
-#include <sstream>
 
 #include <git2.h>
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
 #include <git2/sys/mempack.h>     /* in-memory backend */
 
+#include <gittest/misc.h>
 #include <gittest/bypart.h>
 #include <gittest/gittest.h>
 
@@ -39,6 +38,10 @@ struct GsReachRefsCbCtx
 	std::vector<git_oid> *ReachableOid;
 };
 
+static int gs_reach_refs_cb(git_reference *Ref, void *ctx);
+static int gs_reach_oid(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, const git_oid *Oid);
+static int gs_reach_tree_blobs(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, git_tree *Tree);
+static int gs_reach_commit_tree(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, git_commit *Commit);
 static int gs_reach_refs_cb(git_reference *Ref, void *ctx);
 
 int gs_reach_oid(git_repository *Repository, toposet_t *MarkSet, std::vector<git_oid> *ReachableOid, const git_oid *Oid)
@@ -134,19 +137,25 @@ clean:
 	return r;
 }
 
-int gs_reach_refs(git_repository *Repository, std::vector<git_oid> *ReachableOid)
+int gs_reach_refs(git_repository *Repository, gs_bypart_cb_t cb, void *ctx)
 {
 	int r = 0;
+
+	std::vector<git_oid> ReachableOid;
 
 	toposet_t MarkSet;
 
 	struct GsReachRefsCbCtx Ctx = {};
 	Ctx.Repository = Repository;
 	Ctx.MarkSet = &MarkSet;
-	Ctx.ReachableOid = ReachableOid;
+	Ctx.ReachableOid = &ReachableOid;
 
 	if (!!(r = git_reference_foreach(Repository, gs_reach_refs_cb, &Ctx)))
 		GS_GOTO_CLEAN();
+
+	for (size_t i = 0; i < ReachableOid.size(); ++i)
+		if (!!(r = cb(ctx, (const char *) &ReachableOid[i], sizeof ReachableOid[0])))
+			GS_GOTO_CLEAN();
 
 clean:
 
