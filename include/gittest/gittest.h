@@ -89,9 +89,20 @@ int clnt_missing_blobs(git_repository *RepositoryT, uint32_t PairedVecLen, std::
 int aux_commit_buffer_checkexist_dummy(git_odb *OdbT, git_buf *CommitBuf, uint32_t *oExists, git_oid *oCommitOid);
 int aux_commit_buffer_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_buf *oCommitBuf);
 int aux_commit_commit_dummy(git_odb *OdbT, git_buf *CommitBuf, git_oid *oCommitOid);
+int clnt_tree_ensure_from_workdir(
+	git_repository *Repository,
+	const char *DirBuf, size_t LenDir,
+	git_oid *oTreeOid);
+int clnt_tree_ensure_single(git_repository *Repository,
+	const char *SingleBlobNameBuf, size_t LenSingleBlobName,
+	git_oid *BlobOid,
+	git_oid *oTreeOid);
+int clnt_tree_ensure_dummy(git_repository *Repository, git_oid *oTreeOid);
 int clnt_commit_ensure_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_oid *oCommitOid);
 int clnt_commit_setref(git_repository *RepositoryT, const char *RefName, git_oid *CommitOid);
-int aux_repository_open(const char *RepoOpenPath, git_repository **oRepository);
+int aux_repository_open(
+	const char *RepoOpenPathBuf, size_t LenRepoOpenPath,
+	git_repository **oRepository);
 int aux_repository_discover_open(const char *RepoDiscoverPath, git_repository **oRepository);
 int aux_checkout(
 	git_repository *Repository,

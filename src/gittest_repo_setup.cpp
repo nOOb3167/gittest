@@ -22,6 +22,7 @@
 #define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
 #define GS_REPO_SETUP_ARG_CREATE_MASTER_UPDATE  "--xcreate_master_update"
 #define GS_REPO_SETUP_ARG_MAINTENANCE           "--xmaintenance"
+#define GS_REPO_SETUP_ARG_DUMMYPREP             "--xdummyprep"
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
@@ -35,6 +36,9 @@ int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHar
 	git_repository_init_options InitOptions = GIT_REPOSITORY_INIT_OPTIONS_INIT;
 	
 	GS_ASSERT(InitOptions.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
+
+	if (!!(r = gs_buf_ensure_haszero(RepoPathBuf, LenRepoPath + 1)))
+		GS_GOTO_CLEAN();
 
 	GS_LOG(I, PF, "Repository initializing [%.*s]", LenRepoPath, RepoPathBuf);
 
@@ -87,7 +91,7 @@ int gs_repo_setup_main_mode_commit_selfupdate(
 	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
+	if (!!(r = aux_repository_open(RepoPathBuf, LenRepoPath, &Repository)))
 		GS_GOTO_CLEAN();
 
 	GS_LOG(I, S, "creating blob and tree");
@@ -151,7 +155,7 @@ int gs_repo_setup_main_mode_commit_main(
 	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
+	if (!!(r = aux_repository_open(RepoPathBuf, LenRepoPath, &Repository)))
 		GS_GOTO_CLEAN();
 
 	GS_LOG(I, S, "better way to commit a directory once libgit2 multiple worktree support lands");
@@ -229,13 +233,10 @@ int gs_repo_setup_main_mode_maintenance(
 	GS_BYPART_DATA_VAR(OidVector, BypartReachableOid);
 	GS_BYPART_DATA_INIT(OidVector, BypartReachableOid, &ReachableOid);
 
-	GS_ASSERT(!gs_buf_ensure_haszero(RepoPathBuf, LenRepoPath + 1) &&
-			  !gs_buf_ensure_haszero(MaintenanceBkpPathBuf, LenMaintenanceBkpPath + 1));
-
 	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(RepoPathBuf, &Repository)))
+	if (!!(r = aux_repository_open(RepoPathBuf, LenRepoPath, &Repository)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_reach_refs(Repository, gs_bypart_cb_OidVector, &BypartReachableOid)))
@@ -243,11 +244,129 @@ int gs_repo_setup_main_mode_maintenance(
 
 	std::sort(ReachableOid.begin(), ReachableOid.end(), oid_comparator_v_t());
 
-	if (!!(r = git_memes_thunderdome(RepoPathBuf, ReachableOid.data(), ReachableOid.size(), MaintenanceBkpPathBuf, MaintenanceBkpPathBuf)))
+	if (!!(r = git_memes_thunderdome(
+		RepoPathBuf, LenRepoPath,
+		ReachableOid.data(), ReachableOid.size(),
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath,
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
 clean:
 	git_repository_free(Repository);
+
+	return r;
+}
+
+int gs_repo_setup_main_mode_dummyprep(
+	const char *RepoMainPathBuf, size_t LenRepoMainPath,
+	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
+	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
+	const char *MainDirectoryFileNameBuf, size_t LenMainDirectoryFileName,
+	const char *SelfUpdateExecutableFileNameBuf, size_t LenSelfUpdateExecutableFileName)
+{
+	int r = 0;
+
+	const char SelfUpdateExecutableHardcodedName[] = GS_STR_PARENT_EXPECTED_SUFFIX;
+	size_t LenSelfUpdateExecutableHardcodedName = sizeof SelfUpdateExecutableFileNameBuf - 1;
+
+	size_t IsDir = 0;
+	size_t IsNotDir = 0;
+
+	git_repository *RepoMain = NULL;
+	git_repository *RepoSelfUpdate = NULL;
+	git_repository *RepoMasterUpdate = NULL;
+
+	git_oid BlobSelfUpdateOid = {};
+	git_oid TreeOid = {};
+	git_oid TreeMainOid = {};
+	git_oid TreeSelfUpdateOid = {};
+	git_oid CommitOid = {};
+	git_oid CommitMainOid = {};
+	git_oid CommitSelfUpdateOid = {};
+
+	if (!!(r = gs_file_is_directory(MainDirectoryFileNameBuf, LenMainDirectoryFileName, &IsDir)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_file_is_directory(SelfUpdateExecutableFileNameBuf, LenSelfUpdateExecutableFileName, &IsNotDir)))
+		GS_GOTO_CLEAN();
+
+	if (!IsDir || !IsNotDir)
+		GS_ERR_CLEAN(1);
+
+	if (!!(r = gs_repo_init(RepoMainPathBuf, LenRepoMainPath, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_repo_init(RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_repo_init(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoMainPathBuf, LenRepoMainPath, &RepoMain)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath, &RepoSelfUpdate)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath, &RepoMasterUpdate)))
+		GS_GOTO_CLEAN();
+
+	/* dummy clnt (RepoMasterUpdate @ main and selfupdate) */
+
+	if (!!(r = clnt_tree_ensure_dummy(RepoMasterUpdate, &TreeOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_ensure_dummy(RepoMasterUpdate, &TreeOid, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameMainBuf, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameSelfUpdateBuf, &CommitOid)))
+		GS_GOTO_CLEAN();
+
+	/* nondummy serv (RepoMain @ main and RepoSelfUpdate @ selfupdate) */
+
+	if (!!(r = clnt_tree_ensure_from_workdir(
+		RepoMain,
+		MainDirectoryFileNameBuf, LenMainDirectoryFileName,
+		&TreeMainOid)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = clnt_commit_ensure_dummy(RepoMasterUpdate, &TreeMainOid, &CommitMainOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameMainBuf, &CommitMainOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_blob_create_fromdisk(&BlobSelfUpdateOid, RepoMasterUpdate, SelfUpdateExecutableFileNameBuf)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_tree_ensure_single(
+		RepoMasterUpdate,
+		SelfUpdateExecutableHardcodedName, LenSelfUpdateExecutableHardcodedName,
+		&BlobSelfUpdateOid,
+		&TreeSelfUpdateOid)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = clnt_commit_ensure_dummy(RepoMasterUpdate, &TreeSelfUpdateOid, &CommitSelfUpdateOid)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameSelfUpdateBuf, &CommitSelfUpdateOid)))
+		GS_GOTO_CLEAN();
+
+clean:
+	git_repository_free(RepoMain);
+	git_repository_free(RepoSelfUpdate);
+	git_repository_free(RepoMasterUpdate);
 
 	return r;
 }
@@ -257,8 +376,8 @@ int gs_repo_setup_main(
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
 	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RefNameMainBuf, size_t LenRefNameMain,
+	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
 {
 	int r = 0;
@@ -312,11 +431,28 @@ int gs_repo_setup_main(
 		}
 	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_MAINTENANCE) == 0) {
 		GS_LOG(I, S, "maintenance start");
-		if (argc != 2)
+		if (argc != 3)
 			GS_ERR_CLEAN(1);
 		if (!!(r = gs_repo_setup_main_mode_maintenance(
 			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
 			MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+		{
+			GS_GOTO_CLEAN();
+		}
+	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_DUMMYPREP) == 0) {
+		GS_LOG(I, S, "dummyprep start");
+		if (argc != 5)
+			GS_ERR_CLEAN(1);
+		const size_t LenArgvDirectoryFileName = strlen(argv[3]);
+		const size_t LenArgvExecutableFileName = strlen(argv[4]);
+		if (!!(r = gs_repo_setup_main_mode_dummyprep(
+			RepoMainPathBuf, LenRepoMainPath,
+			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
+			RefNameMainBuf, LenRefNameMain,
+			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+			argv[3], LenArgvDirectoryFileName,
+			argv[4], LenArgvExecutableFileName)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -361,8 +497,8 @@ int main(int argc, char **argv) {
 			CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
 			CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
 			CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
-			CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
 			CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+			CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
 			CommonVars.MaintenanceBkpPathBuf, CommonVars.LenMaintenanceBkpPath)))
 		{
 			GS_GOTO_CLEAN();

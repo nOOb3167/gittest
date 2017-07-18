@@ -390,10 +390,10 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	Ctx->mMagic = GS_EV_CTX_SERV_MAGIC;
 	Ctx->mCommonVars = CommonVars;
 
-	if (!!(r = aux_repository_open(CommonVars.RepoMainPathBuf, &Ctx->mRepository)))
+	if (!!(r = aux_repository_open(CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath, &Ctx->mRepository)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(CommonVars.RepoSelfUpdatePathBuf, &Ctx->mRepositorySelfUpdate)))
+	if (!!(r = aux_repository_open(CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath, &Ctx->mRepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	if (!(Base = event_base_new()))

@@ -134,7 +134,7 @@ int clnt_state_need_repository_noown2(
 {
 	int r = 0;
 
-	if (!!(r = aux_repository_open(RepoMainOpenPathBuf, oRepositoryT)))
+	if (!!(r = aux_repository_open(RepoMainOpenPathBuf, LenRepoMainOpenPath, oRepositoryT)))
 		GS_GOTO_CLEAN();
 
 clean:

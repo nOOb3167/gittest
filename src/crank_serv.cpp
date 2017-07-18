@@ -257,10 +257,10 @@ int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
 	if (pStoreWorker->base.magic != GS_STORE_WORKER_SERVER_MAGIC)
 		GS_ERR_CLEAN(1);
 
-	if (!!(r = aux_repository_open(pStoreWorker->mRepoMainPathBuf, &Repository)))
+	if (!!(r = aux_repository_open(pStoreWorker->mRepoMainPathBuf, pStoreWorker->mLenRepoMainPath, &Repository)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(pStoreWorker->mRepoSelfUpdatePathBuf, &RepositorySelfUpdate)))
+	if (!!(r = aux_repository_open(pStoreWorker->mRepoSelfUpdatePathBuf, pStoreWorker->mLenRepoSelfUpdatePath, &RepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
 	while (true) {

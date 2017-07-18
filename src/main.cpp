@@ -824,6 +824,106 @@ clean:
 	return r;
 }
 
+/* WARNING: side-effects on Repository through git_repository_set_workdir
+*/
+int clnt_tree_ensure_from_workdir(
+	git_repository *Repository,
+	const char *DirBuf, size_t LenDir,
+	git_oid *oTreeOid)
+{
+	int r = 0;
+
+	const char *PathSpecAllC = "*";
+	git_strarray PathSpecAll = {};
+	PathSpecAll.count = 1;
+	PathSpecAll.strings = (char **) &PathSpecAllC;
+
+	git_index *Index = NULL;
+
+	git_oid TreeOid = {};
+
+	if (!!(r = gs_buf_ensure_haszero(DirBuf, LenDir + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_repository_set_workdir(Repository, DirBuf, 0)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_repository_index(&Index, Repository)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_index_clear(Index)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_index_add_all(Index, &PathSpecAll, GIT_INDEX_ADD_FORCE, NULL, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_index_write_tree_to(&TreeOid, Index, Repository)))
+		GS_GOTO_CLEAN();
+
+	if (oTreeOid)
+		*oTreeOid = TreeOid;
+
+clean:
+	git_index_free(Index);
+
+	return r;
+}
+
+int clnt_tree_ensure_single(git_repository *Repository,
+	const char *SingleBlobNameBuf, size_t LenSingleBlobName,
+	git_oid *BlobOid,
+	git_oid *oTreeOid)
+{
+	int r = 0;
+
+	git_treebuilder *TreeBuilder = NULL;
+
+	git_oid TreeOid = {};
+
+	if (!!(r = gs_buf_ensure_haszero(SingleBlobNameBuf, LenSingleBlobName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_treebuilder_new(&TreeBuilder, Repository, NULL)))
+		GS_GOTO_CLEAN();
+
+	// FIXME: really GIT_FILEMODE_BLOB_EXECUTABLE? makes sense but what about just GIT_FILEMODE_BLOB?
+	if (!!(r = git_treebuilder_insert(NULL, TreeBuilder, SingleBlobNameBuf, BlobOid, GIT_FILEMODE_BLOB_EXECUTABLE)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = git_treebuilder_write(&TreeOid, TreeBuilder)))
+		GS_GOTO_CLEAN();
+
+	if (oTreeOid)
+		*oTreeOid = TreeOid;
+
+clean:
+	git_treebuilder_free(TreeBuilder);
+
+	return r;
+}
+
+int clnt_tree_ensure_dummy(git_repository *Repository, git_oid *oTreeOid)
+{
+	int r = 0;
+
+	char DummyData[] = "Hello World";
+	char DummyFileName[] = "DummyFileName.txt";
+
+	git_oid BlobOid = {};
+	git_oid TreeOid = {};
+	git_oid CommitOid = {};
+
+	if (!!(r = git_blob_create_frombuffer(&BlobOid, Repository, DummyData, sizeof DummyData - 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = clnt_tree_ensure_single(Repository, DummyFileName, sizeof DummyFileName - 1, &BlobOid, oTreeOid)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
 int clnt_commit_ensure_dummy(git_repository *RepositoryT, git_oid *TreeOid, git_oid *oCommitOid) {
 	int r = 0;
 
@@ -878,12 +978,18 @@ clean:
 	return r;
 }
 
-int aux_repository_open(const char *RepoOpenPath, git_repository **oRepository) {
+int aux_repository_open(
+	const char *RepoOpenPathBuf, size_t LenRepoOpenPath,
+	git_repository **oRepository)
+{
 	int r = 0;
 
 	git_repository *Repository = NULL;
 
-	if (!!(r = git_repository_open(&Repository, RepoOpenPath)))
+	if (!!(r = gs_buf_ensure_haszero(RepoOpenPathBuf, LenRepoOpenPath + 1)))
+		goto clean;
+
+	if (!!(r = git_repository_open(&Repository, RepoOpenPathBuf)))
 		goto clean;
 
 	if (oRepository)
@@ -981,7 +1087,7 @@ int aux_repository_checkout(
 	if (!!(r = gs_buf_ensure_haszero(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath + 1)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(RepoMasterUpdatePathBuf, &Repository)))
+	if (!!(r = aux_repository_open(RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath, &Repository)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_oid_latest_commit_tree(Repository, RefNameMainBuf, &CommitHeadOid, &TreeHeadOid)))
@@ -1071,10 +1177,10 @@ int stuff(
 	git_oid LastReverseToposortAkaFirstToposort = {};
 	git_oid CreatedCommitOid = {};
 
-	if (!!(r = aux_repository_open(RepoOpenPath, &Repository)))
+	if (!!(r = aux_repository_open(RepoOpenPath, LenRepoOpenPath, &Repository)))
 		goto clean;
 
-	if (!!(r = aux_repository_open(RepoTOpenPath, &RepositoryT)))
+	if (!!(r = aux_repository_open(RepoTOpenPath, LenRepoTOpenPath, &RepositoryT)))
 		goto clean;
 
 	if (!!(r = serv_latest_commit_tree_oid(Repository, RefName, &CommitHeadOid, &TreeHeadOid)))

@@ -275,6 +275,27 @@ clean:
 	return r;
 }
 
+int gs_file_is_directory(const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsDirectory)
+{
+	int r = 0;
+
+	DWORD Attributes = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (INVALID_FILE_ATTRIBUTES == (Attributes = GetFileAttributes(FileNameBuf)))
+		GS_ERR_CLEAN(1);
+
+	if (oIsDirectory)
+		*oIsDirectory = !!(Attributes & FILE_ATTRIBUTE_DIRECTORY);
+
+clean:
+
+	return r;
+}
+
 int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute)
 {
 	int r = 0;

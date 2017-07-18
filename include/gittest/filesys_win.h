@@ -21,6 +21,9 @@ int gs_file_exist(
 	size_t *oIsExist);
 int gs_file_exist_ensure(const char *FileNameBuf, size_t LenFileName);
 
+int gs_file_is_directory(const char *FileNameBuf, size_t LenFileName,
+	size_t *oIsDirectory);
+
 int gs_path_is_absolute(const char *PathBuf, size_t LenPath, size_t *oIsAbsolute);
 
 int gs_path_append_abs_rel(

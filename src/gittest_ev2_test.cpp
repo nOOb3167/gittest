@@ -50,7 +50,7 @@ int gs_ev_clnt_state_crank3_connected(
 	if (!!(r = clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_REPOSITORY)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = aux_repository_open(Ctx->mCommonVars.RepoMainPathBuf, &RepositoryT)))
+	if (!!(r = aux_repository_open(Ctx->mCommonVars.RepoMainPathBuf, Ctx->mCommonVars.LenRepoMainPath, &RepositoryT)))
 		GS_GOTO_CLEAN();
 
 	Ctx->mClntState->mRepositoryT = sp<git_repository *>(new git_repository *(RepositoryT));
