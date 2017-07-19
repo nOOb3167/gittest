@@ -27,8 +27,8 @@ int gs_build_modified_filename(
 	std::string out;
 
 	// NOTE: GS_MAX guarding against underflow
-	if (BaseFileName.substr(GS_MAX(LenBaseFileName - LenExpectedSuffix   , LenBaseFileName)) != ExpectedSuffix ||
-		BaseFileName.substr(GS_MAX(LenBaseFileName - LenExpectedExtension, LenBaseFileName)) != ExpectedExtension)
+	if (BaseFileName.substr(GS_MIN(LenBaseFileName - LenExpectedSuffix   , LenBaseFileName)) != ExpectedSuffix ||
+		BaseFileName.substr(GS_MIN(LenBaseFileName - LenExpectedExtension, LenBaseFileName)) != ExpectedExtension)
 	{
 		GS_ERR_CLEAN(1);
 	}
