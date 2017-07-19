@@ -42,45 +42,6 @@ clean:
 	return r;
 }
 
-int setuplogging() {
-	int r = 0;
-
-	if (!!(r = gs_log_crash_handler_setup()))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_log_create_common_logs()))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
-int testlog() {
-	int r = 0;
-
-	GS_LOG_ADD(gs_log_create_ret("testprefix1"));
-	GS_LOG_ADD(gs_log_create_ret("testprefix2"));
-
-	{
-		log_guard_t log(GS_LOG_GET("testprefix1"));
-
-		GS_LOG(I,S, "hello_insidescope");
-		GS_LOG(I,SZ, "hello", strlen("hello"));
-		GS_LOG(I,PF, "hello [%s]", "world");
-
-		log_guard_t log2(GS_LOG_GET("testprefix2"));
-
-		GS_LOG(I, S, "hello_insidescope");
-		GS_LOG(I, SZ, "hello", strlen("hello"));
-		GS_LOG(I, PF, "hello [%s]", "world");
-	}
-
-clean:
-
-	return r;
-}
-
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -90,11 +51,11 @@ int main(int argc, char **argv) {
 	if (!!(r = enet_initialize()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = setuplogging()))
+	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	//if (!!(r = testlog()))
-	//	GS_GOTO_CLEAN();
+	if (!!(r = gs_log_create_common_logs()))
+		GS_GOTO_CLEAN();
 
 	if (!!(r = startselfupdate(argc, argv)))
 		GS_GOTO_CLEAN();
