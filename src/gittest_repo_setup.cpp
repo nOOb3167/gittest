@@ -228,26 +228,15 @@ int gs_repo_setup_main_mode_maintenance(
 
 	git_repository *Repository = NULL;
 
-	std::vector<git_oid> ReachableOid;
-
-	GS_BYPART_DATA_VAR(OidVector, BypartReachableOid);
-	GS_BYPART_DATA_INIT(OidVector, BypartReachableOid, &ReachableOid);
-
 	if (!!(r = gs_repo_init(RepoPathBuf, LenRepoPath, NULL)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = aux_repository_open(RepoPathBuf, LenRepoPath, &Repository)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_reach_refs(Repository, gs_bypart_cb_OidVector, &BypartReachableOid)))
-		GS_GOTO_CLEAN();
-
-	std::sort(ReachableOid.begin(), ReachableOid.end(), oid_comparator_v_t());
-
-	if (!!(r = git_memes_thunderdome(
+	if (!!(r = aux_repository_maintenance_special(
+		GS_ARGOWN(&Repository),
 		RepoPathBuf, LenRepoPath,
-		ReachableOid.data(), ReachableOid.size(),
-		MaintenanceBkpPathBuf, LenMaintenanceBkpPath,
 		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
 	{
 		GS_GOTO_CLEAN();
@@ -266,12 +255,13 @@ int gs_repo_setup_main_mode_dummyprep(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *MainDirectoryFileNameBuf, size_t LenMainDirectoryFileName,
-	const char *SelfUpdateExecutableFileNameBuf, size_t LenSelfUpdateExecutableFileName)
+	const char *SelfUpdateExecutableFileNameBuf, size_t LenSelfUpdateExecutableFileName,
+	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
 {
 	int r = 0;
 
-	const char SelfUpdateExecutableHardcodedName[] = GS_STR_PARENT_EXPECTED_SUFFIX;
-	size_t LenSelfUpdateExecutableHardcodedName = sizeof SelfUpdateExecutableFileNameBuf - 1;
+	const char SelfUpdateExecutableHardcodedNameBuf[] = GS_STR_PARENT_EXPECTED_SUFFIX;
+	size_t LenSelfUpdateExecutableHardcodedName = sizeof SelfUpdateExecutableHardcodedNameBuf - 1;
 
 	size_t IsDir = 0;
 	size_t IsNotDir = 0;
@@ -294,7 +284,7 @@ int gs_repo_setup_main_mode_dummyprep(
 	if (!!(r = gs_file_is_directory(SelfUpdateExecutableFileNameBuf, LenSelfUpdateExecutableFileName, &IsNotDir)))
 		GS_GOTO_CLEAN();
 
-	if (!IsDir || !IsNotDir)
+	if (!IsDir || IsNotDir)
 		GS_ERR_CLEAN(1);
 
 	if (!!(r = gs_repo_init(RepoMainPathBuf, LenRepoMainPath, NULL)))
@@ -331,6 +321,8 @@ int gs_repo_setup_main_mode_dummyprep(
 
 	/* nondummy serv (RepoMain @ main and RepoSelfUpdate @ selfupdate) */
 
+	/*   RepoMain */
+
 	if (!!(r = clnt_tree_ensure_from_workdir(
 		RepoMain,
 		MainDirectoryFileNameBuf, LenMainDirectoryFileName,
@@ -339,29 +331,57 @@ int gs_repo_setup_main_mode_dummyprep(
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = clnt_commit_ensure_dummy(RepoMasterUpdate, &TreeMainOid, &CommitMainOid)))
+	if (!!(r = clnt_commit_ensure_dummy(RepoMain, &TreeMainOid, &CommitMainOid)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameMainBuf, &CommitMainOid)))
+	if (!!(r = clnt_commit_setref(RepoMain, RefNameMainBuf, &CommitMainOid)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = git_blob_create_fromdisk(&BlobSelfUpdateOid, RepoMasterUpdate, SelfUpdateExecutableFileNameBuf)))
+	/*   RepoSelfUpdate */
+
+	if (!!(r = git_blob_create_fromdisk(&BlobSelfUpdateOid, RepoSelfUpdate, SelfUpdateExecutableFileNameBuf)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_tree_ensure_single(
-		RepoMasterUpdate,
-		SelfUpdateExecutableHardcodedName, LenSelfUpdateExecutableHardcodedName,
+		RepoSelfUpdate,
+		SelfUpdateExecutableHardcodedNameBuf, LenSelfUpdateExecutableHardcodedName,
 		&BlobSelfUpdateOid,
 		&TreeSelfUpdateOid)))
 	{
 		GS_GOTO_CLEAN();
 	}
 
-	if (!!(r = clnt_commit_ensure_dummy(RepoMasterUpdate, &TreeSelfUpdateOid, &CommitSelfUpdateOid)))
+	if (!!(r = clnt_commit_ensure_dummy(RepoSelfUpdate, &TreeSelfUpdateOid, &CommitSelfUpdateOid)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = clnt_commit_setref(RepoMasterUpdate, RefNameSelfUpdateBuf, &CommitSelfUpdateOid)))
+	if (!!(r = clnt_commit_setref(RepoSelfUpdate, RefNameSelfUpdateBuf, &CommitSelfUpdateOid)))
 		GS_GOTO_CLEAN();
+
+	/* maintenance */
+
+	if (!!(r = aux_repository_maintenance_special(
+		GS_ARGOWN(&RepoMain),
+		RepoMainPathBuf, LenRepoMainPath,
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_repository_maintenance_special(
+		GS_ARGOWN(&RepoSelfUpdate),
+		RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = aux_repository_maintenance_special(
+		GS_ARGOWN(&RepoMasterUpdate),
+		RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 clean:
 	git_repository_free(RepoMain);
@@ -373,12 +393,7 @@ clean:
 
 int gs_repo_setup_main(
 	int argc, char **argv,
-	const char *RepoMainPathBuf, size_t LenRepoMainPath,
-	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
-	const char *RepoMasterUpdatePathBuf, size_t LenRepoMasterUpdatePath,
-	const char *RefNameMainBuf, size_t LenRefNameMain,
-	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
-	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
+	struct GsAuxConfigCommonVars *CommonVars)
 {
 	int r = 0;
 
@@ -402,8 +417,8 @@ int gs_repo_setup_main(
 			GS_ERR_CLEAN(1);
 		const size_t LenArgvExecutableFileName = strlen(argv[3]);
 		if (!!(r = gs_repo_setup_main_mode_commit_selfupdate(
-			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
-			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
+			CommonVars->RepoSelfUpdatePathBuf, CommonVars->LenRepoSelfUpdatePath,
+			CommonVars->RefNameSelfUpdateBuf, CommonVars->LenRefNameSelfUpdate,
 			argv[3], LenArgvExecutableFileName)))
 		{
 			GS_GOTO_CLEAN();
@@ -414,8 +429,8 @@ int gs_repo_setup_main(
 			GS_ERR_CLEAN(1);
 		const size_t LenArgvDirectoryFileName = strlen(argv[3]);
 		if (!!(r = gs_repo_setup_main_mode_commit_main(
-			RepoMainPathBuf, LenRepoMainPath,
-			RefNameMainBuf, LenRefNameMain,
+			CommonVars->RepoMainPathBuf, CommonVars->LenRepoMainPath,
+			CommonVars->RefNameMainBuf, CommonVars->LenRefNameMain,
 			argv[3], LenArgvDirectoryFileName)))
 		{
 			GS_GOTO_CLEAN();
@@ -425,7 +440,7 @@ int gs_repo_setup_main(
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
 		if (!!(r = gs_repo_setup_main_mode_create_master_update(
-			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath)))
+			CommonVars->RepoMasterUpdatePathBuf, CommonVars->LenRepoMasterUpdatePath)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -434,25 +449,24 @@ int gs_repo_setup_main(
 		if (argc != 3)
 			GS_ERR_CLEAN(1);
 		if (!!(r = gs_repo_setup_main_mode_maintenance(
-			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
-			MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+			CommonVars->RepoMasterUpdatePathBuf, CommonVars->LenRepoMasterUpdatePath,
+			CommonVars->MaintenanceBkpPathBuf, CommonVars->LenMaintenanceBkpPath)))
 		{
 			GS_GOTO_CLEAN();
 		}
 	} else if (strcmp(argv[2], GS_REPO_SETUP_ARG_DUMMYPREP) == 0) {
 		GS_LOG(I, S, "dummyprep start");
-		if (argc != 5)
+		if (argc != 3)
 			GS_ERR_CLEAN(1);
-		const size_t LenArgvDirectoryFileName = strlen(argv[3]);
-		const size_t LenArgvExecutableFileName = strlen(argv[4]);
 		if (!!(r = gs_repo_setup_main_mode_dummyprep(
-			RepoMainPathBuf, LenRepoMainPath,
-			RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
-			RepoMasterUpdatePathBuf, LenRepoMasterUpdatePath,
-			RefNameMainBuf, LenRefNameMain,
-			RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
-			argv[3], LenArgvDirectoryFileName,
-			argv[4], LenArgvExecutableFileName)))
+			CommonVars->RepoMainPathBuf, CommonVars->LenRepoMainPath,
+			CommonVars->RepoSelfUpdatePathBuf, CommonVars->LenRepoSelfUpdatePath,
+			CommonVars->RepoMasterUpdatePathBuf, CommonVars->LenRepoMasterUpdatePath,
+			CommonVars->RefNameMainBuf, CommonVars->LenRefNameMain,
+			CommonVars->RefNameSelfUpdateBuf, CommonVars->LenRefNameSelfUpdate,
+			CommonVars->MainDirPathBuf, CommonVars->LenMainDirPath,
+			CommonVars->SelfUpdateExePathBuf, CommonVars->LenSelfUpdateExePath,
+			CommonVars->MaintenanceBkpPathBuf, CommonVars->LenMaintenanceBkpPath)))
 		{
 			GS_GOTO_CLEAN();
 		}
@@ -492,14 +506,8 @@ int main(int argc, char **argv) {
 	{
 		log_guard_t log(GS_LOG_GET("repo_setup"));
 
-		if (!!(r = gs_repo_setup_main(
-			argc, argv,
-			CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
-			CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
-			CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
-			CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
-			CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
-			CommonVars.MaintenanceBkpPathBuf, CommonVars.LenMaintenanceBkpPath)))
+		if (!!(r = gs_repo_setup_main(argc, argv,
+			&CommonVars)))
 		{
 			GS_GOTO_CLEAN();
 		}

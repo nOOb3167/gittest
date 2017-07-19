@@ -19,6 +19,7 @@
 #include <git2.h>
 #include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
 #include <git2/sys/mempack.h>     /* in-memory backend */
+#include <git2/sys/memes.h>       /* git_memes_thunderdome */
 
 #include <gittest/misc.h>
 #include <gittest/bypart.h>
@@ -1106,6 +1107,46 @@ int aux_repository_checkout(
 clean:
 	if (Repository)
 		git_repository_free(Repository);
+
+	return r;
+}
+
+/** NOTE: 'Repository' must be the one pointed by 'RepoPathBuf'.
+          'Repository' will be freed before performing actual maintenance.
+		  Other git_repository-es should not be open from 'RepoPathBuf'
+		  at the time of this call.
+		  In other words Repository becomes owned by this function.
+*/
+int aux_repository_maintenance_special(
+	git_repository *Repository, /*< owned */
+	const char *RepoPathBuf, size_t LenRepoPath,
+	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
+{
+	int r = 0;
+
+	std::vector<git_oid> ReachableOid;
+
+	GS_BYPART_DATA_VAR(OidVector, BypartReachableOid);
+	GS_BYPART_DATA_INIT(OidVector, BypartReachableOid, &ReachableOid);
+
+	if (!!(r = gs_reach_refs(Repository, gs_bypart_cb_OidVector, &BypartReachableOid)))
+		GS_GOTO_CLEAN();
+
+	std::sort(ReachableOid.begin(), ReachableOid.end(), oid_comparator_v_t());
+
+	git_repository_free(GS_ARGOWN(&Repository));
+
+	if (!!(r = git_memes_thunderdome(
+		RepoPathBuf, LenRepoPath,
+		ReachableOid.data(), ReachableOid.size(),
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath,
+		MaintenanceBkpPathBuf, LenMaintenanceBkpPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+clean:
+	git_repository_free(Repository);
 
 	return r;
 }

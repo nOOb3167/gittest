@@ -26,6 +26,8 @@ struct GsAuxConfigCommonVars {
 	char *RepoMasterUpdateCheckoutPathBuf; size_t LenRepoMasterUpdateCheckoutPath;
 	uint32_t ServBlobSoftSizeLimit;
 	char *MaintenanceBkpPathBuf; size_t LenMaintenanceBkpPath;
+	char *MainDirPathBuf; size_t LenMainDirPath;
+	char *SelfUpdateExePathBuf; size_t LenSelfUpdateExePath;
 };
 
 int gs_conf_map_create(struct GsConfMap **oConfMap);
