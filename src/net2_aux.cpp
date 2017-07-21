@@ -38,11 +38,13 @@ int gs_packet_with_offset_get_veclen(
 	struct GsPacketWithOffset *PacketWithOffset,
 	uint32_t *oVecLen)
 {
-	GS_ASSERT(
-		GS_FRAME_SIZE_LEN == sizeof(uint32_t) &&
-		PacketWithOffset->mOffsetObject >= PacketWithOffset->mOffsetSize &&
-		(PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) % GS_FRAME_SIZE_LEN == 0);
-	return (PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) / GS_FRAME_SIZE_LEN;
+	GS_ASSERT(GS_FRAME_SIZE_LEN == sizeof(uint32_t));
+	if (PacketWithOffset->mOffsetObject < PacketWithOffset->mOffsetSize ||
+		(PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) % GS_FRAME_SIZE_LEN != 0)
+		return 1;
+	if (oVecLen)
+		*oVecLen = (PacketWithOffset->mOffsetObject - PacketWithOffset->mOffsetSize) / GS_FRAME_SIZE_LEN;
+	return 0;
 }
 
 int gs_ctrl_con_create(
