@@ -27,18 +27,25 @@
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-struct GsEvCtxClnt
+struct GsEvCtx
 {
 	uint32_t mMagic;
+};
+
+struct GsEvCtxClnt
+{
+	struct GsEvCtx base;
 	struct GsAuxConfigCommonVars mCommonVars;
 	struct ClntState *mClntState;
 };
 
 int gs_ev_clnt_state_crank3_connected(
 	struct bufferevent *Bev,
-	struct GsEvCtxClnt *Ctx)
+	struct GsEvCtx *CtxBase)
 {
 	int r = 0;
+
+	struct GsEvCtxClnt *Ctx = (struct GsEvCtxClnt *) CtxBase;
 
 	std::string Buffer;
 
@@ -46,6 +53,8 @@ int gs_ev_clnt_state_crank3_connected(
 
 	GS_BYPART_DATA_VAR(String, BysizeBuffer);
 	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_CLNT_MAGIC);
 
 	if (!!(r = clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_REPOSITORY)))
 		GS_GOTO_CLEAN();
@@ -71,12 +80,16 @@ clean:
 
 int gs_ev_clnt_state_crank3(
 	struct bufferevent *Bev,
-	struct GsEvCtxClnt *Ctx,
+	struct GsEvCtx *CtxBase,
 	struct GsEvData *Packet)
 {
 	int r = 0;
 
+	struct GsEvCtxClnt *Ctx = (struct GsEvCtxClnt *) CtxBase;
+
 	uint32_t Code = 0;
+
+process_another_state_label:
 
 	if (!!(r = clnt_state_code(Ctx->mClntState, &Code)))
 		GS_GOTO_CLEAN();
@@ -170,6 +183,7 @@ int gs_ev_clnt_state_crank3(
 		if (!!(r = gs_ev_evbuffer_write_frame(bufferevent_get_output(Bev), Buffer.data(), Buffer.size())))
 			GS_GOTO_CLEAN();
 	}
+	break;
 
 	case GS_CLNT_STATE_CODE_NEED_BLOBLIST:
 	{
@@ -277,6 +291,7 @@ int gs_ev_clnt_state_crank3(
 		if (!!(r = gs_packet_with_offset_get_veclen(PacketBlobWO.get(), &BufferBlobLen)))
 			GS_GOTO_CLEAN();
 
+		GS_ASSERT(Ctx->mClntState->mMissingBloblist && Ctx->mClntState->mMissingTreelist);
 		GS_ASSERT(BufferBlobLen <= Ctx->mClntState->mMissingBloblist->size() - Ctx->mClntState->mWrittenBlob->size());
 
 		if (!!(r = clnt_deserialize_blobs(
@@ -336,10 +351,15 @@ int gs_ev_clnt_state_crank3(
 				GS_GOTO_CLEAN();
 			}
 
+			/* unlike the others, this state uses reverse convention (initialized as default, cleared for transition) */
+			Ctx->mClntState->mWrittenBlob.reset();
+			Ctx->mClntState->mWrittenTree.reset();
+
 			if (!!(r = clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_UPDATED_REF)))
 				GS_GOTO_CLEAN();
 
 			/* no frame needs to be sent */
+			goto process_another_state_label;
 		}
 	}
 	break;
@@ -364,18 +384,21 @@ int gs_ev_clnt_state_crank3(
 		if (!!(r = clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_NOTHING)))
 			GS_GOTO_CLEAN();
 
+		goto process_another_state_label;
 	}
 	break;
 
 	case GS_CLNT_STATE_CODE_NEED_NOTHING:
 	{
-		GS_ASSERT(0);
+		GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
 	}
 	break;
 
 	default:
 		GS_ASSERT(0);
 	}
+
+noclean:
 
 clean:
 
@@ -454,10 +477,11 @@ clean:
 	return r;
 }
 
-static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxClnt)
+static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBase)
 {
 	int r = 0;
-	struct GsEvCtxClnt *Ctx = (struct GsEvCtxClnt *) CtxClnt;
+
+	struct GsEvCtx *Ctx = (struct GsEvCtx *) CtxBase;
 	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
 
 	if (What & BEV_EVENT_CONNECTED) {
@@ -480,19 +504,29 @@ clean:
 		assert(0);
 }
 
-static void bev_read_cb(struct bufferevent *Bev, void *CtxClnt)
+static void bev_read_cb(struct bufferevent *Bev, void *CtxBase)
 {
 	int r = 0;
-	struct GsEvCtxClnt *Ctx = (struct GsEvCtxClnt *) CtxClnt;
+
+	struct GsEvCtx *Ctx = (struct GsEvCtx *) CtxBase;
 	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
+
 	const char *Data = NULL;
 	size_t LenHdr, LenData;
+
 	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
-		assert(0);
+		GS_GOTO_CLEAN();
+
 	if (Data) {
 		struct GsEvData Packet = { (uint8_t *) Data, LenData };
-		if (!!(r = gs_ev_clnt_state_crank3(Bev, Ctx, &Packet)))
+
+		r = gs_ev_clnt_state_crank3(Bev, Ctx, &Packet);
+		if (!!r && r != GS_ERRCODE_EXIT)
 			GS_GOTO_CLEAN();
+		if (r == GS_ERRCODE_EXIT)
+			if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
+				GS_GOTO_CLEAN();
+
 		if (!!(r = evbuffer_drain(bufferevent_get_input(Bev), LenHdr + LenData)))
 			GS_GOTO_CLEAN();
 	}
@@ -502,7 +536,9 @@ clean:
 		assert(0);
 }
 
-int gs_ev2_test_clntmain(struct GsAuxConfigCommonVars CommonVars)
+int gs_ev2_test_clntmain(
+	struct GsAuxConfigCommonVars CommonVars,
+	struct GsEvCtxClnt **oCtx)
 {
 	int r = 0;
 
@@ -515,30 +551,31 @@ int gs_ev2_test_clntmain(struct GsAuxConfigCommonVars CommonVars)
 	struct GsEvCtxClnt *Ctx = new GsEvCtxClnt();
 
 	if (!(Base = event_base_new()))
-		assert(0);
+		GS_GOTO_CLEAN();
 
 	if (!(Bev = bufferevent_socket_new(Base, -1, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
-		assert(0);
+		GS_GOTO_CLEAN();
 
 	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, Ctx);
 
 	if (!!(r = bufferevent_enable(Bev, EV_READ)))
-		assert(0);
+		GS_GOTO_CLEAN();
 
-	Ctx->mMagic = GS_EV_CTX_CLNT_MAGIC;
+	Ctx->base.mMagic = GS_EV_CTX_CLNT_MAGIC;
 	Ctx->mCommonVars = CommonVars;
 	Ctx->mClntState = new ClntState();
 
 	if (!!(r = clnt_state_make_default(Ctx->mClntState)))
-		assert(0);
+		GS_GOTO_CLEAN();
 
 	if (!!(r = bufferevent_socket_connect_hostname(Bev, NULL, AF_INET, CommonVars.ServHostNameBuf, CommonVars.ServPort)))
-		assert(0);
+		GS_GOTO_CLEAN();
 
 	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
-		assert(0);
+		GS_GOTO_CLEAN();
 
-	printf("exitingC\n");
+	if (oCtx)
+		*oCtx = Ctx;
 
 clean:
 
@@ -551,6 +588,7 @@ int main(int argc, char **argv)
 
 	struct GsConfMap *ConfMap = NULL;
 	struct GsAuxConfigCommonVars CommonVars = {};
+	struct GsEvCtxClnt *Ctx = NULL;
 
 	std::thread ThreadServ;
 
@@ -577,8 +615,10 @@ int main(int argc, char **argv)
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-	if (!!(r = gs_ev2_test_clntmain(CommonVars)))
+	if (!!(r = gs_ev2_test_clntmain(CommonVars, &Ctx)))
 		GS_GOTO_CLEAN();
+
+	GS_ASSERT(! clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_NOTHING));
 
 clean:
 	if (!!r)

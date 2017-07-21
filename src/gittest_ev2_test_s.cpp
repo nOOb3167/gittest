@@ -72,7 +72,7 @@ int gs_ev2_serv_state_service_request_blobs2(
 	/* if none made it under the size limit, make sure we send at least one, so that progress is made */
 
 	if (NumUntilSizeLimit == 0)
-		NumUntilSizeLimit++;
+		NumUntilSizeLimit = GS_CLAMP(BloblistRequested.size(), 0, 1);
 
 	BloblistRequested.resize(NumUntilSizeLimit);
 
