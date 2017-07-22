@@ -35,30 +35,16 @@ int gs_build_child_filename(
 
 	int r = 0;
 
-	const size_t OffsetStartOfCheck = LenParentFileName - LenExpectedSuffix;
-	const size_t OffsetStartOfChange = LenParentFileName - LenExpectedExtension;
-	const size_t LenChildFileName = OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension;
-
-	if (LenParentFileName < LenExpectedSuffix)
-		GS_ERR_CLEAN(1);
-	if (LenExpectedSuffix < LenExpectedExtension)
-		GS_ERR_CLEAN(1);
-
-	if (strcmp(ExpectedSuffix, ParentFileNameBuf + OffsetStartOfCheck) != 0)
-		GS_ERR_CLEAN(1);
-	if (strcmp(ExpectedExtension, ParentFileNameBuf + OffsetStartOfChange) != 0)
-		GS_ERR_CLEAN(1);
-
-	if (ChildFileNameSize < OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension + 1 /*zero terminator*/)
-		GS_ERR_CLEAN(1);
-
-	memcpy(ioChildFileNameBuf, ParentFileNameBuf, OffsetStartOfChange);
-	memcpy(ioChildFileNameBuf + OffsetStartOfChange, ExtraSuffix, LenExtraSuffix);
-	memcpy(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix, ExpectedExtension, LenExpectedExtension);
-	memset(ioChildFileNameBuf + OffsetStartOfChange + LenExtraSuffix + LenExpectedExtension, '\0', 1);
-
-	if (oLenChildFileName)
-		*oLenChildFileName = LenChildFileName;
+	if (!!(r = gs_build_modified_filename(
+		ParentFileNameBuf, LenParentFileName,
+		ExpectedSuffix, LenExpectedSuffix,
+		ExpectedExtension, LenExpectedExtension,
+		ExtraSuffix, LenExtraSuffix,
+		ExpectedExtension, LenExpectedExtension,
+		ioChildFileNameBuf, ChildFileNameSize, oLenChildFileName)))
+	{
+		GS_GOTO_CLEAN();
+	}
 
 clean:
 
