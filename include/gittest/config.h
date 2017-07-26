@@ -28,6 +28,7 @@ struct GsAuxConfigCommonVars {
 	char *MaintenanceBkpPathBuf; size_t LenMaintenanceBkpPath;
 	char *MainDirPathBuf; size_t LenMainDirPath;
 	char *SelfUpdateExePathBuf; size_t LenSelfUpdateExePath;
+	char *SelfUpdateBlobNameBuf; size_t LenSelfUpdateBlobName;
 };
 
 int gs_conf_map_create(struct GsConfMap **oConfMap);

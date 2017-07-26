@@ -150,6 +150,7 @@ int gs_store_worker_server_create(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorkerServer **oStoreWorker)
 {
@@ -173,14 +174,11 @@ int gs_store_worker_server_create(
 		GS_GOTO_CLEAN();
 	}
 
-	StoreWorker->mRefNameMainBuf = RefNameMainBuf;
-	StoreWorker->mLenRefNameMain = LenRefNameMain;
-	StoreWorker->mRefNameSelfUpdateBuf = RefNameSelfUpdateBuf;
-	StoreWorker->mLenRefNameSelfUpdate = LenRefNameSelfUpdate;
-	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf;
-	StoreWorker->mLenRepoMainPath = LenRepoMainPath;
-	StoreWorker->mRepoSelfUpdatePathBuf = RepoSelfUpdatePathBuf;
-	StoreWorker->mLenRepoSelfUpdatePath = LenRepoSelfUpdatePath;
+	StoreWorker->mRefNameMainBuf = RefNameMainBuf; StoreWorker->mLenRefNameMain = LenRefNameMain;
+	StoreWorker->mRefNameSelfUpdateBuf = RefNameSelfUpdateBuf; StoreWorker->mLenRefNameSelfUpdate = LenRefNameSelfUpdate;
+	StoreWorker->mRepoMainPathBuf = RepoMainPathBuf; StoreWorker->mLenRepoMainPath = LenRepoMainPath;
+	StoreWorker->mRepoSelfUpdatePathBuf = RepoSelfUpdatePathBuf; StoreWorker->mLenRepoSelfUpdatePath = LenRepoSelfUpdatePath;
+	StoreWorker->mSelfUpdateBlobNameBuf = SelfUpdateBlobNameBuf; StoreWorker->mLenSelfUpdateBlobName = LenSelfUpdateBlobName;
 
 	if (oStoreWorker)
 		*oStoreWorker = StoreWorker;
@@ -442,7 +440,7 @@ int gs_store_worker_cb_crank_t_server(struct GsCrankData *CrankData)
 			if (!!(r = serv_latest_commit_tree_oid(RepositorySelfUpdate, pStoreWorker->mRefNameSelfUpdateBuf, &CommitHeadOid, &TreeHeadOid)))
 				GS_GOTO_CLEAN();
 
-			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobSelfUpdateOid)))
+			if (!!(r = aux_oid_tree_blob_byname(RepositorySelfUpdate, &TreeHeadOid, pStoreWorker->mSelfUpdateBlobNameBuf, &BlobSelfUpdateOid)))
 				GS_GOTO_CLEAN();
 
 			if (!!(r = aux_frame_full_write_response_latest_selfupdate_blob(BlobSelfUpdateOid.id, GIT_OID_RAWSZ, gs_bysize_cb_String, &BysizeResponseBuffer)))
@@ -496,6 +494,7 @@ int gs_net_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	struct GsFullConnection **oConnectionServer)
 {
 	int r = 0;
@@ -521,6 +520,7 @@ int gs_net_full_create_connection_server(
 		RefNameSelfUpdateBuf, LenRefNameSelfUpdate,
 		RepoMainPathBuf, LenRepoMainPath,
 		RepoSelfUpdatePathBuf, LenRepoSelfUpdatePath,
+		SelfUpdateBlobNameBuf, LenSelfUpdateBlobName,
 		ConnectionCommon,
 		&StoreWorker)))
 	{

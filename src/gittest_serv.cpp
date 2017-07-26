@@ -37,6 +37,7 @@ int startserv() {
 		CommonVars.RefNameSelfUpdateBuf, CommonVars.LenRefNameSelfUpdate,
 		CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath,
 		CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath,
+		CommonVars.SelfUpdateBlobNameBuf, CommonVars.LenSelfUpdateBlobName,
 		&FcsServ)))
 	{
 		GS_GOTO_CLEAN();

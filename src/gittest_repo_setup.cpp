@@ -75,9 +75,11 @@ clean:
 	return r;
 }
 
+/* FIXME: old code */
 int gs_repo_setup_main_mode_commit_selfupdate(
 	const char *RepoPathBuf, size_t LenRepoPath,
 	const char *RefNameSelfUpdate, size_t LenRefNameSelfUpdate,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	const char *ExecutableFileNameBuf, size_t LenExecutableFileName)
 {
 	int r = 0;
@@ -106,7 +108,7 @@ int gs_repo_setup_main_mode_commit_selfupdate(
 		GS_GOTO_CLEAN();
 
 	// FIXME: really GIT_FILEMODE_BLOB_EXECUTABLE? makes sense but what about just GIT_FILEMODE_BLOB?
-	if (!!(r = git_treebuilder_insert(NULL, TreeBuilder, GS_STR_PARENT_EXPECTED_SUFFIX, &BlobOid, GIT_FILEMODE_BLOB_EXECUTABLE)))
+	if (!!(r = git_treebuilder_insert(NULL, TreeBuilder, SelfUpdateBlobNameBuf, &BlobOid, GIT_FILEMODE_BLOB_EXECUTABLE)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = git_treebuilder_write(&TreeOid, TreeBuilder)))
@@ -255,13 +257,11 @@ int gs_repo_setup_main_mode_dummyprep(
 	const char *RefNameMainBuf, size_t LenRefNameMain,
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *MainDirectoryFileNameBuf, size_t LenMainDirectoryFileName,
-	const char *SelfUpdateExecutableFileNameBuf, size_t LenSelfUpdateExecutableFileName,
+	const char *SelfUpdateExePathBuf, size_t LenSelfUpdateExePath,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	const char *MaintenanceBkpPathBuf, size_t LenMaintenanceBkpPath)
 {
 	int r = 0;
-
-	const char SelfUpdateExecutableHardcodedNameBuf[] = GS_STR_PARENT_EXPECTED_SUFFIX;
-	size_t LenSelfUpdateExecutableHardcodedName = sizeof SelfUpdateExecutableHardcodedNameBuf - 1;
 
 	size_t IsDir = 0;
 	size_t IsNotDir = 0;
@@ -281,7 +281,7 @@ int gs_repo_setup_main_mode_dummyprep(
 	if (!!(r = gs_file_is_directory(MainDirectoryFileNameBuf, LenMainDirectoryFileName, &IsDir)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_file_is_directory(SelfUpdateExecutableFileNameBuf, LenSelfUpdateExecutableFileName, &IsNotDir)))
+	if (!!(r = gs_file_is_directory(SelfUpdateExePathBuf, LenSelfUpdateExePath, &IsNotDir)))
 		GS_GOTO_CLEAN();
 
 	if (!IsDir || IsNotDir)
@@ -339,12 +339,12 @@ int gs_repo_setup_main_mode_dummyprep(
 
 	/*   RepoSelfUpdate */
 
-	if (!!(r = git_blob_create_fromdisk(&BlobSelfUpdateOid, RepoSelfUpdate, SelfUpdateExecutableFileNameBuf)))
+	if (!!(r = git_blob_create_fromdisk(&BlobSelfUpdateOid, RepoSelfUpdate, SelfUpdateExePathBuf)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_tree_ensure_single(
 		RepoSelfUpdate,
-		SelfUpdateExecutableHardcodedNameBuf, LenSelfUpdateExecutableHardcodedName,
+		SelfUpdateBlobNameBuf, LenSelfUpdateBlobName,
 		&BlobSelfUpdateOid,
 		&TreeSelfUpdateOid)))
 	{
@@ -419,6 +419,7 @@ int gs_repo_setup_main(
 		if (!!(r = gs_repo_setup_main_mode_commit_selfupdate(
 			CommonVars->RepoSelfUpdatePathBuf, CommonVars->LenRepoSelfUpdatePath,
 			CommonVars->RefNameSelfUpdateBuf, CommonVars->LenRefNameSelfUpdate,
+			CommonVars->SelfUpdateBlobNameBuf, CommonVars->LenSelfUpdateBlobName,
 			argv[3], LenArgvExecutableFileName)))
 		{
 			GS_GOTO_CLEAN();
@@ -466,6 +467,7 @@ int gs_repo_setup_main(
 			CommonVars->RefNameSelfUpdateBuf, CommonVars->LenRefNameSelfUpdate,
 			CommonVars->MainDirPathBuf, CommonVars->LenMainDirPath,
 			CommonVars->SelfUpdateExePathBuf, CommonVars->LenSelfUpdateExePath,
+			CommonVars->SelfUpdateBlobNameBuf, CommonVars->LenSelfUpdateBlobName,
 			CommonVars->MaintenanceBkpPathBuf, CommonVars->LenMaintenanceBkpPath)))
 		{
 			GS_GOTO_CLEAN();

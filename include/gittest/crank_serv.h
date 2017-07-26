@@ -45,6 +45,7 @@ struct GsStoreWorkerServer
 	const char *mRefNameSelfUpdateBuf; size_t mLenRefNameSelfUpdate;
 	const char *mRepoMainPathBuf; size_t mLenRepoMainPath;
 	const char *mRepoSelfUpdatePathBuf; size_t mLenRepoSelfUpdatePath;
+	const char *mSelfUpdateBlobNameBuf; size_t mLenSelfUpdateBlobName;
 };
 
 int gs_extra_host_create_server_create(
@@ -71,6 +72,7 @@ int gs_store_worker_server_create(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	struct GsFullConnectionCommonData *ConnectionCommon,
 	struct GsStoreWorkerServer **oStoreWorker);
 int gs_store_worker_server_aux_state_service_request_blobs2(
@@ -90,6 +92,7 @@ int gs_net_full_create_connection_server(
 	const char *RefNameSelfUpdateBuf, size_t LenRefNameSelfUpdate,
 	const char *RepoMainPathBuf, size_t LenRepoMainPath,
 	const char *RepoSelfUpdatePathBuf, size_t LenRepoSelfUpdatePath,
+	const char *SelfUpdateBlobNameBuf, size_t LenSelfUpdateBlobName,
 	struct GsFullConnection **oConnectionServer);
 
 #endif /* _GITTEST_CRANK_SERV_H_ */
