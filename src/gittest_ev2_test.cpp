@@ -10,6 +10,8 @@
 #include <thread>
 #include <chrono>
 
+#include <git2.h>
+
 #define EVENT2_VISIBILITY_STATIC_MSVC
 #include <event2/event.h>
 #include <event2/bufferevent.h>
