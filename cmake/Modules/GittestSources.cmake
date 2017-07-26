@@ -415,6 +415,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   
   SET(GITTEST_EV2_TEST_SOURCES
     src/gittest_ev2_test.cpp
+    src/gittest_ev2_test_su.cpp
     src/gittest_ev2_test_s.cpp
   )
 

@@ -46,6 +46,11 @@ struct GsStrided {
 	uint32_t mEltStride;
 };
 
+int gs_strided_for_oid_vec(
+	const git_oid *OidVec,
+	size_t OidVecNum,
+	GsStrided *oStrided);
+
 int gs_strided_for_struct_member(
 	uint8_t *DataStart, uint32_t DataStartOffset, uint32_t OffsetOfMember,
 	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,

@@ -7,6 +7,41 @@
 
 #include <gittest/bypart.h>
 
+int gs_strided_for_oid_vec(
+	const git_oid *OidVec,
+	size_t OidVecNum,
+	GsStrided *oStrided)
+{
+	int r = 0;
+
+	uint8_t *DataStart = (uint8_t *) OidVec;
+	uint32_t DataOffset = 0;
+	uint32_t DataOffsetPlusOffset = DataOffset + offsetof(git_oid, id);
+	uint32_t EltNum = OidVecNum;
+	uint32_t EltSize = GIT_OID_RAWSZ;
+	uint32_t EltStride = sizeof git_oid;
+
+	GsStrided Strided = {
+		DataStart,
+		DataOffsetPlusOffset,
+		EltNum,
+		EltSize,
+		EltStride,
+	};
+
+	uint32_t DataLength = OidVecNum * sizeof git_oid;
+
+	if (EltSize > EltStride || DataOffset + EltStride * EltNum > DataLength)
+		GS_ERR_CLEAN(1);
+
+	if (oStrided)
+		*oStrided = Strided;
+
+clean:
+
+	return r;
+}
+
 int gs_strided_for_struct_member(
 	uint8_t *DataStart, uint32_t DataOffset, uint32_t OffsetOfMember,
 	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
