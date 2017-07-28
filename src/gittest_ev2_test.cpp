@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 
 #include <thread>
 #include <chrono>
@@ -14,6 +15,7 @@
 
 #define EVENT2_VISIBILITY_STATIC_MSVC
 #include <event2/event.h>
+#include <event2/listener.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 
@@ -35,6 +37,130 @@ struct GsEvCtxClnt
 	struct GsAuxConfigCommonVars mCommonVars;
 	struct ClntState *mClntState;
 };
+
+static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV);
+static void bev_read_cb(struct bufferevent *Bev, void *CtxBaseV);
+static void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct sockaddr *Addr, int AddrLen, void *CtxBaseV);
+static void evc_error_cb(struct evconnlistener *Listener, void *CtxBaseV);
+static int gs_ev_clnt_state_crank3_connected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase);
+static int gs_ev_clnt_state_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *Ctx,
+	int DisconnectReason);
+static int gs_ev_clnt_state_crank3(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	struct GsEvData *Packet);
+
+static int gs_ev2_test_clntmain(
+	struct GsAuxConfigCommonVars CommonVars,
+	struct GsEvCtxClnt **oCtx);
+
+void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
+{
+	int r = 0;
+
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+
+	int DisconnectReason = 0;
+
+	if (What & BEV_EVENT_CONNECTED) {
+		if (!!(r = CtxBase->CbConnect(Bev, CtxBase)))
+			GS_GOTO_CLEAN();
+	}
+	else {
+		if (What & BEV_EVENT_EOF)
+			DisconnectReason = GS_DISCONNECT_REASON_EOF;
+		else if (What & BEV_EVENT_TIMEOUT)
+			DisconnectReason = GS_DISCONNECT_REASON_TIMEOUT;
+		else if (What & BEV_EVENT_ERROR)
+			DisconnectReason = GS_DISCONNECT_REASON_ERROR;
+
+		if (!!(r = CtxBase->CbDisconnect(Bev, CtxBase, DisconnectReason)))
+			GS_GOTO_CLEAN();
+
+		printf("[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+
+		// FIXME: possibly loopbreak on fatal error / BEV_EVENT_ERROR
+		// if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
+		//	GS_GOTO_CLEAN();
+	}
+	
+clean:
+	if (!!r)
+		assert(0);
+}
+
+void bev_read_cb(struct bufferevent *Bev, void *CtxBaseV)
+{
+	int r = 0;
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+
+	const char *Data = NULL;
+	size_t LenHdr, LenData;
+
+	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
+		assert(0);
+
+	if (Data) {
+		struct GsEvData Packet = { (uint8_t *) Data, LenData };
+
+		r = CtxBase->CbCrank(Bev, CtxBase, &Packet);
+		if (!!r && r != GS_ERRCODE_EXIT)
+			GS_GOTO_CLEAN();
+		if (r == GS_ERRCODE_EXIT)
+			if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
+				GS_GOTO_CLEAN();
+
+		if (!!(r = evbuffer_drain(bufferevent_get_input(Bev), LenHdr + LenData)))
+			GS_GOTO_CLEAN();
+
+	}
+
+clean:
+	if (!!r)
+		assert(0);
+}
+
+void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct sockaddr *Addr, int AddrLen, void *CtxBaseV)
+{
+	int r = 0;
+
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+
+	struct event_base *Base = evconnlistener_get_base(Listener);
+	struct bufferevent *Bev = NULL;
+	struct timeval Timeout = {};
+	Timeout.tv_sec = GS_EV_TIMEOUT_SEC;
+	Timeout.tv_usec = 0;
+
+	if (!(Bev = bufferevent_socket_new(Base, Fd, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
+		GS_ERR_CLEAN(1);
+
+	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, CtxBase);
+
+	if (!!(r = bufferevent_set_timeouts(Bev, &Timeout, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = bufferevent_enable(Bev, EV_READ)))
+		GS_GOTO_CLEAN();
+
+clean:
+	if (!!r)
+		GS_ASSERT(0);
+}
+
+void evc_error_cb(struct evconnlistener *Listener, void *CtxBaseV)
+{
+	struct event_base *Base = evconnlistener_get_base(Listener);
+
+	GS_LOG(E, S, "Listener failure");
+
+	if (!!(event_base_loopbreak(Base)))
+		GS_ASSERT(0);
+}
 
 int gs_ev_clnt_state_crank3_connected(
 	struct bufferevent *Bev,
@@ -486,65 +612,89 @@ clean:
 	return r;
 }
 
-static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
+int gs_ev2_listen(
+	struct GsEvCtx *CtxBase,
+	uint32_t ServPortU32)
 {
 	int r = 0;
 
-	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+	struct event_base *Base = NULL;
 
-	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_CLNT_MAGIC);
+	struct addrinfo Hints = {};
+	struct addrinfo *ServInfo = NULL;
+	struct sockaddr *ServAddr = NULL;
 
-	if (What & BEV_EVENT_CONNECTED) {
-		if (!!(r = gs_ev_clnt_state_crank3_connected(Bev, CtxBase)))
-			GS_GOTO_CLEAN();
-	}
-	if (What & BEV_EVENT_ERROR) {
-		printf("%s\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+	struct evconnlistener *Listener = NULL;
+
+	std::stringstream ss;
+	ss << ServPortU32;
+	std::string cServPort = ss.str();
+
+	if (!(Base = event_base_new()))
 		GS_ERR_CLEAN(1);
-	}
-	
-	if (What & BEV_EVENT_ERROR || What & BEV_EVENT_EOF || What & BEV_EVENT_TIMEOUT) {
-		if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
-			GS_GOTO_CLEAN();
-		GS_ERR_CLEAN(1);
-	}
 
-clean:
-	if (!!r)
-		assert(0);
-}
+	Hints.ai_flags = AI_PASSIVE; /* for NULL nodename in getaddrinfo */
+	Hints.ai_family = AF_INET;
+	Hints.ai_socktype = SOCK_STREAM;
 
-static void bev_read_cb(struct bufferevent *Bev, void *CtxBase)
-{
-	int r = 0;
-
-	struct GsEvCtx *Ctx = (struct GsEvCtx *) CtxBase;
-
-	const char *Data = NULL;
-	size_t LenHdr, LenData;
-
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
-
-	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
+	if (!!(r = getaddrinfo(NULL, cServPort.c_str(), &Hints, &ServInfo)))
 		GS_GOTO_CLEAN();
 
-	if (Data) {
-		struct GsEvData Packet = { (uint8_t *) Data, LenData };
-
-		r = gs_ev_clnt_state_crank3(Bev, Ctx, &Packet);
-		if (!!r && r != GS_ERRCODE_EXIT)
-			GS_GOTO_CLEAN();
-		if (r == GS_ERRCODE_EXIT)
-			if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
-				GS_GOTO_CLEAN();
-
-		if (!!(r = evbuffer_drain(bufferevent_get_input(Bev), LenHdr + LenData)))
-			GS_GOTO_CLEAN();
+	if (!(Listener = evconnlistener_new_bind(
+		Base,
+		evc_listener_cb,
+		CtxBase,
+		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE,
+		-1,
+		ServInfo->ai_addr,
+		ServInfo->ai_addrlen)))
+	{
+		GS_ERR_CLEAN(1);
 	}
+	evconnlistener_set_error_cb(Listener, evc_error_cb);
+
+	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
+		GS_GOTO_CLEAN();
 
 clean:
-	if (!!r)
-		assert(0);
+	freeaddrinfo(ServInfo);
+
+	return r;
+}
+
+int gs_ev2_connect(
+	struct GsEvCtx *CtxBase,
+	const char *ConnectHostNameBuf, size_t LenConnectHostName,
+	uint32_t ConnectPort)
+{
+	int r = 0;
+
+	struct event_base *Base = NULL;
+	struct bufferevent *Bev = NULL;
+
+	if (!!(r = gs_buf_ensure_haszero(ConnectHostNameBuf, LenConnectHostName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!(Base = event_base_new()))
+		GS_GOTO_CLEAN();
+
+	if (!(Bev = bufferevent_socket_new(Base, -1, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
+		GS_GOTO_CLEAN();
+
+	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, CtxBase);
+
+	if (!!(r = bufferevent_enable(Bev, EV_READ)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = bufferevent_socket_connect_hostname(Bev, NULL, AF_INET, ConnectHostNameBuf, ConnectPort)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
 }
 
 int gs_ev2_test_clntmain(
@@ -555,22 +705,7 @@ int gs_ev2_test_clntmain(
 
 	log_guard_t Log(GS_LOG_GET("selfup"));
 
-	struct event_base *Base = NULL;
-	struct bufferevent *Bev = NULL;
-	struct event *Tev = NULL;
-
 	struct GsEvCtxClnt *Ctx = new GsEvCtxClnt();
-
-	if (!(Base = event_base_new()))
-		GS_GOTO_CLEAN();
-
-	if (!(Bev = bufferevent_socket_new(Base, -1, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
-		GS_GOTO_CLEAN();
-
-	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, Ctx);
-
-	if (!!(r = bufferevent_enable(Bev, EV_READ)))
-		GS_GOTO_CLEAN();
 
 	Ctx->base.mMagic = GS_EV_CTX_CLNT_MAGIC;
 	Ctx->base.CbConnect = gs_ev_clnt_state_crank3_connected;
@@ -582,11 +717,14 @@ int gs_ev2_test_clntmain(
 	if (!!(r = clnt_state_make_default(Ctx->mClntState)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = bufferevent_socket_connect_hostname(Bev, NULL, AF_INET, CommonVars.ServHostNameBuf, CommonVars.ServPort)))
+	if (!!(r = gs_ev2_connect(&Ctx->base,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
+		CommonVars.ServPort)))
+	{
 		GS_GOTO_CLEAN();
+	}
 
-	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
-		GS_GOTO_CLEAN();
+	GS_LOG(I, S, "exiting");
 
 	if (oCtx)
 		*oCtx = Ctx;

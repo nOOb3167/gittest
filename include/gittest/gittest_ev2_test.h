@@ -44,6 +44,14 @@ int gs_ev_evbuffer_write_frame(
 	const char *Data,
 	size_t LenData);
 
+int gs_ev2_listen(
+	struct GsEvCtx *CtxBase,
+	uint32_t ServPortU32);
+int gs_ev2_connect(
+struct GsEvCtx *CtxBase,
+	const char *ConnectHostNameBuf, size_t LenConnectHostName,
+	uint32_t ConnectPort);
+
 int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars);
 
 #endif /* _GITTEST_EV2_TEST_H_ */

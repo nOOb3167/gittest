@@ -31,6 +31,25 @@ struct GsEvCtxServ
 	git_repository *mRepositorySelfUpdate = NULL;
 };
 
+static int gs_ev2_serv_state_service_request_blobs2(
+	struct bufferevent *Bev,
+	struct GsEvCtxServ *Ctx,
+	struct GsEvData *Packet,
+	uint32_t OffsetSize,
+	git_repository *Repository,
+	const struct GsFrameType FrameTypeResponse);
+static int gs_ev_serv_state_crank3_connected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase);
+static int gs_ev_serv_state_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	int DisconnectReason);
+static int gs_ev_serv_state_crank3(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	struct GsEvData *Packet);
+
 int gs_ev2_serv_state_service_request_blobs2(
 	struct bufferevent *Bev,
 	struct GsEvCtxServ *Ctx,
@@ -303,126 +322,13 @@ clean:
 	return r;
 }
 
-static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
-{
-	int r = 0;
-
-	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
-
-	int DisconnectReason = 0;
-
-	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_SERV_MAGIC);
-
-	if (What & BEV_EVENT_CONNECTED) {
-		if (!!(r = CtxBase->CbConnect(Bev, CtxBase)))
-			GS_GOTO_CLEAN();
-	}
-	else {
-		if (What & BEV_EVENT_EOF)
-			DisconnectReason = GS_DISCONNECT_REASON_EOF;
-		else if (What & BEV_EVENT_TIMEOUT)
-			DisconnectReason = GS_DISCONNECT_REASON_TIMEOUT;
-		else if (What & BEV_EVENT_ERROR)
-			DisconnectReason = GS_DISCONNECT_REASON_ERROR;
-
-		if (!!(r = CtxBase->CbDisconnect(Bev, CtxBase, DisconnectReason)))
-			GS_GOTO_CLEAN();
-
-		printf("[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-
-		// FIXME: possibly loopbreak on fatal error / BEV_EVENT_ERROR
-		// if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
-		//	GS_GOTO_CLEAN();
-	}
-	
-clean:
-	if (!!r)
-		assert(0);
-}
-
-static void bev_read_cb(struct bufferevent *Bev, void *CtxServ)
-{
-	int r = 0;
-	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxServ;
-
-	const char *Data = NULL;
-	size_t LenHdr, LenData;
-
-	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_SERV_MAGIC);
-
-	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
-		assert(0);
-	if (Data) {
-		struct GsEvData Packet = { (uint8_t *) Data, LenData };
-		if (!!(r = CtxBase->CbCrank(Bev, CtxBase, &Packet)))
-			GS_GOTO_CLEAN();
-		if (!!(r = evbuffer_drain(bufferevent_get_input(Bev), LenHdr + LenData)))
-			GS_GOTO_CLEAN();
-	}
-
-clean:
-	if (!!r)
-		assert(0);
-}
-
-static void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct sockaddr *Addr, int AddrLen, void *CtxServ)
-{
-	int r = 0;
-
-	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxServ;
-
-	struct event_base *Base = evconnlistener_get_base(Listener);
-	struct bufferevent *Bev = NULL;
-	struct timeval Timeout = {};
-	Timeout.tv_sec = GS_EV_TIMEOUT_SEC;
-	Timeout.tv_usec = 0;
-
-	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
-	
-	if (!(Bev = bufferevent_socket_new(Base, Fd, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
-		GS_ERR_CLEAN(1);
-
-	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, Ctx);
-
-	if (!!(r = bufferevent_set_timeouts(Bev, &Timeout, NULL)))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = bufferevent_enable(Bev, EV_READ)))
-		GS_GOTO_CLEAN();
-
-clean:
-	if (!!r)
-		GS_ASSERT(0);
-}
-
-static void evc_error_cb(struct evconnlistener *Listener, void *CtxServ)
-{
-	struct event_base *Base = evconnlistener_get_base(Listener);
-
-	GS_LOG(E, S, "Listener failure");
-
-	if (!!(event_base_loopbreak(Base)))
-		GS_ASSERT(0);
-}
-
 int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 {
 	int r = 0;
 
 	log_guard_t Log(GS_LOG_GET("serv"));
 
-	struct addrinfo Hints = {};
-	struct addrinfo *ServInfo = NULL;
-	struct sockaddr *ServAddr = NULL;
-
-	struct event_base *Base = NULL;
-	struct evconnlistener *Listener = NULL;
-
 	struct GsEvCtxServ *Ctx = new GsEvCtxServ();
-
-	std::stringstream ss;
-	ss << CommonVars.ServPort;
-	std::string cServPort = ss.str();
 
 	Ctx->base.mMagic = GS_EV_CTX_SERV_MAGIC;
 	Ctx->base.CbConnect = gs_ev_serv_state_crank3_connected;
@@ -436,36 +342,12 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	if (!!(r = aux_repository_open(CommonVars.RepoSelfUpdatePathBuf, CommonVars.LenRepoSelfUpdatePath, &Ctx->mRepositorySelfUpdate)))
 		GS_GOTO_CLEAN();
 
-	if (!(Base = event_base_new()))
-		GS_ERR_CLEAN(1);
-
-	Hints.ai_flags = AI_PASSIVE; /* for NULL nodename in getaddrinfo */
-	Hints.ai_family = AF_INET;
-	Hints.ai_socktype = SOCK_STREAM;
-
-	if (!!(r = getaddrinfo(NULL, cServPort.c_str(), &Hints, &ServInfo)))
+	if (!!(r = gs_ev2_listen(&Ctx->base, CommonVars.ServPort)))
 		GS_GOTO_CLEAN();
 
-	if (!(Listener = evconnlistener_new_bind(
-		Base,
-		evc_listener_cb,
-		Ctx,
-		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE,
-		-1,
-		ServInfo->ai_addr,
-		ServInfo->ai_addrlen)))
-	{
-		GS_ERR_CLEAN(1);
-	}
-	evconnlistener_set_error_cb(Listener, evc_error_cb);
-
-	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
-		GS_GOTO_CLEAN();
-
-	printf("exitingS\n");
+	GS_LOG(I, S, "exiting");
 
 clean:
-	freeaddrinfo(ServInfo);
 	
 	return r;
 }
