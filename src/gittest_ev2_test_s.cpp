@@ -98,7 +98,7 @@ clean:
 
 int gs_ev_serv_state_crank3_connected(
 	struct bufferevent *Bev,
-	struct GsEvCtxServ *Ctx)
+	struct GsEvCtx *CtxBase)
 {
 	int r = 0;
 
@@ -107,7 +107,7 @@ int gs_ev_serv_state_crank3_connected(
 
 int gs_ev_serv_state_crank3_disconnected(
 	struct bufferevent *Bev,
-	struct GsEvCtxServ *Ctx,
+	struct GsEvCtx *CtxBase,
 	int DisconnectReason)
 {
 	int r = 0;
@@ -119,15 +119,19 @@ int gs_ev_serv_state_crank3_disconnected(
 
 int gs_ev_serv_state_crank3(
 	struct bufferevent *Bev,
-	struct GsEvCtxServ *Ctx,
+	struct GsEvCtx *CtxBase,
 	struct GsEvData *Packet)
 {
 	int r = 0;
+
+	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxBase;
 
 	uint32_t OffsetStart = 0;
 	uint32_t OffsetSize = 0;
 
 	GsFrameType FoundFrameType = {};
+
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
 
 	if (!!(r = aux_frame_read_frametype(Packet->data, Packet->dataLength, OffsetStart, &OffsetSize, &FoundFrameType)))
 		GS_GOTO_CLEAN();
@@ -299,18 +303,18 @@ clean:
 	return r;
 }
 
-static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxServ)
+static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
 {
 	int r = 0;
 
-	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxServ;
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
 
 	int DisconnectReason = 0;
 
-	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
+	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_SERV_MAGIC);
 
 	if (What & BEV_EVENT_CONNECTED) {
-		if (!!(r = gs_ev_serv_state_crank3_connected(Bev, Ctx)))
+		if (!!(r = CtxBase->CbConnect(Bev, CtxBase)))
 			GS_GOTO_CLEAN();
 	}
 	else {
@@ -321,7 +325,7 @@ static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxServ)
 		else if (What & BEV_EVENT_ERROR)
 			DisconnectReason = GS_DISCONNECT_REASON_ERROR;
 
-		if (!!(r = gs_ev_serv_state_crank3_disconnected(Bev, Ctx, DisconnectReason)))
+		if (!!(r = CtxBase->CbDisconnect(Bev, CtxBase, DisconnectReason)))
 			GS_GOTO_CLEAN();
 
 		printf("[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
@@ -339,15 +343,18 @@ clean:
 static void bev_read_cb(struct bufferevent *Bev, void *CtxServ)
 {
 	int r = 0;
-	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxServ;
-	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxServ;
+
 	const char *Data = NULL;
 	size_t LenHdr, LenData;
+
+	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_SERV_MAGIC);
+
 	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
 		assert(0);
 	if (Data) {
 		struct GsEvData Packet = { (uint8_t *) Data, LenData };
-		if (!!(r = gs_ev_serv_state_crank3(Bev, Ctx, &Packet)))
+		if (!!(r = CtxBase->CbCrank(Bev, CtxBase, &Packet)))
 			GS_GOTO_CLEAN();
 		if (!!(r = evbuffer_drain(bufferevent_get_input(Bev), LenHdr + LenData)))
 			GS_GOTO_CLEAN();
@@ -418,6 +425,9 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	std::string cServPort = ss.str();
 
 	Ctx->base.mMagic = GS_EV_CTX_SERV_MAGIC;
+	Ctx->base.CbConnect = gs_ev_serv_state_crank3_connected;
+	Ctx->base.CbDisconnect = gs_ev_serv_state_crank3_disconnected;
+	Ctx->base.CbCrank = gs_ev_serv_state_crank3;
 	Ctx->mCommonVars = CommonVars;
 
 	if (!!(r = aux_repository_open(CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath, &Ctx->mRepository)))

@@ -7,7 +7,6 @@
 
 #define GS_EV_TIMEOUT_SEC 30
 
-// FIXME: use constants so bufferevent.h need not be included
 #define GS_DISCONNECT_REASON_ERROR BEV_EVENT_ERROR
 #define GS_DISCONNECT_REASON_EOF BEV_EVENT_EOF
 #define GS_DISCONNECT_REASON_TIMEOUT BEV_EVENT_TIMEOUT
@@ -21,6 +20,18 @@ struct GsEvData
 struct GsEvCtx
 {
 	uint32_t mMagic;
+
+	int (*CbConnect)(
+		struct bufferevent *Bev,
+		struct GsEvCtx *CtxBase);
+	int (*CbDisconnect)(
+		struct bufferevent *Bev,
+		struct GsEvCtx *CtxBase,
+		int DisconnectReason);
+	int (*CbCrank)(
+		struct bufferevent *Bev,
+		struct GsEvCtx *CtxBase,
+		struct GsEvData *Packet);
 };
 
 int gs_ev_evbuffer_get_frame_try(

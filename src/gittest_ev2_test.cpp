@@ -75,6 +75,18 @@ clean:
 	return r;
 }
 
+int gs_ev_clnt_state_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *Ctx,
+	int DisconnectReason)
+{
+	int r = 0;
+
+	bufferevent_free(Bev);
+
+	return r;
+}
+
 int gs_ev_clnt_state_crank3(
 	struct bufferevent *Bev,
 	struct GsEvCtx *CtxBase,
@@ -474,15 +486,16 @@ clean:
 	return r;
 }
 
-static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBase)
+static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
 {
 	int r = 0;
 
-	struct GsEvCtx *Ctx = (struct GsEvCtx *) CtxBase;
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+
+	GS_ASSERT(CtxBase->mMagic == GS_EV_CTX_CLNT_MAGIC);
 
 	if (What & BEV_EVENT_CONNECTED) {
-		if (!!(r = gs_ev_clnt_state_crank3_connected(Bev, Ctx)))
+		if (!!(r = gs_ev_clnt_state_crank3_connected(Bev, CtxBase)))
 			GS_GOTO_CLEAN();
 	}
 	if (What & BEV_EVENT_ERROR) {
@@ -506,10 +519,11 @@ static void bev_read_cb(struct bufferevent *Bev, void *CtxBase)
 	int r = 0;
 
 	struct GsEvCtx *Ctx = (struct GsEvCtx *) CtxBase;
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
 
 	const char *Data = NULL;
 	size_t LenHdr, LenData;
+
+	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_CLNT_MAGIC);
 
 	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
 		GS_GOTO_CLEAN();
@@ -559,6 +573,9 @@ int gs_ev2_test_clntmain(
 		GS_GOTO_CLEAN();
 
 	Ctx->base.mMagic = GS_EV_CTX_CLNT_MAGIC;
+	Ctx->base.CbConnect = gs_ev_clnt_state_crank3_connected;
+	Ctx->base.CbDisconnect = gs_ev_clnt_state_crank3_disconnected;
+	Ctx->base.CbCrank = gs_ev_clnt_state_crank3;
 	Ctx->mCommonVars = CommonVars;
 	Ctx->mClntState = new ClntState();
 
