@@ -29,11 +29,6 @@
 
 GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
 
-struct GsEvCtx
-{
-	uint32_t mMagic;
-};
-
 struct GsEvCtxClnt
 {
 	struct GsEvCtx base;

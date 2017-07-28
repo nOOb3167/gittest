@@ -20,11 +20,11 @@
 
 #include <gittest/gittest_ev2_test.h>
 
-#define GS_EV_CTX_SERV_MAGIC 0x4E8BF2AD 
+#define GS_EV_CTX_SERV_MAGIC 0x4E8BF2AD
 
 struct GsEvCtxServ
 {
-	uint32_t mMagic;
+	struct GsEvCtx base;
 	struct GsAuxConfigCommonVars mCommonVars;
 
 	git_repository *mRepository = NULL;
@@ -101,6 +101,18 @@ int gs_ev_serv_state_crank3_connected(
 	struct GsEvCtxServ *Ctx)
 {
 	int r = 0;
+
+	return r;
+}
+
+int gs_ev_serv_state_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtxServ *Ctx,
+	int DisconnectReason)
+{
+	int r = 0;
+
+	bufferevent_free(Bev);
 
 	return r;
 }
@@ -290,24 +302,35 @@ clean:
 static void bev_event_cb(struct bufferevent *Bev, short What, void *CtxServ)
 {
 	int r = 0;
+
 	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxServ;
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_SERV_MAGIC);
+
+	int DisconnectReason = 0;
+
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
 
 	if (What & BEV_EVENT_CONNECTED) {
 		if (!!(r = gs_ev_serv_state_crank3_connected(Bev, Ctx)))
 			GS_GOTO_CLEAN();
 	}
-	if (What & BEV_EVENT_ERROR) {
-		printf("%s\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		GS_ERR_CLEAN(1);
+	else {
+		if (What & BEV_EVENT_EOF)
+			DisconnectReason = GS_DISCONNECT_REASON_EOF;
+		else if (What & BEV_EVENT_TIMEOUT)
+			DisconnectReason = GS_DISCONNECT_REASON_TIMEOUT;
+		else if (What & BEV_EVENT_ERROR)
+			DisconnectReason = GS_DISCONNECT_REASON_ERROR;
+
+		if (!!(r = gs_ev_serv_state_crank3_disconnected(Bev, Ctx, DisconnectReason)))
+			GS_GOTO_CLEAN();
+
+		printf("[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+
+		// FIXME: possibly loopbreak on fatal error / BEV_EVENT_ERROR
+		// if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
+		//	GS_GOTO_CLEAN();
 	}
 	
-	if (What & BEV_EVENT_ERROR || What & BEV_EVENT_EOF || What & BEV_EVENT_TIMEOUT) {
-		if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
-			GS_GOTO_CLEAN();
-		GS_ERR_CLEAN(1);
-	}
-
 clean:
 	if (!!r)
 		assert(0);
@@ -317,7 +340,7 @@ static void bev_read_cb(struct bufferevent *Bev, void *CtxServ)
 {
 	int r = 0;
 	struct GsEvCtxServ *Ctx = (struct GsEvCtxServ *) CtxServ;
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_SERV_MAGIC);
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
 	const char *Data = NULL;
 	size_t LenHdr, LenData;
 	if (!!(r = gs_ev_evbuffer_get_frame_try(bufferevent_get_input(Bev), &Data, &LenHdr, &LenData)))
@@ -343,15 +366,22 @@ static void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd,
 
 	struct event_base *Base = evconnlistener_get_base(Listener);
 	struct bufferevent *Bev = NULL;
+	struct timeval Timeout = {};
+	Timeout.tv_sec = GS_EV_TIMEOUT_SEC;
+	Timeout.tv_usec = 0;
 
-	GS_ASSERT(Ctx->mMagic == GS_EV_CTX_SERV_MAGIC);
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SERV_MAGIC);
 	
 	if (!(Bev = bufferevent_socket_new(Base, Fd, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS)))
 		GS_ERR_CLEAN(1);
 
 	bufferevent_setcb(Bev, bev_read_cb, NULL, bev_event_cb, Ctx);
 
-	bufferevent_enable(Bev, EV_READ);
+	if (!!(r = bufferevent_set_timeouts(Bev, &Timeout, NULL)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = bufferevent_enable(Bev, EV_READ)))
+		GS_GOTO_CLEAN();
 
 clean:
 	if (!!r)
@@ -387,7 +417,7 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	ss << CommonVars.ServPort;
 	std::string cServPort = ss.str();
 
-	Ctx->mMagic = GS_EV_CTX_SERV_MAGIC;
+	Ctx->base.mMagic = GS_EV_CTX_SERV_MAGIC;
 	Ctx->mCommonVars = CommonVars;
 
 	if (!!(r = aux_repository_open(CommonVars.RepoMainPathBuf, CommonVars.LenRepoMainPath, &Ctx->mRepository)))
