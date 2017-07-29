@@ -7,9 +7,12 @@
 
 #include <gittest/misc.h>
 #include <gittest/config.h>
+#include <gittest/log.h>
 #include <gittest/frame.h>
 #include <gittest/gittest.h>  // aux_LE_to_uint32
 #include <gittest/gittest_ev2_test.h>
+
+#define GS_EV_CTX_SELFUPDATE_MAGIC 0x4E8BF2AF
 
 enum gs_selfupdate_state_code_t {
 	GS_SELFUPDATE_STATE_CODE_NEED_REPOSITORY = 0,
@@ -29,10 +32,28 @@ struct GsSelfUpdateState
 
 struct GsEvCtxSelfUpdate
 {
-	struct GsEvCtx *base;
+	struct GsEvCtx base;
 	struct GsAuxConfigCommonVars mCommonVars;
 	struct GsSelfUpdateState *mState;
 };
+
+static int gs_selfupdate_state_code(
+	struct GsSelfUpdateState *State,
+	uint32_t *oCode);
+static int gs_selfupdate_state_code_ensure(
+	struct GsSelfUpdateState *State,
+	uint32_t WantedCode);
+static int gs_ev_selfupdate_crank3_connected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase);
+static int gs_ev_selfupdate_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	int DisconnectReason);
+static int gs_ev_selfupdate_crank3(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	struct GsEvData *Packet);
 
 int gs_selfupdate_state_code(
 	struct GsSelfUpdateState *State,
@@ -83,6 +104,62 @@ int gs_selfupdate_state_code_ensure(
 		GS_ERR_CLEAN(1);
 
 clean:
+
+	return r;
+}
+
+int gs_ev_selfupdate_crank3_connected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase)
+{
+	int r = 0;
+
+	struct GsEvCtxSelfUpdate *Ctx = (struct GsEvCtxSelfUpdate *) CtxBase;
+
+	std::string Buffer;
+
+	git_repository *RepositoryT = NULL;
+	git_repository *RepositoryMemory = NULL;
+
+	GS_BYPART_DATA_VAR(String, BysizeBuffer);
+	GS_BYPART_DATA_INIT(String, BysizeBuffer, &Buffer);
+
+	GS_ASSERT(Ctx->base.mMagic == GS_EV_CTX_SELFUPDATE_MAGIC);
+
+	if (!!(r = gs_selfupdate_state_code_ensure(Ctx->mState, GS_SELFUPDATE_STATE_CODE_NEED_REPOSITORY)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_repository_open(Ctx->mCommonVars.RepoMasterUpdatePathBuf, Ctx->mCommonVars.LenRepoMasterUpdatePath, &RepositoryT)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_memory_repository_new(&RepositoryMemory)))
+		GS_GOTO_CLEAN();
+
+	Ctx->mState->mRepositoryT = sp<git_repository *>(new git_repository *(RepositoryT));
+	Ctx->mState->mRepositoryMemory = sp<git_repository *>(new git_repository *(RepositoryMemory));
+
+	if (!!(r = gs_selfupdate_state_code_ensure(Ctx->mState, GS_SELFUPDATE_STATE_CODE_NEED_BLOB_HEAD)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = aux_frame_full_write_request_latest_selfupdate_blob(gs_bysize_cb_String, &BysizeBuffer)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_ev_evbuffer_write_frame(bufferevent_get_output(Bev), Buffer.data(), Buffer.size())))
+		GS_GOTO_CLEAN();
+
+clean:
+
+	return r;
+}
+
+int gs_ev_selfupdate_crank3_disconnected(
+	struct bufferevent *Bev,
+	struct GsEvCtx *CtxBase,
+	int DisconnectReason)
+{
+	int r = 0;
+
+	bufferevent_free(Bev);
 
 	return r;
 }
@@ -221,6 +298,41 @@ process_another_state_label:
 	}
 
 noclean:
+
+clean:
+
+	return r;
+}
+
+int gs_ev2_test_selfupdatemain(
+	struct GsAuxConfigCommonVars CommonVars,
+	struct GsEvCtxSelfUpdate **oCtx)
+{
+	int r = 0;
+
+	log_guard_t Log(GS_LOG_GET("selfup"));
+
+	struct GsEvCtxSelfUpdate *Ctx = new GsEvCtxSelfUpdate();
+
+	Ctx->base.mMagic = GS_EV_CTX_SELFUPDATE_MAGIC;
+	Ctx->base.CbConnect = gs_ev_selfupdate_crank3_connected;
+	Ctx->base.CbDisconnect = gs_ev_selfupdate_crank3_disconnected;
+	Ctx->base.CbCrank = gs_ev_selfupdate_crank3;
+	Ctx->mCommonVars = CommonVars;
+	Ctx->mState = new GsSelfUpdateState();
+
+	if (!!(r = gs_ev2_connect(
+		&Ctx->base,
+		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
+		CommonVars.ServPort)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	GS_LOG(I, S, "exiting");
+
+	if (oCtx)
+		*oCtx = Ctx;
 
 clean:
 

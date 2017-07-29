@@ -20,7 +20,7 @@
 
 #include <gittest/gittest_ev2_test.h>
 
-#define GS_EV_CTX_SERV_MAGIC 0x4E8BF2AD
+#define GS_EV_CTX_SERV_MAGIC 0x4E8BF2AE
 
 struct GsEvCtxServ
 {

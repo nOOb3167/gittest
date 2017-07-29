@@ -53,5 +53,8 @@ struct GsEvCtx *CtxBase,
 	uint32_t ConnectPort);
 
 int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars);
+int gs_ev2_test_selfupdatemain(
+	struct GsAuxConfigCommonVars CommonVars,
+	struct GsEvCtxSelfUpdate **oCtx);
 
 #endif /* _GITTEST_EV2_TEST_H_ */
