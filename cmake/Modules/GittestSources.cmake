@@ -10,6 +10,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_selfupdate
   )
 
   SET(GITTEST_SOURCES_TARGETS
@@ -23,6 +24,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_selfupdate
   )
   SET(GITTEST_SOURCES_TARGETS_EXE
     gittest_serv
@@ -32,6 +34,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_selfupdate
   )
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
     STRING(REPLACE "gittest_" "" VV "${VV}")
@@ -264,6 +267,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_selfupdate
   )
   
   # misc
@@ -415,6 +419,20 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
   
   SET(GITTEST_EV2_TEST_SOURCES
     src/gittest_ev2_test.cpp
+    src/gittest_ev2_test_c.cpp
+    src/gittest_ev2_test_su.cpp
+    src/gittest_ev2_test_s.cpp
+  )
+  
+  # gittest_ev2_selfupdate
+  
+  SET(GITTEST_EV2_SELFUPDATE_HEADERS
+    include/gittest/gittest_ev2_test.h
+  )
+  
+  SET(GITTEST_EV2_SELFUPDATE_SOURCES
+    src/gittest_ev2_selfupdate.cpp
+    src/gittest_ev2_test_c.cpp
     src/gittest_ev2_test_su.cpp
     src/gittest_ev2_test_s.cpp
   )

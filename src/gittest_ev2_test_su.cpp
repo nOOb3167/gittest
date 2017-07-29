@@ -12,37 +12,9 @@
 #include <gittest/gittest.h>  // aux_LE_to_uint32
 #include <gittest/gittest_ev2_test.h>
 
-#define GS_EV_CTX_SELFUPDATE_MAGIC 0x4E8BF2AF
-
-enum gs_selfupdate_state_code_t {
-	GS_SELFUPDATE_STATE_CODE_NEED_REPOSITORY = 0,
-	GS_SELFUPDATE_STATE_CODE_NEED_BLOB_HEAD = 1,
-	GS_SELFUPDATE_STATE_CODE_NEED_BLOB = 2,
-	GS_SELFUPDATE_STATE_CODE_NEED_NOTHING = 3,
-	GS_SELFUPDATE_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
-};
-
-struct GsSelfUpdateState
-{
-	sp<git_repository *> mRepositoryT;
-	sp<git_repository *> mRepositoryMemory;
-	sp<git_oid>          mBlobHeadOid;
-	sp<std::string>      mBufferUpdate;
-};
-
-struct GsEvCtxSelfUpdate
-{
-	struct GsEvCtx base;
-	struct GsAuxConfigCommonVars mCommonVars;
-	struct GsSelfUpdateState *mState;
-};
-
 static int gs_selfupdate_state_code(
 	struct GsSelfUpdateState *State,
 	uint32_t *oCode);
-static int gs_selfupdate_state_code_ensure(
-	struct GsSelfUpdateState *State,
-	uint32_t WantedCode);
 static int gs_ev_selfupdate_crank3_connected(
 	struct bufferevent *Bev,
 	struct GsEvCtx *CtxBase);

@@ -10,7 +10,6 @@
 #include <gittest/config.h>
 #include <gittest/log.h>
 #include <gittest/gittest.h>
-#include <gittest/crank_clnt.h>
 
 #include <gittest/gittest_ev2_test.h>
 
@@ -22,7 +21,7 @@ int main(int argc, char **argv)
 
 	struct GsConfMap *ConfMap = NULL;
 	struct GsAuxConfigCommonVars CommonVars = {};
-	struct GsEvCtxClnt *Ctx = NULL;
+	struct GsEvCtxSelfUpdate *Ctx = NULL;
 
 	std::thread ThreadServ;
 
@@ -49,10 +48,10 @@ int main(int argc, char **argv)
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-	if (!!(r = gs_ev2_test_clntmain(CommonVars, &Ctx)))
+	if (!!(r = gs_ev2_test_selfupdatemain(CommonVars, &Ctx)))
 		GS_GOTO_CLEAN();
 
-	GS_ASSERT(! clnt_state_code_ensure(Ctx->mClntState, GS_CLNT_STATE_CODE_NEED_NOTHING));
+	GS_ASSERT(! gs_selfupdate_state_code_ensure(Ctx->mState, GS_SELFUPDATE_STATE_CODE_NEED_NOTHING));
 
 clean:
 	if (!!r)

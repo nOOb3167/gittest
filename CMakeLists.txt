@@ -24,6 +24,7 @@ SET(GITTEST_SOURCES_MAGIC_TARGET_LIST
   gittest_log_convert
   gittest_test_02
   gittest_ev2_test
+  gittest_ev2_selfupdate
 )
 
 GITTEST_COMMON_SET_PLATFORM()

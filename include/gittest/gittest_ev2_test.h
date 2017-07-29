@@ -11,6 +11,10 @@
 #define GS_DISCONNECT_REASON_EOF BEV_EVENT_EOF
 #define GS_DISCONNECT_REASON_TIMEOUT BEV_EVENT_TIMEOUT
 
+#define GS_EV_CTX_CLNT_MAGIC 0x4E8BF2AD
+#define GS_EV_CTX_SERV_MAGIC 0x4E8BF2AE
+#define GS_EV_CTX_SELFUPDATE_MAGIC 0x4E8BF2AF
+
 struct GsEvData
 {
 	uint8_t *data;
@@ -34,6 +38,36 @@ struct GsEvCtx
 		struct GsEvData *Packet);
 };
 
+struct GsEvCtxClnt
+{
+	struct GsEvCtx base;
+	struct GsAuxConfigCommonVars mCommonVars;
+	struct ClntState *mClntState;
+};
+
+enum gs_selfupdate_state_code_t {
+	GS_SELFUPDATE_STATE_CODE_NEED_REPOSITORY = 0,
+	GS_SELFUPDATE_STATE_CODE_NEED_BLOB_HEAD = 1,
+	GS_SELFUPDATE_STATE_CODE_NEED_BLOB = 2,
+	GS_SELFUPDATE_STATE_CODE_NEED_NOTHING = 3,
+	GS_SELFUPDATE_STATE_CODE_MAX_ENUM = 0x7FFFFFFF,
+};
+
+struct GsSelfUpdateState
+{
+	sp<git_repository *> mRepositoryT;
+	sp<git_repository *> mRepositoryMemory;
+	sp<git_oid>          mBlobHeadOid;
+	sp<std::string>      mBufferUpdate;
+};
+
+struct GsEvCtxSelfUpdate
+{
+	struct GsEvCtx base;
+	struct GsAuxConfigCommonVars mCommonVars;
+	struct GsSelfUpdateState *mState;
+};
+
 int gs_ev_evbuffer_get_frame_try(
 	struct evbuffer *Ev,
 	const char **oDataOpt,
@@ -52,6 +86,13 @@ struct GsEvCtx *CtxBase,
 	const char *ConnectHostNameBuf, size_t LenConnectHostName,
 	uint32_t ConnectPort);
 
+int gs_selfupdate_state_code_ensure(
+	struct GsSelfUpdateState *State,
+	uint32_t WantedCode);
+
+int gs_ev2_test_clntmain(
+	struct GsAuxConfigCommonVars CommonVars,
+	struct GsEvCtxClnt **oCtx);
 int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars);
 int gs_ev2_test_selfupdatemain(
 	struct GsAuxConfigCommonVars CommonVars,
