@@ -12,12 +12,21 @@
 #include <gittest/filesys.h>
 #include <gittest/filesys_win.h>
 
+static void gs_close_handle(HANDLE handle);
+
 int gs_win_path_directory(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
 int gs_win_path_canonicalize(
 	const char *InputPathBuf, size_t LenInputPath,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
+
+void gs_close_handle(HANDLE handle)
+{
+	if (handle)
+		if (!CloseHandle(handle))
+			GS_ASSERT(0);
+}
 
 int gs_win_path_directory(
 	const char *InputPathBuf, size_t LenInputPath,
@@ -356,6 +365,138 @@ int gs_path_append_abs_rel(
 		GS_GOTO_CLEAN();
 
 clean:
+
+	return r;
+}
+
+int gs_file_write_frombuffer(
+	const char *FileNameBuf, size_t LenFileName,
+	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize)
+{
+	int r = 0;
+
+	HANDLE hTempFile = INVALID_HANDLE_VALUE;
+
+	DWORD NumberOfBytesWritten = 0;
+
+	BOOL Ok = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(FileNameBuf, LenFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	if ((hTempFile = CreateFile(
+		FileNameBuf,
+		GENERIC_WRITE,
+		FILE_SHARE_DELETE,
+		NULL,
+		CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL)) == INVALID_HANDLE_VALUE)
+	{
+		GS_ERR_CLEAN(1);
+	}
+
+	if (!(Ok = WriteFile(hTempFile, BufferUpdateData, BufferUpdateSize, &NumberOfBytesWritten, NULL)))
+		GS_ERR_CLEAN(1);
+
+	if (NumberOfBytesWritten != BufferUpdateSize)
+		GS_ERR_CLEAN(1);
+
+clean:
+	if (hTempFile != INVALID_HANDLE_VALUE)
+		CloseHandle(hTempFile);
+	
+	return r;
+}
+
+int gs_rename_wrapper(
+	const char *SrcFileNameBuf, size_t LenSrcFileName,
+	const char *DstFileNameBuf, size_t LenDstFileName)
+{
+	int r = 0;
+
+	BOOL Ok = 0;
+
+	if (!!(r = gs_buf_ensure_haszero(SrcFileNameBuf, LenSrcFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_buf_ensure_haszero(DstFileNameBuf, LenDstFileName + 1)))
+		GS_GOTO_CLEAN();
+
+	if (!(Ok = MoveFileEx(SrcFileNameBuf, DstFileNameBuf, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)))
+		GS_ERR_CLEAN(1);
+
+clean:
+
+	return r;
+}
+
+int gs_process_start(
+	const char *FileNameParentBuf, size_t LenFileNameParent,
+	const char *CmdLineBuf, size_t LenCmdLine)
+{
+	/* create a process and discard all the handles (process and thread handles) */
+	int r = 0;
+
+	STARTUPINFO si = {};
+	PROCESS_INFORMATION pi = {};
+	HANDLE hChildProcess = NULL;
+	HANDLE hChildThread = NULL;
+
+	/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms682425(v=vs.85).aspx
+	*    32768 actually */
+	const size_t MagicCommandLineLenghtLimit = 32767;
+	const size_t ReasonableCommandLineLengthLimit = 1024;
+	char CmdLineCopyBuf[ReasonableCommandLineLengthLimit];
+
+	BOOL Ok = 0;
+	DWORD ExitCode = 0;
+
+	if (!!(r = gs_buf_copy_zero_terminate(
+		CmdLineBuf, LenCmdLine,
+		CmdLineCopyBuf, sizeof CmdLineCopyBuf, NULL)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	if (!!(r = gs_file_exist_ensure(FileNameParentBuf, LenFileNameParent)))
+		GS_GOTO_CLEAN();
+
+	ZeroMemory(&si, sizeof si);
+	si.cb = sizeof si;
+	ZeroMemory(&pi, sizeof pi);
+
+	if (!(Ok = CreateProcess(
+		FileNameParentBuf,
+		CmdLineCopyBuf,
+		NULL,
+		NULL,
+		TRUE,
+		0, /* CREATE_NEW_CONSOLE - meh it closes on quit */
+		NULL,
+		NULL,
+		&si,
+		&pi)))
+	{
+		GS_ERR_CLEAN(1);
+	}
+	hChildProcess = pi.hProcess;
+	hChildThread = pi.hThread;
+
+	if (WAIT_OBJECT_0 != WaitForSingleObject(hChildProcess, GS_FILESYS_ARBITRARY_TIMEOUT_MSEC))
+		GS_ERR_CLEAN(1);
+
+	if (! GetExitCodeProcess(hChildProcess, &ExitCode))
+		GS_ERR_CLEAN(1);
+
+	// FIXME: is there and official success exit code? constant zero or something?
+	if (ExitCode != EXIT_SUCCESS)
+		GS_ERR_CLEAN(1);
+
+clean:
+	gs_close_handle(hChildThread);
+
+	gs_close_handle(hChildProcess);
 
 	return r;
 }

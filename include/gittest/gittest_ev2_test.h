@@ -68,6 +68,9 @@ struct GsEvCtxSelfUpdate
 	struct GsSelfUpdateState *mState;
 };
 
+int gs_ev_ctx_clnt_destroy(struct GsEvCtxClnt *w);
+int gs_ev_ctx_selfupdate_destroy(struct GsEvCtxSelfUpdate *w);
+
 int gs_ev_evbuffer_get_frame_try(
 	struct evbuffer *Ev,
 	const char **oDataOpt,
@@ -86,6 +89,9 @@ struct GsEvCtx *CtxBase,
 	const char *ConnectHostNameBuf, size_t LenConnectHostName,
 	uint32_t ConnectPort);
 
+int gs_selfupdate_state_code(
+	struct GsSelfUpdateState *State,
+	uint32_t *oCode);
 int gs_selfupdate_state_code_ensure(
 	struct GsSelfUpdateState *State,
 	uint32_t WantedCode);

@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#define GS_FILESYS_ARBITRARY_TIMEOUT_MSEC 10000
+
 int gs_build_path_expand_separated(
 	const char *PathBuf, size_t LenPath,
 	const char *ExtBuf, size_t LenExt,
@@ -30,5 +32,19 @@ int gs_path_append_abs_rel(
 	const char *AbsoluteBuf, size_t LenAbsolute,
 	const char *RelativeBuf, size_t LenRelative,
 	char *ioOutputPathBuf, size_t OutputPathBufSize, size_t *oLenOutputPath);
+
+int gs_file_write_frombuffer(
+	const char *FileNameBuf, size_t LenFileName,
+	uint8_t *BufferUpdateData, uint32_t BufferUpdateSize);
+
+int gs_rename_wrapper(
+	const char *SrcFileNameBuf, size_t LenSrcFileName,
+	const char *DstFileNameBuf, size_t LenDstFileName);
+
+/* unportable / platform specific */
+
+int gs_process_start(
+	const char *FileNameParentBuf, size_t LenFileNameParent,
+	const char *CmdLineBuf, size_t LenCmdLine);
 
 #endif /* _GITTEST_FILESYS_WIN_H_ */

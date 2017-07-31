@@ -61,6 +61,9 @@ int aux_win_selfupdate_main_mode_child(
 	const char *ArgvParentFileName, size_t LenArgvParentFileName,
 	const char *ArgvChildFileName, size_t LenArgvChildFileName);
 
+static int gs_process_start(
+	const char *FileNameParentBuf, size_t LenFileNameParent,
+	const char *ParentCommandLineBuf, size_t LenParentCommandLine);
 
 void gs_close_handle(HANDLE handle) {
 	if (handle)

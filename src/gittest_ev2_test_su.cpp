@@ -12,9 +12,6 @@
 #include <gittest/gittest.h>  // aux_LE_to_uint32
 #include <gittest/gittest_ev2_test.h>
 
-static int gs_selfupdate_state_code(
-	struct GsSelfUpdateState *State,
-	uint32_t *oCode);
 static int gs_ev_selfupdate_crank3_connected(
 	struct bufferevent *Bev,
 	struct GsEvCtx *CtxBase);
@@ -188,6 +185,9 @@ process_another_state_label:
 			char buf[GIT_OID_HEXSZ] = {};
 			git_oid_fmt(buf, &BlobOldOidT);
 			GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
+
+			// FIXME: delegate to cleansub (nocleansub)
+			GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
 		}
 
 		Ctx->mState->mBlobHeadOid = BlobHeadOid;

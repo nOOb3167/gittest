@@ -15,6 +15,7 @@
 
 #define GS_STR_PARENT_EXPECTED_EXTENSION GS_STR_EXECUTABLE_EXPECTED_EXTENSION
 #define GS_STR_PARENT_EXTRA_SUFFIX "_helper"
+#define GS_STR_PARENT_EXTRA_SUFFIX_OLD "_helper_old"
 
 /* to be implemented platform neutrally */
 

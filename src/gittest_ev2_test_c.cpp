@@ -43,6 +43,20 @@ static int gs_ev_clnt_state_crank3(
 	struct GsEvCtx *CtxBase,
 	struct GsEvData *Packet);
 
+int gs_ev_ctx_clnt_destroy(struct GsEvCtxClnt *w)
+{
+	if (w)
+		delete w;
+	return 0;
+}
+
+int gs_ev_ctx_selfupdate_destroy(struct GsEvCtxSelfUpdate *w)
+{
+	if (w)
+		delete w;
+	return 0;
+}
+
 void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
 {
 	int r = 0;
@@ -244,6 +258,9 @@ process_another_state_label:
 			char buf[GIT_OID_HEXSZ] = {};
 			git_oid_fmt(buf, &CommitHeadOidT);
 			GS_LOG(I, PF, "Have latest [%.*s]\n", (int)GIT_OID_HEXSZ, buf);
+
+			// FIXME: delegate to cleansub (nocleansub)
+			GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
 		}
 
 		Ctx->mClntState->mTreeHeadOid = TreeHeadOid;
