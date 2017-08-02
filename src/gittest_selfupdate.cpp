@@ -104,8 +104,8 @@ int aux_selfupdate_main_mode_parent(uint32_t *oHaveUpdateShouldQuit) {
 	GS_LOG(I, PF, "executable_filename=[%.*s]", LenFileNameCurrent, FileNameCurrentBuf);
 
 	if (!!(r = gs_build_child_filename(
-		FileNameCurrentBuf, LenFileNameCurrent, /* updating the current executable */
 		FileNameCurrentBuf, LenFileNameCurrent,
+		"", 0,
 		GS_STR_PARENT_EXPECTED_EXTENSION, strlen(GS_STR_PARENT_EXPECTED_EXTENSION),
 		GS_STR_PARENT_EXTRA_SUFFIX, strlen(GS_STR_PARENT_EXTRA_SUFFIX),
 		FileNameChildBuf, sizeof FileNameChildBuf, &LenFileNameChild)))

@@ -110,7 +110,7 @@ int gs_ev2_selfupdate_full(
 
 	if (!!(r = gs_build_modified_filename(
 		CurExeBuf, LenCurExe,
-		CurExeBuf, LenCurExe,
+		"", 0,
 		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
 		GS_STR_PARENT_EXTRA_SUFFIX, strlen(GS_STR_PARENT_EXTRA_SUFFIX),
 		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
@@ -121,7 +121,7 @@ int gs_ev2_selfupdate_full(
 
 	if (!!(r = gs_build_modified_filename(
 		CurExeBuf, LenCurExe,
-		CurExeBuf, LenCurExe,
+		"", 0,
 		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
 		GS_STR_PARENT_EXTRA_SUFFIX_OLD, strlen(GS_STR_PARENT_EXTRA_SUFFIX_OLD),
 		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),

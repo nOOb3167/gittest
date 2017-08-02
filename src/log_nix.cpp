@@ -273,10 +273,9 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
 		goto clean;
 
-	/* FIXME: some of these defines */
 	if (!!(r = gs_build_modified_filename(
 		CurrentFileNameBuf, LenCurrentFileName,
-		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
+		"", 0,
 		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
 		CombinedExtraSuffix, LenCombinedExtraSuffix,
 		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),

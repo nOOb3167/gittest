@@ -11,8 +11,8 @@ int gs_build_modified_filename(
 	const char *BaseFileNameBuf, size_t LenBaseFileName,
 	const char *ExpectedSuffixBuf, size_t LenExpectedSuffix,
 	const char *ExpectedExtensionBuf, size_t LenExpectedExtension,
-	const char *ExtraSuffixBuf, size_t LenExtraSuffix,
-	const char *ExtraExtensionBuf, size_t LenExtraExtension,
+	const char *AddedSuffixBuf, size_t LenAddedSuffix,
+	const char *ReplacedExtensionBuf, size_t LenReplacedExtension,
 	char *ioModifiedFileNameBuf, size_t ModifiedFileNameSize, size_t *oLenModifiedFileName)
 {
 	int r = 0;
@@ -20,20 +20,23 @@ int gs_build_modified_filename(
 	std::string BaseFileName(BaseFileNameBuf, LenBaseFileName);
 	std::string ExpectedSuffix(ExpectedSuffixBuf, LenExpectedSuffix);
 	std::string ExpectedExtension(ExpectedExtensionBuf, LenExpectedExtension);
-	std::string ExtraSuffix(ExtraSuffixBuf, LenExtraSuffix);
-	std::string ExtraExtension(ExtraExtensionBuf, LenExtraExtension);
+	std::string AddedSuffix(AddedSuffixBuf, LenAddedSuffix);
+	std::string ReplacedExtension(ReplacedExtensionBuf, LenReplacedExtension);
 
 	std::stringstream ss;
 	std::string out;
 
-	// NOTE: GS_MAX guarding against underflow
-	if (BaseFileName.substr(GS_MIN(LenBaseFileName - LenExpectedSuffix   , LenBaseFileName)) != ExpectedSuffix ||
-		BaseFileName.substr(GS_MIN(LenBaseFileName - LenExpectedExtension, LenBaseFileName)) != ExpectedExtension)
+	size_t ExtensionCutoffOffset = GS_MIN(LenBaseFileName - LenExpectedExtension, LenBaseFileName);
+	size_t SuffixCheckOffset = GS_MIN(LenBaseFileName - LenExpectedExtension - LenExpectedSuffix, LenBaseFileName);
+
+	// NOTE: GS_MIN effectively guarding against underflow
+	if (BaseFileName.substr(ExtensionCutoffOffset) != ExpectedExtension ||
+		BaseFileName.substr(SuffixCheckOffset, ExtensionCutoffOffset - SuffixCheckOffset) != ExpectedSuffix)
 	{
 		GS_ERR_CLEAN(1);
 	}
 
-	ss << BaseFileNameBuf << ExtraSuffix << ExtraExtension;
+	ss << BaseFileName.substr(0, ExtensionCutoffOffset) << AddedSuffix << ReplacedExtension;
 	out = ss.str();
 
 	if (!!(r = gs_buf_copy_zero_terminate(
