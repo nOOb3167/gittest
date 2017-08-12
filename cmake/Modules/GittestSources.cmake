@@ -11,6 +11,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_selfupdate
+    gittest_ev2_selfupdate_clone
   )
 
   SET(GITTEST_SOURCES_TARGETS
@@ -25,6 +26,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_selfupdate
+    gittest_ev2_selfupdate_clone
   )
   SET(GITTEST_SOURCES_TARGETS_EXE
     gittest_serv
@@ -35,6 +37,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_selfupdate
+    gittest_ev2_selfupdate_clone
   )
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
     STRING(REPLACE "gittest_" "" VV "${VV}")
@@ -180,6 +183,8 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
     gittest_selfupdate  # special link
     gittest_clnt        # special defs
     gittest_clnt_clone  # special defs
+    gittest_ev2_selfupdate       # special defs
+    gittest_ev2_selfupdate_clone # special defs
   )
 
   # explicit suffix definition for executables (prefer .exe even on nix)
@@ -202,6 +207,9 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   
   TARGET_COMPILE_DEFINITIONS(gittest_clnt       PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt")
   TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt_clone")
+
+  TARGET_COMPILE_DEFINITIONS(gittest_ev2_selfupdate       PRIVATE GS_CONFIG_DEFS_GITTEST_EV2_SELFUPDATE_VERSUB="versub_ev2_selfupdate")
+  TARGET_COMPILE_DEFINITIONS(gittest_ev2_selfupdate_clone PRIVATE GS_CONFIG_DEFS_GITTEST_EV2_SELFUPDATE_VERSUB="versub_ev2_selfupdate_clone")
   
   # target include dirs
   
@@ -268,6 +276,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_selfupdate
+    gittest_ev2_selfupdate_clone
   )
   
   # misc
@@ -424,9 +433,12 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/gittest_ev2_test_s.cpp
   )
   
-  # gittest_ev2_selfupdate
+  # gittest_ev2_selfupdate, gittest_ev2_selfupdate_clone
   
   SET(GITTEST_EV2_SELFUPDATE_HEADERS
+    include/gittest/gittest_ev2_test.h
+  )
+  SET(GITTEST_EV2_SELFUPDATE_CLONE_HEADERS
     include/gittest/gittest_ev2_test.h
   )
   
@@ -437,4 +449,11 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/gittest_ev2_test_s.cpp
   )
 
+  SET(GITTEST_EV2_SELFUPDATE_CLONE_SOURCES
+    src/gittest_ev2_selfupdate.cpp
+    src/gittest_ev2_test_c.cpp
+    src/gittest_ev2_test_su.cpp
+    src/gittest_ev2_test_s.cpp
+  )
+  
 ENDMACRO ()

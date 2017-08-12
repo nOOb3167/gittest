@@ -29,12 +29,18 @@ int gs_ev2_selfupdate_reexec()
 	char CurExeBuf[512] = {};
 	size_t LenCurExe = 0;
 
+	std::stringstream ss;
+	std::string out;
+
 	if (!!(r = gs_get_current_executable_filename(CurExeBuf, sizeof CurExeBuf, &LenCurExe)))
 		GS_GOTO_CLEAN();
 
+	ss << "\"" << std::string(CurExeBuf, LenCurExe) << "\"" << " " << std::string(GS_SELFUPDATE_ARG_CHILD);
+	out = ss.str();
+
 	if (!!(r = gs_process_start(
 		CurExeBuf, LenCurExe,
-		CurExeBuf, LenCurExe)))
+		out.data(), out.size())))
 	{
 		GS_GOTO_CLEAN();
 	}
@@ -49,16 +55,14 @@ int gs_ev2_selfupdate_dryrun(
 {
 	int r = 0;
 
-	std::string RunFileName(RunFileNameBuf, LenRunFileName);
-
 	std::stringstream ss;
 	std::string out;
 
-	ss << "\"" << RunFileName << "\"" << " " << std::string(GS_SELFUPDATE_ARG_VERSUB);
+	ss << "\"" << std::string(RunFileNameBuf, LenRunFileName) << "\"" << " " << std::string(GS_SELFUPDATE_ARG_VERSUB);
 	out = ss.str();
 
 	if (!!(r = gs_process_start(
-		RunFileName.data(), RunFileName.size(),
+		RunFileNameBuf, LenRunFileName,
 		out.data(), out.size())))
 	{
 		GS_GOTO_CLEAN();
@@ -207,6 +211,7 @@ int main(int argc, char **argv)
 	std::thread ThreadServ;
 
 	uint32_t HaveUpdateShouldQuit = 0;
+	uint32_t DoNotReExec = 0;
 
 	if (!!(r = aux_gittest_init()))
 		GS_GOTO_CLEAN();
@@ -223,7 +228,7 @@ int main(int argc, char **argv)
 
 	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
-	gs_debug_break();
+
 	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
 		GS_GOTO_CLEAN();
 
@@ -231,13 +236,20 @@ int main(int argc, char **argv)
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-	if (argc == 2 && strcmp(argv[1], GS_SELFUPDATE_ARG_VERSUB))
+	if (argc == 2 && strcmp(argv[1], GS_SELFUPDATE_ARG_VERSUB) == 0) {
+		printf(GS_CONFIG_DEFS_GITTEST_EV2_SELFUPDATE_VERSUB);
 		GS_ERR_NO_CLEAN(0);
+	}
+	else if (argc == 2 && strcmp(argv[1], GS_SELFUPDATE_ARG_CHILD) == 0) {
+		DoNotReExec = 1;
+	}
 
 	if (!!(r = gs_ev2_selfupdate_full(CommonVars, &HaveUpdateShouldQuit)))
 		GS_GOTO_CLEAN();
 
 	if (HaveUpdateShouldQuit) {
+		if (DoNotReExec)
+			GS_ERR_CLEAN(1);
 		if (!!(r = gs_ev2_selfupdate_reexec()))
 			GS_GOTO_CLEAN();
 	}

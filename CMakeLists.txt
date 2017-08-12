@@ -25,6 +25,7 @@ SET(GITTEST_SOURCES_MAGIC_TARGET_LIST
   gittest_test_02
   gittest_ev2_test
   gittest_ev2_selfupdate
+  gittest_ev2_selfupdate_clone
 )
 
 GITTEST_COMMON_SET_PLATFORM()
