@@ -3,7 +3,11 @@
 
 #include <cstdint>
 
+#define EVENT2_VISIBILITY_STATIC_MSVC
 #include <event2/bufferevent.h>
+
+#include <gittest/config.h>
+#include <gittest/crank_clnt.h>
 
 #define GS_EV_TIMEOUT_SEC 30
 
@@ -71,24 +75,6 @@ struct GsEvCtxSelfUpdate
 int gs_ev_ctx_clnt_destroy(struct GsEvCtxClnt *w);
 int gs_ev_ctx_selfupdate_destroy(struct GsEvCtxSelfUpdate *w);
 
-int gs_ev_evbuffer_get_frame_try(
-	struct evbuffer *Ev,
-	const char **oDataOpt,
-	size_t *oLenHdr,
-	size_t *oLenDataOpt);
-int gs_ev_evbuffer_write_frame(
-	struct evbuffer *Ev,
-	const char *Data,
-	size_t LenData);
-
-int gs_ev2_listen(
-	struct GsEvCtx *CtxBase,
-	uint32_t ServPortU32);
-int gs_ev2_connect(
-struct GsEvCtx *CtxBase,
-	const char *ConnectHostNameBuf, size_t LenConnectHostName,
-	uint32_t ConnectPort);
-
 int gs_selfupdate_state_code(
 	struct GsSelfUpdateState *State,
 	uint32_t *oCode);
@@ -104,4 +90,29 @@ int gs_ev2_test_selfupdatemain(
 	struct GsAuxConfigCommonVars CommonVars,
 	struct GsEvCtxSelfUpdate **oCtx);
 
+/* common */
+
+int gs_ev_evbuffer_get_frame_try(
+	struct evbuffer *Ev,
+	const char **oDataOpt,
+	size_t *oLenHdr,
+	size_t *oLenDataOpt);
+int gs_ev_evbuffer_write_frame(
+	struct evbuffer *Ev,
+	const char *Data,
+	size_t LenData);
+
+void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV);
+void bev_read_cb(struct bufferevent *Bev, void *CtxBaseV);
+
+void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct sockaddr *Addr, int AddrLen, void *CtxBaseV);
+void evc_error_cb(struct evconnlistener *Listener, void *CtxBaseV);
+
+int gs_ev2_listen(
+	struct GsEvCtx *CtxBase,
+	uint32_t ServPortU32);
+int gs_ev2_connect(
+struct GsEvCtx *CtxBase,
+	const char *ConnectHostNameBuf, size_t LenConnectHostName,
+	uint32_t ConnectPort);
 #endif /* _GITTEST_EV2_TEST_H_ */

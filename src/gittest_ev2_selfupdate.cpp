@@ -208,10 +208,11 @@ int main(int argc, char **argv)
 	struct GsConfMap *ConfMap = NULL;
 	struct GsAuxConfigCommonVars CommonVars = {};
 
-	std::thread ThreadServ;
-
 	uint32_t HaveUpdateShouldQuit = 0;
 	uint32_t DoNotReExec = 0;
+
+	// FIXME: due to possible race condition vs startup of server (workaround)
+	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
 	if (!!(r = aux_gittest_init()))
 		GS_GOTO_CLEAN();
@@ -231,10 +232,6 @@ int main(int argc, char **argv)
 
 	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
 		GS_GOTO_CLEAN();
-
-	ThreadServ.swap(std::thread(gs_ev2_test_servmain, CommonVars));
-
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
 	if (argc == 2 && strcmp(argv[1], GS_SELFUPDATE_ARG_VERSUB) == 0) {
 		printf(GS_CONFIG_DEFS_GITTEST_EV2_SELFUPDATE_VERSUB);

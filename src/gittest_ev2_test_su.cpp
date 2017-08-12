@@ -276,6 +276,13 @@ clean:
 	return r;
 }
 
+int gs_ev_ctx_selfupdate_destroy(struct GsEvCtxSelfUpdate *w)
+{
+	if (w)
+		delete w;
+	return 0;
+}
+
 int gs_ev2_test_selfupdatemain(
 	struct GsAuxConfigCommonVars CommonVars,
 	struct GsEvCtxSelfUpdate **oCtx)

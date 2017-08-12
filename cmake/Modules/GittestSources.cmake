@@ -10,6 +10,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_serv
     gittest_ev2_selfupdate
     gittest_ev2_selfupdate_clone
   )
@@ -25,6 +26,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_serv
     gittest_ev2_selfupdate
     gittest_ev2_selfupdate_clone
   )
@@ -36,6 +38,7 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_serv
     gittest_ev2_selfupdate
     gittest_ev2_selfupdate_clone
   )
@@ -275,6 +278,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_log_convert
     gittest_test_02
     gittest_ev2_test
+    gittest_ev2_serv
     gittest_ev2_selfupdate
     gittest_ev2_selfupdate_clone
   )
@@ -431,6 +435,19 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/gittest_ev2_test_c.cpp
     src/gittest_ev2_test_su.cpp
     src/gittest_ev2_test_s.cpp
+    src/gittest_ev2_common.cpp
+  )
+  
+  # gittest_ev2_serv
+  
+  SET(GITTEST_EV2_SERV_HEADERS
+    include/gittest/gittest_ev2_test.h
+  )
+  
+  SET(GITTEST_EV2_SERV_SOURCES
+    src/gittest_ev2_serv.cpp
+    src/gittest_ev2_test_s.cpp
+    src/gittest_ev2_common.cpp
   )
   
   # gittest_ev2_selfupdate, gittest_ev2_selfupdate_clone
@@ -446,14 +463,14 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/gittest_ev2_selfupdate.cpp
     src/gittest_ev2_test_c.cpp
     src/gittest_ev2_test_su.cpp
-    src/gittest_ev2_test_s.cpp
+    src/gittest_ev2_common.cpp
   )
 
   SET(GITTEST_EV2_SELFUPDATE_CLONE_SOURCES
     src/gittest_ev2_selfupdate.cpp
     src/gittest_ev2_test_c.cpp
     src/gittest_ev2_test_su.cpp
-    src/gittest_ev2_test_s.cpp
+    src/gittest_ev2_common.cpp
   )
   
 ENDMACRO ()
