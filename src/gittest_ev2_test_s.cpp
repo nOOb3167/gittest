@@ -329,6 +329,7 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	struct GsEvCtxServ *Ctx = new GsEvCtxServ();
 
 	Ctx->base.mMagic = GS_EV_CTX_SERV_MAGIC;
+	Ctx->base.mIsError = 0;
 	Ctx->base.CbConnect = gs_ev_serv_state_crank3_connected;
 	Ctx->base.CbDisconnect = gs_ev_serv_state_crank3_disconnected;
 	Ctx->base.CbCrank = gs_ev_serv_state_crank3;
@@ -346,6 +347,7 @@ int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars)
 	GS_LOG(I, S, "exiting");
 
 clean:
+	// GS_DELETE_F(&Ctx, gs_ev_ctx_serv_destroy);
 	
 	return r;
 }

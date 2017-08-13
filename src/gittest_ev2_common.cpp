@@ -111,14 +111,16 @@ void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
 
 		GS_LOG(I, PF, "[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 
-		// FIXME: possibly loopbreak on fatal error / BEV_EVENT_ERROR
-		// if (!!(r = event_base_loopbreak(bufferevent_get_base(Bev))))
-		//	GS_GOTO_CLEAN();
+		GS_ERR_CLEAN(1);
 	}
 	
 clean:
-	if (!!r)
-		assert(0);
+	if (!!r) {
+		CtxBase->mIsError = 1;
+
+		if (!!(event_base_loopbreak(bufferevent_get_base(Bev))))
+			GS_ASSERT(0);
+	}
 }
 
 void bev_read_cb(struct bufferevent *Bev, void *CtxBaseV)
@@ -148,8 +150,12 @@ void bev_read_cb(struct bufferevent *Bev, void *CtxBaseV)
 	}
 
 clean:
-	if (!!r)
-		assert(0);
+	if (!!r) {
+		CtxBase->mIsError = 1;
+
+		if (!!(event_base_loopbreak(bufferevent_get_base(Bev))))
+			GS_ASSERT(0);
+	}
 }
 
 void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct sockaddr *Addr, int AddrLen, void *CtxBaseV)
@@ -176,15 +182,23 @@ void evc_listener_cb(struct evconnlistener *Listener, evutil_socket_t Fd, struct
 		GS_GOTO_CLEAN();
 
 clean:
-	if (!!r)
-		GS_ASSERT(0);
+	if (!!r) {
+		CtxBase->mIsError = 1;
+		
+		if (!!(event_base_loopbreak(Base)))
+			GS_ASSERT(0);
+	}
 }
 
 void evc_error_cb(struct evconnlistener *Listener, void *CtxBaseV)
 {
 	struct event_base *Base = evconnlistener_get_base(Listener);
 
+	struct GsEvCtx *CtxBase = (struct GsEvCtx *) CtxBaseV;
+
 	GS_LOG(E, S, "Listener failure");
+
+	CtxBase->mIsError = 1;
 
 	if (!!(event_base_loopbreak(Base)))
 		GS_ASSERT(0);
@@ -234,6 +248,9 @@ int gs_ev2_listen(
 	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
 		GS_GOTO_CLEAN();
 
+	if (CtxBase->mIsError)
+		GS_ERR_CLEAN(1);
+
 clean:
 	freeaddrinfo(ServInfo);
 
@@ -268,6 +285,9 @@ int gs_ev2_connect(
 		GS_GOTO_CLEAN();
 
 	if (!!(r = event_base_loop(Base, EVLOOP_NO_EXIT_ON_EMPTY)))
+		GS_GOTO_CLEAN();
+
+	if (CtxBase->mIsError)
 		GS_GOTO_CLEAN();
 
 clean:

@@ -29,6 +29,8 @@ struct GsEvCtx
 {
 	uint32_t mMagic;
 
+	int mIsError;
+
 	int (*CbConnect)(
 		struct bufferevent *Bev,
 		struct GsEvCtx *CtxBase);

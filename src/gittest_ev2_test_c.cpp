@@ -438,6 +438,7 @@ int gs_ev2_test_clntmain(
 	struct GsEvCtxClnt *Ctx = new GsEvCtxClnt();
 
 	Ctx->base.mMagic = GS_EV_CTX_CLNT_MAGIC;
+	Ctx->base.mIsError = 0;
 	Ctx->base.CbConnect = gs_ev_clnt_state_crank3_connected;
 	Ctx->base.CbDisconnect = gs_ev_clnt_state_crank3_disconnected;
 	Ctx->base.CbCrank = gs_ev_clnt_state_crank3;
@@ -451,10 +452,12 @@ int gs_ev2_test_clntmain(
 		CommonVars.ServHostNameBuf, CommonVars.LenServHostName,
 		CommonVars.ServPort)))
 	{
-		GS_GOTO_CLEAN();
+		GS_ERR_NO_CLEAN(0);
 	}
 
 	GS_LOG(I, S, "exiting");
+
+noclean:
 
 	if (oCtx)
 		*oCtx = Ctx;

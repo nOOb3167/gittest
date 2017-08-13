@@ -294,6 +294,7 @@ int gs_ev2_test_selfupdatemain(
 	struct GsEvCtxSelfUpdate *Ctx = new GsEvCtxSelfUpdate();
 
 	Ctx->base.mMagic = GS_EV_CTX_SELFUPDATE_MAGIC;
+	Ctx->base.mIsError = 0;
 	Ctx->base.CbConnect = gs_ev_selfupdate_crank3_connected;
 	Ctx->base.CbDisconnect = gs_ev_selfupdate_crank3_disconnected;
 	Ctx->base.CbCrank = gs_ev_selfupdate_crank3;
