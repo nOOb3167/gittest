@@ -9,7 +9,7 @@
 #include <gittest/config.h>
 #include <gittest/crank_clnt.h>
 
-#define GS_EV_TIMEOUT_SEC 30
+#define GS_EV_TIMEOUT_SEC (30 * 20)
 
 #define GS_DISCONNECT_REASON_ERROR BEV_EVENT_ERROR
 #define GS_DISCONNECT_REASON_EOF BEV_EVENT_EOF
