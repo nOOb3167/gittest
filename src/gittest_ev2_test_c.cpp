@@ -87,6 +87,10 @@ int gs_ev_clnt_state_crank3_disconnected(
 
 	bufferevent_free(Bev);
 
+	GS_LOG(I, S, "crank3 disconnected, err-trigger");
+
+	r = 1;
+
 	return r;
 }
 

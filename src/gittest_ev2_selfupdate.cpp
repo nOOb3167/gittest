@@ -94,23 +94,21 @@ int gs_ev2_selfupdate_full(
 	char OldFileNameBuf[512] = {};
 	size_t LenOldFileName = 0;
 
-	GS_ASSERT(sizeof TempFileNameBuf >= MAX_PATH);
+	if (!!(r = gs_get_current_executable_filename(CurExeBuf, sizeof CurExeBuf, &LenCurExe)))
+		GS_GOTO_CLEAN();
 
-	GS_LOG(I, S, "start");
+	GS_LOG(I, PF, "start selfupdate [executable_filename=[%.*s]]", LenCurExe, CurExeBuf);
 
-	if (!!(r = gs_ev2_test_selfupdatemain(CommonVars, &Ctx)))
+	if (!!(r = gs_ev2_test_selfupdatemain(CommonVars, CurExeBuf, LenCurExe, &Ctx)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_selfupdate_state_code(Ctx->mState, &Code)))
 		GS_GOTO_CLEAN();
 
+	if (Code == GS_SELFUPDATE_STATE_CODE_NEED_BLOB_HEAD)
+		GS_ERR_NO_CLEAN(0);  // exited upon finding gotten HEAD needs no update triggered
 	if (Code != GS_SELFUPDATE_STATE_CODE_NEED_NOTHING)
-		GS_ERR_NO_CLEAN(0);
-
-	if (!!(r = gs_get_current_executable_filename(CurExeBuf, sizeof CurExeBuf, &LenCurExe)))
-		GS_GOTO_CLEAN();
-
-	GS_LOG(I, PF, "executable_filename=[%.*s]", LenCurExe, CurExeBuf);
+		GS_ERR_CLEAN(1);     // must be some kind of oversight
 
 	if (!!(r = gs_build_modified_filename(
 		CurExeBuf, LenCurExe,

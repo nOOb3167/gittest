@@ -71,6 +71,7 @@ struct GsEvCtxSelfUpdate
 {
 	struct GsEvCtx base;
 	struct GsAuxConfigCommonVars mCommonVars;
+	const char *mCurExeBuf; size_t mLenCurExe;
 	struct GsSelfUpdateState *mState;
 };
 
@@ -90,6 +91,7 @@ int gs_ev2_test_clntmain(
 int gs_ev2_test_servmain(struct GsAuxConfigCommonVars CommonVars);
 int gs_ev2_test_selfupdatemain(
 	struct GsAuxConfigCommonVars CommonVars,
+	const char *CurExeBuf, size_t LenCurExe,
 	struct GsEvCtxSelfUpdate **oCtx);
 
 /* common */

@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
 #include <cstddef>
 #include <cstdint>
 
@@ -106,12 +110,10 @@ void bev_event_cb(struct bufferevent *Bev, short What, void *CtxBaseV)
 		else if (What & BEV_EVENT_ERROR)
 			DisconnectReason = GS_DISCONNECT_REASON_ERROR;
 
-		if (!!(r = CtxBase->CbDisconnect(Bev, CtxBase, DisconnectReason)))
-			GS_GOTO_CLEAN();
-
 		GS_LOG(I, PF, "[beverr=[%s]]\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 
-		GS_ERR_CLEAN(1);
+		if (!!(r = CtxBase->CbDisconnect(Bev, CtxBase, DisconnectReason)))
+			GS_GOTO_CLEAN();
 	}
 	
 clean:

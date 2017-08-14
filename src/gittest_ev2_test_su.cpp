@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
 #include <git2.h>
 
 #define EVENT2_VISIBILITY_STATIC_MSVC
@@ -130,6 +134,10 @@ int gs_ev_selfupdate_crank3_disconnected(
 
 	bufferevent_free(Bev);
 
+	GS_LOG(I, S, "crank3 disconnected, err-trigger");
+
+	r = 1;
+
 	return r;
 }
 
@@ -176,9 +184,11 @@ process_another_state_label:
 		if (!!(r = aux_frame_read_oid(Packet->data, Packet->dataLength, Offset, &Offset, BlobHeadOid->id, GIT_OID_RAWSZ)))
 			GS_GOTO_CLEAN();
 
-		// FIXME: really SelfUpdateExePathBuf ? probably want to detect current executable filename
+		if (!!(r = gs_buf_ensure_haszero(Ctx->mCurExeBuf, Ctx->mLenCurExe + 1)))
+			GS_GOTO_CLEAN();
+
 		/* empty as_path parameter means no filters applied */
-		if (!!(r = git_repository_hashfile(&BlobOldOidT, *Ctx->mState->mRepositoryMemory, Ctx->mCommonVars.SelfUpdateExePathBuf, GIT_OBJ_BLOB, "")))
+		if (!!(r = git_repository_hashfile(&BlobOldOidT, *Ctx->mState->mRepositoryMemory, Ctx->mCurExeBuf, GIT_OBJ_BLOB, "")))
 			GS_GOTO_CLEAN_L(E, PF, "failure hashing [filename=[%.*s]]", Ctx->mCommonVars.LenSelfUpdateExePath, Ctx->mCommonVars.SelfUpdateExePathBuf);
 
 		if (git_oid_cmp(&BlobOldOidT, BlobHeadOid.get()) == 0) {
@@ -285,6 +295,7 @@ int gs_ev_ctx_selfupdate_destroy(struct GsEvCtxSelfUpdate *w)
 
 int gs_ev2_test_selfupdatemain(
 	struct GsAuxConfigCommonVars CommonVars,
+	const char *CurExeBuf, size_t LenCurExe,
 	struct GsEvCtxSelfUpdate **oCtx)
 {
 	int r = 0;
@@ -299,6 +310,7 @@ int gs_ev2_test_selfupdatemain(
 	Ctx->base.CbDisconnect = gs_ev_selfupdate_crank3_disconnected;
 	Ctx->base.CbCrank = gs_ev_selfupdate_crank3;
 	Ctx->mCommonVars = CommonVars;
+	Ctx->mCurExeBuf = CurExeBuf; Ctx->mLenCurExe = LenCurExe;
 	Ctx->mState = new GsSelfUpdateState();
 
 	if (!!(r = gs_ev2_connect(

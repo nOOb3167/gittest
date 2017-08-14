@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
+#endif /* _MSC_VER */
+
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
@@ -130,6 +134,8 @@ int gs_ev_serv_state_crank3_disconnected(
 	int r = 0;
 
 	bufferevent_free(Bev);
+
+	GS_LOG(I, S, "crank3 disconnected");
 
 	return r;
 }
