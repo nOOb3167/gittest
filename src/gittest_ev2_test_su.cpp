@@ -194,7 +194,7 @@ process_another_state_label:
 		if (git_oid_cmp(&BlobOldOidT, BlobHeadOid.get()) == 0) {
 			char buf[GIT_OID_HEXSZ] = {};
 			git_oid_fmt(buf, &BlobOldOidT);
-			GS_LOG(I, PF, "have latest [oid=[%.*s]]", GIT_OID_HEXSZ, buf);
+			GS_LOG(I, PF, "have latest [oid=[%.*s]]", (int)GIT_OID_HEXSZ, buf);
 
 			// FIXME: delegate to cleansub (nocleansub)
 			GS_ERR_NO_CLEAN(GS_ERRCODE_EXIT);
