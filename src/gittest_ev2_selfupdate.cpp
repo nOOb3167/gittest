@@ -187,8 +187,10 @@ int gs_ev2_mainupdate_full(
 	if (!!(r = clnt_state_code(Ctx->mClntState, &Code)))
 		GS_GOTO_CLEAN();
 
+	if (Code == GS_CLNT_STATE_CODE_NEED_TREE_HEAD)
+		GS_ERR_NO_CLEAN(0);  // exited upon finding gotten HEAD needs no update triggered
 	if (Code != GS_CLNT_STATE_CODE_NEED_NOTHING)
-		GS_ERR_NO_CLEAN(0);
+		GS_ERR_CLEAN(1);     // must be some kind of oversight
 
 noclean:
 
