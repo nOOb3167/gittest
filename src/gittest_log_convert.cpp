@@ -6,7 +6,7 @@
 #include <gittest/filesys.h>
 #include <gittest/log.h>
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int callback_printout_sqlite(
 	void *Ctx,

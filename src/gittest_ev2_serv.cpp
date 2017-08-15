@@ -9,7 +9,7 @@
 #include <gittest/gittest.h>
 #include <gittest/gittest_ev2_test.h>
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int main(int argc, char **argv)
 {

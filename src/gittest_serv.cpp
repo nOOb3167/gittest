@@ -12,7 +12,7 @@
 #include <gittest/crank_serv.h>
 #include <gittest/gittest_selfupdate.h>
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int startserv() {
 	int r = 0;

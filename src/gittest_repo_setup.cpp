@@ -24,7 +24,7 @@
 #define GS_REPO_SETUP_ARG_MAINTENANCE           "--xmaintenance"
 #define GS_REPO_SETUP_ARG_DUMMYPREP             "--xdummyprep"
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int gs_repo_init(const char *RepoPathBuf, size_t LenRepoPath, const char *OptHardcodedSanityCheck)
 {
@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	GS_LOG_ADD(gs_log_create_ret("repo_setup"));
+	GS_LOG_ADD(gs_log_base_create_ret("repo_setup"));
 
 	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();

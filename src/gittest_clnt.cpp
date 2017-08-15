@@ -15,7 +15,7 @@
 #include <gittest/net2.h>
 #include <gittest/gittest_selfupdate.h>
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int startselfupdate(int argc, char **argv) {
 	int r = 0;

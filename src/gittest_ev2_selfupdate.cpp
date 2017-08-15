@@ -20,7 +20,7 @@
 
 #include <gittest/gittest_ev2_test.h>
 
-GsLogList *g_gs_log_list_global = gs_log_list_global_create_cpp();
+GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 
 int gs_ev2_selfupdate_reexec()
 {

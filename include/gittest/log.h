@@ -1,55 +1,64 @@
 #ifndef _GITTEST_LOG_H_
 #define _GITTEST_LOG_H_
 
-#include <cstdint>
+#include <stdint.h>
 
-#include <memory>
-#include <string>
-#include <deque>
-#include <list>
-#include <mutex>
-#include <atomic>
+#include <gittest/bypart.h>
 
-#include <gittest/misc.h>
-#include <gittest/cbuf.h>
-#include <gittest/log_defs.h>
-
-#define GS_LOG_VERSION_COMPILED 0x00010000
-
-#define GS_TRIPWIRE_LOG_BASE 0xA37F4680
-#define GS_TRIPWIRE_LOG      0xA37F4681
-
-#define GS_LOG_STR_EXTRA_SUFFIX "_log"
+#define GS_LOG_STR_EXTRA_SUFFIX    "_log"
 #define GS_LOG_STR_EXTRA_EXTENSION ".txt"
-#define GS_LOG_STR_EXPECTED_SUFFIX  GS_LOG_STR_EXTRA_SUFFIX GS_LOG_STR_EXTRA_EXTENSION
 
-#define GS_LOG_DEFAULT_SIZE 64 * 1024 /* 64KB */
-
-#define GS_LOG_ADD(PLOG) { if (!!gs_log_list_add_log(GS_LOG_LIST_GLOBAL_NAME, GS_LOG_BASE_CAST((PLOG)))) { GS_ERR_CLEAN(1); } }
+#define GS_LOG_ADD(PLOG) { if (!!gs_log_list_add_log(GS_LOG_LIST_GLOBAL_NAME, (PLOG))) { GS_ERR_CLEAN(1); } }
 #define GS_LOG_GET(PREFIX) gs_log_list_get_log_ret(GS_LOG_LIST_GLOBAL_NAME, (PREFIX))
 #define GS_LOG_GET_2(PREFIX1, OPT_PREFIX2) gs_log_list_get_log_ret_2(GS_LOG_LIST_GLOBAL_NAME, (PREFIX1), (OPT_PREFIX2))
 
 /* global log list: user should define, signature 'GsLogList *', initialized eg by 'gs_log_list_global_create' */
 #define GS_LOG_LIST_GLOBAL_NAME g_gs_log_list_global
 
-#define GS_LOG_BASE_CAST(PTR) gs_log_base_cast_((GsLogBase *)(PTR))
-#define GS_LOG_CAST(PTR) gs_log_cast_((GsLog *)(PTR))
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
-
-
-typedef uint32_t gs_tripwire_t;
+struct GsVersion;
+struct GsLogBase;
+struct GsLogList;
+struct GsLogTls;
 
 struct GsLogUnified;
 
-struct GsVersion;
-struct GsLogList;
-struct GsLogTls;
-struct GsLogBase;
-struct GsLog;
+/* global log list: declaration only */
+extern GsLogList *GS_LOG_LIST_GLOBAL_NAME;
 
+void gs_log_version_make_compiled(struct GsVersion *oVersion);
+int gs_log_version_check_compiled(struct GsVersion *other);
+
+struct GsLogBase * gs_log_base_create_ret(const char *Prefix);
+int gs_log_base_create(
+	uint32_t LogLevelLimit,
+	const char *PrefixBuf, size_t LenPrefix,
+	struct GsLogBase **oBase);
+int gs_log_base_destroy(struct GsLogBase *Base);
+void gs_log_base_enter(struct GsLogBase *Base);
+void gs_log_base_exit(struct GsLogBase *Base);
+
+struct GsLogList * gs_log_list_global_create();
+int gs_log_list_create(struct GsLogList **oLogList);
+int gs_log_list_free(struct GsLogList *LogList);
+int gs_log_list_set_log_unified(struct GsLogList *LogList, struct GsLogUnified *LogUnified);
+int gs_log_list_add_log(struct GsLogList *LogList, struct GsLogBase *Log);
+int gs_log_list_get_log(struct GsLogList *LogList, const char *Prefix, struct GsLogBase **oLog);
+int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
+struct GsLogBase * gs_log_list_get_log_ret(struct GsLogList *LogList, const char *Prefix);
+struct GsLogBase * gs_log_list_get_log_ret_2(struct GsLogList *LogList, const char *Prefix1, const char *optPrefix2);
+
+int gs_log_create_common_logs();
+
+int gs_log_crash_handler_dump_global_log_list_suffix_2(
+	const char *SuffixBuf1, const char *SuffixBuf2);
+
+/* defined per-platform */
+int gs_log_crash_handler_setup();
+int gs_log_crash_handler_dump_global_log_list_suffix(
+	const char *SuffixBuf, size_t LenSuffix);
+
+/* defined in log_unified.cpp */
 int gs_log_unified_create(struct GsLogUnified **oLogUnified);
 int gs_log_unified_destroy(struct GsLogUnified *LogUnified);
 int gs_log_unified_message_log(
@@ -61,74 +70,11 @@ int gs_log_unified_message_log(
 	const char *CppFile,
 	int CppLine);
 
-/* public structure - reset with gs_log_dump_reset */
-struct GsLogDump {
-	char *mBuf;
-	size_t mBufSize;
-	size_t mLenBuf;
-};
-
-/* global log list: declaration only */
-extern GsLogList *GS_LOG_LIST_GLOBAL_NAME;
-
-
-GsLogBase *gs_log_base_cast_(void *Log);
-int gs_log_base_init(GsLogBase *Klass, uint32_t LogLevelLimit, const char *Prefix);
-void gs_log_base_enter(GsLogBase *Klass);
-void gs_log_base_exit(GsLogBase *Klass);
-
-GsLog *gs_log_cast_(void *Log);
-int gs_log_create(const char *Prefix, GsLog **oLog);
-GsLog * gs_log_create_ret(const char *Prefix);
-int gs_log_init(GsLog *Klass, uint32_t LogLevelLimit);
-int gs_log_message_limit_level(GsLogBase *XKlass, uint32_t Level);
-void gs_log_message_log(GsLogBase *XKlass, uint32_t Level, const char *MsgBuf, uint32_t MsgSize, const char *CppFile, int CppLine);
-int gs_log_dump_and_flush(GsLogBase *XKlass, GsLogDump *oLogDump);
-int gs_log_dump_lowlevel(GsLogBase *XKlass, void *ctx, gs_bypart_cb_t cb);
-
-void gs_log_tls(uint32_t Level, const char *MsgBuf, uint32_t MsgSize);
-
-void gs_log_version_make_compiled(GsVersion *oVersion);
-int gs_log_version_check_compiled(GsVersion *other);
-int gs_log_version_check(GsVersion *other, GsVersion compare);
-
-void gs_log_dump_reset(GsLogDump *ioDump);
-void gs_log_dump_reset_to_noalloc(GsLogDump *ioDump, char *Buf, size_t BufSize, size_t LenBuf);
-void gs_log_dump_reset_to(GsLogDump *ioDump, const char *Buf, size_t BufSize, size_t LenBuf);
-
-int gs_log_list_create(GsLogList **oLogList);
-int gs_log_list_free(GsLogList *LogList);
-int gs_log_list_set_log_unified(GsLogList *LogList, struct GsLogUnified *LogUnified);
-int gs_log_list_add_log(GsLogList *LogList, GsLogBase *Log);
-int gs_log_list_get_log(GsLogList *LogList, const char *Prefix, GsLogBase **oLog);
-GsLogBase * gs_log_list_get_log_ret(GsLogList *LogList, const char *Prefix);
-GsLogBase * gs_log_list_get_log_ret_2(GsLogList *LogList, const char *Prefix1, const char *optPrefix2);
-int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t cb);
-int gs_log_list_dump_all(GsLogList *LogList, GsLogDump *oRetDump);
-
-int gs_log_create_common_logs();
-
-int gs_log_dump_construct_header_(
-	const char *PrefixBuf, size_t PrefixSize,
-	char *ioHeaderBuf, size_t HeaderSize, size_t *oLenHeader);
-
-int gs_log_crash_handler_dump_global_log_list_suffix_2(
-	const char *SuffixBuf1, const char *SuffixBuf2);
-int gs_log_crash_handler_dump_global_log_list_suffix(
-	const char *SuffixBuf, size_t LenSuffix);
-int gs_log_crash_handler_dump_global_log_list();
-int gs_log_crash_handler_setup();
-
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
-
-#ifdef __cplusplus
 
 void gs_log_crash_handler_printall_cpp();
 
 /* global log list: can initialize the g_gs_log_list_global */
-GsLogList *gs_log_list_global_create_cpp();
+GsLogList *gs_log_list_global_create();
 
 class GsLogGuard {
 public:
@@ -151,7 +97,5 @@ private:
 };
 
 typedef GsLogGuard log_guard_t;
-
-#endif /* __cplusplus */
 
 #endif /* _GITTEST_LOG_H_ */
