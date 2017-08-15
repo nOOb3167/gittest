@@ -224,13 +224,13 @@ int main(int argc, char **argv)
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_log_create_common_logs()))
-		GS_GOTO_CLEAN();
-
 	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_config_create_common_logs(ConfMap)))
 		GS_GOTO_CLEAN();
 
 	if (argc == 2 && strcmp(argv[1], GS_SELFUPDATE_ARG_VERSUB) == 0) {

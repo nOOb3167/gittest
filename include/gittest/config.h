@@ -53,6 +53,8 @@ int gs_config_read_builtin_or_relative_current_executable(
 	GsConfMap **oKeyVal);
 int gs_config_read_default_everything(GsConfMap **oKeyVal);
 
+int gs_config_create_common_logs(
+	GsConfMap *KeyVal);
 int gs_config_get_common_vars(
 	GsConfMap *KeyVal,
 	GsAuxConfigCommonVars *oCommonVars);

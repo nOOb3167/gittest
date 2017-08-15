@@ -36,13 +36,13 @@ int main(int argc, char **argv)
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_log_create_common_logs()))
-		GS_GOTO_CLEAN();
-
 	if (!!(r = gs_config_read_default_everything(&ConfMap)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_config_create_common_logs(ConfMap)))
 		GS_GOTO_CLEAN();
 
 	ThreadServ.swap(std::thread(gs_ev2_test_servmain, CommonVars));

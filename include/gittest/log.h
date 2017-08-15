@@ -48,8 +48,6 @@ int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t 
 struct GsLogBase * gs_log_list_get_log_ret(struct GsLogList *LogList, const char *Prefix);
 struct GsLogBase * gs_log_list_get_log_ret_2(struct GsLogList *LogList, const char *Prefix1, const char *optPrefix2);
 
-int gs_log_create_common_logs();
-
 int gs_log_crash_handler_dump_global_log_list_suffix_2(
 	const char *SuffixBuf1, const char *SuffixBuf2);
 

@@ -17,7 +17,7 @@ GsLogList *g_gs_log_list_global = gs_log_list_global_create();
 int startserv() {
 	int r = 0;
 
-	struct GsConfMap *ConfMap = NULL;;
+	struct GsConfMap *ConfMap = NULL;
 
 	GsAuxConfigCommonVars CommonVars = {};
 
@@ -29,6 +29,9 @@ int startserv() {
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_config_get_common_vars(ConfMap, &CommonVars)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_config_create_common_logs(ConfMap)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_net_full_create_connection_server(
@@ -63,20 +66,6 @@ clean:
 	return r;
 }
 
-int setuplogging() {
-	int r = 0;
-
-	if (!!(r = gs_log_crash_handler_setup()))
-		GS_GOTO_CLEAN();
-
-	if (!!(r = gs_log_create_common_logs()))
-		GS_GOTO_CLEAN();
-
-clean:
-
-	return r;
-}
-
 int main(int argc, char **argv) {
 	int r = 0;
 
@@ -86,7 +75,7 @@ int main(int argc, char **argv) {
 	if (!!(r = enet_initialize()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = setuplogging()))
+	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = startserv()))

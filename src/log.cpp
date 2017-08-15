@@ -465,35 +465,6 @@ struct GsLogBase * gs_log_list_get_log_ret_2(struct GsLogList *LogList, const ch
 	return Log;
 }
 
-int gs_log_create_common_logs() {
-	int r = 0;
-
-	GS_LOG_ADD(gs_log_base_create_ret("selfup"));
-
-	GS_LOG_ADD(gs_log_base_create_ret("serv"));
-	GS_LOG_ADD(gs_log_base_create_ret("clnt_worker"));
-	GS_LOG_ADD(gs_log_base_create_ret("clnt_aux"));
-	GS_LOG_ADD(gs_log_base_create_ret("clnt_serv"));
-	GS_LOG_ADD(gs_log_base_create_ret("serv_worker"));
-	GS_LOG_ADD(gs_log_base_create_ret("serv_aux"));
-	GS_LOG_ADD(gs_log_base_create_ret("serv_serv"));
-
-	// net2
-	GS_LOG_ADD(gs_log_base_create_ret("ntwk_clnt"));
-	GS_LOG_ADD(gs_log_base_create_ret("work_clnt"));
-	GS_LOG_ADD(gs_log_base_create_ret("ntwk_serv"));
-	GS_LOG_ADD(gs_log_base_create_ret("work_serv"));
-	GS_LOG_ADD(gs_log_base_create_ret("ntwk_selfup"));
-	GS_LOG_ADD(gs_log_base_create_ret("work_selfup"));
-
-	GS_LOG_ADD(gs_log_base_create_ret("ntwk_test02"));
-	GS_LOG_ADD(gs_log_base_create_ret("work_test02"));
-
-clean:
-
-	return r;
-}
-
 int gs_log_crash_handler_dump_global_log_list_suffix_2(
 	const char *SuffixBuf1, const char *SuffixBuf2)
 {

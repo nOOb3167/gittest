@@ -11,9 +11,10 @@
 #include <string>
 #include <chrono>
 
-#include <gittest/gittest.h>
 #include <gittest/misc.h>
 #include <gittest/log.h>
+#include <gittest/config.h>
+#include <gittest/gittest.h>
 #include <gittest/frame.h>
 #include <gittest/net2.h>
 #include <gittest/crank_test.h>
@@ -484,6 +485,8 @@ int main(int argc, char **argv)
 {
 	int r = 0;
 
+	struct GsConfMap *ConfMap = NULL;
+
 	if (!!(r = aux_gittest_init()))
 		GS_GOTO_CLEAN();
 
@@ -493,7 +496,10 @@ int main(int argc, char **argv)
 	if (!!(r = gs_log_crash_handler_setup()))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_log_create_common_logs()))
+	if (!!(r = gs_config_read_default_everything(&ConfMap)))
+		GS_GOTO_CLEAN();
+
+	if (!!(r = gs_config_create_common_logs(ConfMap)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = gs_net2_test_stuff_02()))

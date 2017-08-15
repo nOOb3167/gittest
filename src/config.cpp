@@ -13,6 +13,7 @@
 
 #include <gittest/misc.h>
 #include <gittest/config.h>
+#include <gittest/log.h>
 #include <gittest/filesys.h>
 
 #include <GsConfigHeader.h>  /* including the generated config header */
@@ -648,6 +649,34 @@ int gs_config_read_default_everything(GsConfMap **oKeyVal)
 		oKeyVal)))
 	{
 		GS_GOTO_CLEAN();
+	}
+
+clean:
+
+	return r;
+}
+
+int gs_config_create_common_logs(
+	GsConfMap *KeyVal)
+{
+	int r = 0;
+
+	std::string LogNames;
+
+	if (!!(r = gs_config_key_ex_interpret_subst(KeyVal, "ConfLogNames", &LogNames)))
+		GS_GOTO_CLEAN();
+
+	/* append zero for parsing purposes (so that ConfLogNames need not end in @SEP@) */
+	LogNames.append("\0", 1);
+
+	// FIXME: is this kind of code even acceptable in 2017? good luck anyhow
+	for (const char *Ptr = LogNames.data(), *Ptr2 = LogNames.data() + 1;
+		 Ptr < LogNames.data() + LogNames.size() && Ptr2 < LogNames.data() + LogNames.size();
+		 Ptr = (Ptr2 += 2) - 1) 
+	{
+		if (!(Ptr2 = (const char *) memchr(Ptr, '\0', LogNames.data() + LogNames.size() - Ptr)))
+			GS_GOTO_CLEAN();
+		GS_LOG_ADD(gs_log_base_create_ret(Ptr));
 	}
 
 clean:
