@@ -300,8 +300,6 @@ int gs_ev2_test_selfupdatemain(
 {
 	int r = 0;
 
-	log_guard_t Log(GS_LOG_GET("selfup"));
-
 	struct GsEvCtxSelfUpdate *Ctx = new GsEvCtxSelfUpdate();
 
 	Ctx->base.mMagic = GS_EV_CTX_SELFUPDATE_MAGIC;

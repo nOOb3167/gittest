@@ -437,8 +437,6 @@ int gs_ev2_test_clntmain(
 {
 	int r = 0;
 
-	log_guard_t Log(GS_LOG_GET("selfup"));
-
 	struct GsEvCtxClnt *Ctx = new GsEvCtxClnt();
 
 	Ctx->base.mMagic = GS_EV_CTX_CLNT_MAGIC;

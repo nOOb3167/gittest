@@ -105,10 +105,14 @@ int gs_ev2_selfupdate_full(
 	if (!!(r = gs_selfupdate_state_code(Ctx->mState, &Code)))
 		GS_GOTO_CLEAN();
 
+	GS_LOG(I, PF, "finish selfupdate [code=%d]", (int) Code);
+
 	if (Code == GS_SELFUPDATE_STATE_CODE_NEED_BLOB_HEAD)
 		GS_ERR_NO_CLEAN(0);  // exited upon finding gotten HEAD needs no update triggered
 	if (Code != GS_SELFUPDATE_STATE_CODE_NEED_NOTHING)
 		GS_ERR_CLEAN(1);     // must be some kind of oversight
+
+	GS_LOG(I, S, "start applying selfupdate");
 
 	if (!!(r = gs_build_modified_filename(
 		CurExeBuf, LenCurExe,
@@ -143,8 +147,12 @@ int gs_ev2_selfupdate_full(
 		GS_GOTO_CLEAN();
 	}
 
+	GS_LOG(I, S, "dryrun");
+
 	if (!!(r = gs_ev2_selfupdate_dryrun(TempFileNameBuf, LenTempFileName)))
 		GS_GOTO_CLEAN();
+
+	GS_LOG(I, S, "rename");
 
 	if (!!(r = gs_rename_wrapper(
 		CurExeBuf, LenCurExe,
@@ -159,6 +167,8 @@ int gs_ev2_selfupdate_full(
 	{
 		GS_GOTO_CLEAN();
 	}
+
+	GS_LOG(I, S, "finish applying selfupdate");
 
 	HaveUpdateShouldQuit = 1;
 
@@ -181,11 +191,15 @@ int gs_ev2_mainupdate_full(
 
 	uint32_t Code = 0;
 
+	GS_LOG(I, S, "start mainupdate");
+
 	if (!!(r = gs_ev2_test_clntmain(CommonVars, &Ctx)))
 		GS_GOTO_CLEAN();
 
 	if (!!(r = clnt_state_code(Ctx->mClntState, &Code)))
 		GS_GOTO_CLEAN();
+
+	GS_LOG(I, PF, "finish mainupdate [code=%d]", (int) Code);
 
 	if (Code == GS_CLNT_STATE_CODE_NEED_TREE_HEAD)
 		GS_ERR_NO_CLEAN(0);  // exited upon finding gotten HEAD needs no update triggered
@@ -200,6 +214,27 @@ clean:
 	return r;
 }
 
+int gs_ev2_selfupdate_checkout(
+	struct GsAuxConfigCommonVars CommonVars)
+{
+	int r = 0;
+
+	GS_LOG(I, S, "start checkout");
+
+	if (!!(r = aux_repository_checkout(
+		CommonVars.RepoMasterUpdatePathBuf, CommonVars.LenRepoMasterUpdatePath,
+		CommonVars.RefNameMainBuf, CommonVars.LenRefNameMain,
+		CommonVars.RepoMasterUpdateCheckoutPathBuf, CommonVars.LenRepoMasterUpdateCheckoutPath)))
+	{
+		GS_GOTO_CLEAN();
+	}
+
+	GS_LOG(I, S, "finish checkout");
+
+clean:
+
+	return r;
+}
 
 int main(int argc, char **argv)
 {
@@ -241,27 +276,36 @@ int main(int argc, char **argv)
 		DoNotReExec = 1;
 	}
 
-	if (!!(r = gs_ev2_selfupdate_full(CommonVars, &HaveUpdateShouldQuit)))
-		GS_GOTO_CLEAN();
+	{
+		log_guard_t Log(GS_LOG_GET("selfup"));
 
-	if (HaveUpdateShouldQuit) {
-		if (DoNotReExec)
-			GS_ERR_CLEAN(1);
-		if (!!(r = gs_ev2_selfupdate_reexec()))
+		if (!!(r = gs_ev2_selfupdate_full(CommonVars, &HaveUpdateShouldQuit)))
 			GS_GOTO_CLEAN();
-	}
-	else {
-		if (!!(r = gs_ev2_mainupdate_full(CommonVars)))
-			GS_GOTO_CLEAN();
+
+		if (HaveUpdateShouldQuit) {
+			if (DoNotReExec)
+				GS_ERR_CLEAN(1);
+			if (!!(r = gs_ev2_selfupdate_reexec()))
+				GS_GOTO_CLEAN();
+		}
+		else {
+			if (!!(r = gs_ev2_mainupdate_full(CommonVars)))
+				GS_GOTO_CLEAN();
+
+			if (!!(r = gs_ev2_selfupdate_checkout(CommonVars)))
+				GS_GOTO_CLEAN();
+		}
 	}
 
 noclean:
 
 clean:
-	if (!!r)
-		GS_ASSERT(0);
-
 	GS_DELETE_F(&ConfMap, gs_conf_map_destroy);
+
+	gs_log_crash_handler_dump_global_log_list_suffix("_log", strlen("_log"));
+
+	if (!!r)
+		EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
 }

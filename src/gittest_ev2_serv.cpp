@@ -37,14 +37,20 @@ int main(int argc, char **argv)
 	if (!!(r = gs_config_create_common_logs(ConfMap)))
 		GS_GOTO_CLEAN();
 
-	if (!!(r = gs_ev2_test_servmain(CommonVars)))
-		GS_GOTO_CLEAN();
+	{
+		log_guard_t Log(GS_LOG_GET("serv"));
+
+		if (!!(r = gs_ev2_test_servmain(CommonVars)))
+			GS_GOTO_CLEAN();
+	}
 
 clean:
-	if (!!r)
-		GS_ASSERT(0);
-
 	GS_DELETE_F(&ConfMap, gs_conf_map_destroy);
+
+	gs_log_crash_handler_dump_global_log_list_suffix("_log", strlen("_log"));
+
+	if (!!r)
+		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
 }
