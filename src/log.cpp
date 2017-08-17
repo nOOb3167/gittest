@@ -530,7 +530,7 @@ int gs_log_crash_handler_dump_global_log_list_suffix(
 	if (!(DumpBuf = (char *) malloc(GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES)))
 		goto clean;
 	LenDump = GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES;
-	gs_debug_break();
+
 	{
 		GsLogCrashHandlerDumpBufData Data = {};
 		Data.Tripwire = GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_BUF_DATA;
