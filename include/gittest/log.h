@@ -12,6 +12,11 @@
 #define GS_LOG_GET(PREFIX) gs_log_list_get_log_ret(GS_LOG_LIST_GLOBAL_NAME, (PREFIX))
 #define GS_LOG_GET_2(PREFIX1, OPT_PREFIX2) gs_log_list_get_log_ret_2(GS_LOG_LIST_GLOBAL_NAME, (PREFIX1), (OPT_PREFIX2))
 
+#define GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_BUF_DATA 0x429d83ff
+
+#define GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES 10 * 1024 * 1024 /* 10MB */
+
+
 /* global log list: user should define, signature 'GsLogList *', initialized eg by 'gs_log_list_global_create' */
 #define GS_LOG_LIST_GLOBAL_NAME g_gs_log_list_global
 
@@ -22,6 +27,9 @@ struct GsLogList;
 struct GsLogTls;
 
 struct GsLogUnified;
+
+struct GsLogCrashHandlerDumpBufData { uint32_t Tripwire; char *Buf; size_t MaxWritePos; size_t CurrentWritePos; };
+int gs_log_crash_handler_dump_buf_cb(void *ctx, const char *d, int64_t l);
 
 /* global log list: declaration only */
 extern GsLogList *GS_LOG_LIST_GLOBAL_NAME;
@@ -48,13 +56,14 @@ int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t 
 struct GsLogBase * gs_log_list_get_log_ret(struct GsLogList *LogList, const char *Prefix);
 struct GsLogBase * gs_log_list_get_log_ret_2(struct GsLogList *LogList, const char *Prefix1, const char *optPrefix2);
 
+int gs_log_crash_handler_dump_global_log_list_suffix(
+	const char *SuffixBuf, size_t LenSuffix);
 int gs_log_crash_handler_dump_global_log_list_suffix_2(
 	const char *SuffixBuf1, const char *SuffixBuf2);
 
 /* defined per-platform */
 int gs_log_crash_handler_setup();
-int gs_log_crash_handler_dump_global_log_list_suffix(
-	const char *SuffixBuf, size_t LenSuffix);
+void gs_log_crash_handler_printall();
 
 /* defined in log_unified.cpp */
 int gs_log_unified_create(struct GsLogUnified **oLogUnified);
@@ -67,9 +76,6 @@ int gs_log_unified_message_log(
 	uint32_t MsgSize,
 	const char *CppFile,
 	int CppLine);
-
-
-void gs_log_crash_handler_printall_cpp();
 
 /* global log list: can initialize the g_gs_log_list_global */
 GsLogList *gs_log_list_global_create();

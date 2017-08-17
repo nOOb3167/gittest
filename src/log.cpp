@@ -17,6 +17,7 @@
 
 #include <gittest/misc.h>
 #include <gittest/cbuf.h>
+#include <gittest/filesys.h>
 
 #include <gittest/log.h>
 
@@ -155,6 +156,26 @@ int gs_log_dump_construct_header_(
 clean:
 
 	return r;
+}
+
+int gs_log_crash_handler_dump_buf_cb(void *ctx, const char *d, int64_t l)
+{
+	GsLogCrashHandlerDumpBufData *Data = (GsLogCrashHandlerDumpBufData *)ctx;
+
+	size_t WritePos = Data->CurrentWritePos;
+
+	Data->CurrentWritePos += l;
+
+	if (Data->Tripwire != GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_BUF_DATA)
+		return 1;
+
+	/* NOTE: return zero - if over limit, just avoid writing anything */
+	if (Data->CurrentWritePos > Data->MaxWritePos)
+		return 0;
+
+	memmove(&Data->Buf[WritePos], d, l);
+
+	return 0;
 }
 
 void gs_log_version_make_compiled(struct GsVersion *oVersion)
@@ -417,7 +438,7 @@ int gs_log_list_dump_all_lowlevel(GsLogList *LogList, void *ctx, gs_bypart_cb_t 
 	if (!!(r = gs_log_version_check_compiled(&LogList->mVersion)))
 		goto clean;
 
-	for (struct GsLogListNode *Node = NULL; Node != NULL; Node = Node->mNext) {
+	for (struct GsLogListNode *Node = LogList->mLogs; Node != NULL; Node = Node->mNext) {
 		size_t LenHeader = 0;
 		char Header[256] = {};
 
@@ -463,6 +484,76 @@ struct GsLogBase * gs_log_list_get_log_ret_2(struct GsLogList *LogList, const ch
 		return NULL;
 
 	return Log;
+}
+
+int gs_log_crash_handler_dump_global_log_list_suffix(
+	const char *SuffixBuf, size_t LenSuffix)
+{
+	int r = 0;
+
+	size_t LenCombinedExtraSuffix = 0;
+	char CombinedExtraSuffix[512];
+
+	size_t LenCurrentFileName = 0;
+	char CurrentFileNameBuf[512];
+	
+	size_t LenLogFileName = 0;
+	char LogFileNameBuf[512];
+
+	char *DumpBuf = NULL;
+	size_t LenDump = 0;
+
+	if ((LenCombinedExtraSuffix = strlen(GS_LOG_STR_EXTRA_SUFFIX) + LenSuffix)
+		>= sizeof CombinedExtraSuffix)
+		{ r = 1; goto clean; }
+
+	memcpy(CombinedExtraSuffix, GS_LOG_STR_EXTRA_SUFFIX, strlen(GS_LOG_STR_EXTRA_SUFFIX));
+	memcpy(CombinedExtraSuffix + strlen(GS_LOG_STR_EXTRA_SUFFIX), SuffixBuf, LenSuffix);
+	memset(CombinedExtraSuffix + LenCombinedExtraSuffix, '\0', 1);
+
+	if (!!(r = gs_get_current_executable_filename(CurrentFileNameBuf, sizeof CurrentFileNameBuf, &LenCurrentFileName)))
+		goto clean;
+
+	if (!!(r = gs_build_modified_filename(
+		CurrentFileNameBuf, LenCurrentFileName,
+		"", 0,
+		GS_STR_EXECUTABLE_EXPECTED_EXTENSION, strlen(GS_STR_EXECUTABLE_EXPECTED_EXTENSION),
+		CombinedExtraSuffix, LenCombinedExtraSuffix,
+		GS_LOG_STR_EXTRA_EXTENSION, strlen(GS_LOG_STR_EXTRA_EXTENSION),
+		LogFileNameBuf, sizeof LogFileNameBuf, &LenLogFileName)))
+	{
+		goto clean;
+	}
+
+	printf("Dumping Logs To: [%.*s]\n", (int)LenLogFileName, LogFileNameBuf);
+
+	if (!(DumpBuf = (char *) malloc(GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES)))
+		goto clean;
+	LenDump = GS_ARBITRARY_LOG_DUMP_FILE_LIMIT_BYTES;
+	gs_debug_break();
+	{
+		GsLogCrashHandlerDumpBufData Data = {};
+		Data.Tripwire = GS_TRIPWIRE_LOG_CRASH_HANDLER_DUMP_BUF_DATA;
+		Data.Buf = DumpBuf;
+		Data.MaxWritePos = LenDump;
+		Data.CurrentWritePos = 0;
+
+		if (!!(r = gs_log_list_dump_all_lowlevel(GS_LOG_LIST_GLOBAL_NAME, &Data, gs_log_crash_handler_dump_buf_cb)))
+			goto clean;
+
+		if (!!(r = gs_file_write_frombuffer(
+			LogFileNameBuf, LenLogFileName,
+			(uint8_t *) Data.Buf, GS_MIN(Data.CurrentWritePos, LenDump))))
+		{
+			goto clean;
+		}
+	}
+
+clean:
+	if (DumpBuf)
+		free(DumpBuf);
+
+	return r;
 }
 
 int gs_log_crash_handler_dump_global_log_list_suffix_2(
