@@ -11,6 +11,7 @@
 #include <git2.h>
 
 #include <gittest/gittest.h>
+#include <gittest/bypart_git.h>
 #include <gittest/frame.h>
 #include <gittest/net2.h>
 

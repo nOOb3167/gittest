@@ -302,6 +302,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     include/gittest/misc.h
     include/gittest/bypart.h
     include/gittest/filesys.h
+    include/gittest/bypart_git.h
   )
   SET(GITTEST_LIB_HEADERS_WIN
     include/gittest/filesys_win.h
@@ -319,6 +320,7 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/main.cpp
     src/bypart.cpp
     src/filesys.cpp
+    src/bypart_git.cpp
   )
   SET(GITTEST_LIB_SOURCES_WIN
     src/log_win.cpp

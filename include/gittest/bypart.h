@@ -5,7 +5,7 @@
 
 #ifdef __cplusplus
 #include <vector>
-#include <git2.h>
+#include <string>
 #endif /* __cplusplus */
 
 #define GS_STRIDED_PIDX(S, IDX) ((S).mDataStart + (S).mDataOffset + (S).mEltStride * (IDX))
@@ -46,11 +46,6 @@ struct GsStrided {
 	uint32_t mEltStride;
 };
 
-int gs_strided_for_oid_vec(
-	const git_oid *OidVec,
-	size_t OidVecNum,
-	GsStrided *oStrided);
-
 int gs_strided_for_struct_member(
 	uint8_t *DataStart, uint32_t DataStartOffset, uint32_t OffsetOfMember,
 	uint32_t EltNum, uint32_t EltSize, uint32_t EltStride,
@@ -71,14 +66,6 @@ GS_BYPART_DATA_DECL(String, std::string *m0Buffer;);
 #define GS_BYPART_DATA_INIT_String(VARNAME, PBUFFER) (VARNAME).m0Buffer = PBUFFER;
 int gs_bypart_cb_String(void *ctx, const char *d, int64_t l);
 int gs_bysize_cb_String(void *ctx, int64_t l, uint8_t **od);
-
-/* GsBypartCbDataOidVector */
-GS_BYPART_DATA_DECL(OidVector, std::vector<git_oid> *m0OidVec;);
-#define GS_BYPART_TRIPWIRE_OidVector 0x23132358
-#define GS_BYPART_DATA_INIT_OidVector(VARNAME, POIDVEC) (VARNAME).m0OidVec = POIDVEC;
-int gs_bypart_cb_OidVector(void *ctx, const char *d, int64_t l);
-
-int gs_strided_for_oid_vec_cpp(std::vector<git_oid> *OidVec, GsStrided *oStrided);
 
 #endif /* __cplusplus */
 

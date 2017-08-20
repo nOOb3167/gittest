@@ -3,6 +3,7 @@
 #endif /* _MSC_VER */
 
 #include <gittest/gittest.h>
+#include <gittest/bypart_git.h>
 #include <gittest/gittest_selfupdate.h>
 #include <gittest/frame.h>
 #include <gittest/net2.h>

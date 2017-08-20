@@ -2,7 +2,9 @@
 #pragma warning(disable : 4267 4102)  // conversion from size_t, unreferenced label
 #endif /* _MSC_VER */
 
+#include <gittest/misc.h>
 #include <gittest/gittest.h>
+#include <gittest/bypart_git.h>
 #include <gittest/gittest_selfupdate.h>
 #include <gittest/net2.h>
 

@@ -16,6 +16,7 @@
 #include <event2/buffer.h>
 
 #include <gittest/misc.h>
+#include <gittest/bypart_git.h>
 #include <gittest/log.h>
 #include <gittest/config.h>
 #include <gittest/gittest.h>
