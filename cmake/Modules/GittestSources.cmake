@@ -7,7 +7,6 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_clnt
     gittest_clnt_clone
     gittest_repo_setup
-    gittest_log_convert
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_serv
@@ -23,7 +22,6 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_clnt
     gittest_clnt_clone
     gittest_repo_setup
-    gittest_log_convert
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_serv
@@ -35,7 +33,6 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
     gittest_clnt
     gittest_clnt_clone
     gittest_repo_setup
-    gittest_log_convert
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_serv
@@ -55,51 +52,12 @@ MACRO(GITTEST_SOURCES_SET_PREREQ_MISC)
 ENDMACRO()
 
 
-FUNCTION (GITTEST_SOURCES_SET_GENERATION)
-  # define a config header generator executable target (GsConfigHeaderGen).
-  # unless GITTEST_DISABLE_CONFIG_GENERATION disables config generation,
-  #   (in which case a bundled empty default header is used)
-  #   setup generation of the header from a config file, using the generator target.
-
-  ADD_EXECUTABLE(GsConfigHeaderGen
-    src/gen/config_header_gen.cpp
-  )
-  
-  IF (GITTEST_DISABLE_CONFIG_GENERATION)
-    SET(GS_CONFIG_NAME "GsConfigHeaderDefault.h")
-
-    ADD_CUSTOM_COMMAND(
-      OUTPUT GsConfigHeader.h
-      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
-      COMMAND "${CMAKE_COMMAND}"
-        -E copy
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
-        "${CMAKE_CURRENT_BINARY_DIR}/GsConfigHeader.h"
-      COMMENT "Generating Config (Empty default)"
-    )  
-  ELSE ()
-    SET(GS_CONFIG_NAME "GsConfig.conf")
-
-    ADD_CUSTOM_COMMAND(
-      OUTPUT GsConfigHeader.h
-      DEPENDS GsConfigHeaderGen
-              "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
-      COMMAND GsConfigHeaderGen
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/${GS_CONFIG_NAME}"
-        "${CMAKE_CURRENT_BINARY_DIR}/GsConfigHeader.h"
-      COMMENT "Generating Config"
-    )  
-  ENDIF ()
-
-ENDFUNCTION ()
-
-
 MACRO (GITTEST_SOURCES_SET)
   GITTEST_SOURCES_SET_COMMON()
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS_LUMP_UPPERS)
     GITTEST_AUX_SOURCES_ENSURE_HEADERS_SOURCES_DEFINED("${VV}")
   ENDFOREACH()
-  GITTEST_COMMON_ENSURE_PLATFORM()
+  GITTEST_PLATFORM_ENSURE_PLATFORM()
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS_LUMP_UPPERS)
     GITTEST_AUX_SOURCES_APPEND_PLATFORM("${VV}" ${GITTEST_PLATFORM_PLAT})
   ENDFOREACH()
@@ -107,7 +65,7 @@ ENDMACRO ()
 
 
 FUNCTION (GITTEST_SOURCES_DEFINE_COSMETIC_VISUAL_STUDIO_STUFF)
-  GITTEST_COMMON_ENSURE_PLATFORM()
+  GITTEST_PLATFORM_ENSURE_PLATFORM()
 
   IF (GITTEST_PLATFORM_WIN)
 
@@ -138,7 +96,10 @@ FUNCTION (GITTEST_SOURCES_DEFINE_COSMETIC_VISUAL_STUDIO_STUFF)
     
     ADD_LIBRARY(dummy_lib STATIC ${TMPLIST})
     # FIXME: grrr, magic (duplicate of GITTEST_SOURCES_CONFIGURE_TARGETS)
-    TARGET_INCLUDE_DIRECTORIES(dummy_lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
+    TARGET_INCLUDE_DIRECTORIES(dummy_lib PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${GITTEST_COMMON_PREFIX}/include    # for Gittest Common
+    )
   ENDIF ()
 
 ENDFUNCTION ()
@@ -152,7 +113,6 @@ FUNCTION (GITTEST_SOURCES_CREATE_TARGETS)
   )
 
   ADD_LIBRARY(gittest_lib STATIC
-    ${GITTEST_MISC_HEADERS}
     ${GITTEST_LIB_HEADERS}
     ${GITTEST_LIB_SOURCES}
   )
@@ -197,16 +157,6 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   ENDFOREACH()
     
   # target compile definitions
-
-  SET(GITTEST_DEFINITIONS
-    # FIXME: WIN hardcoded
-    -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_DEBUG_BREAK=GS_CONFIG_DEFS_WIN
-    -DEXTERNAL_GS_CONFIG_DEFS_GLOBAL_CLEAN_HANDLING=GS_CONFIG_DEFS_NONE
-  )
-  
-  FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
-    TARGET_COMPILE_DEFINITIONS("${VV}" PRIVATE ${GITTEST_DEFINITIONS})
-  ENDFOREACH()
   
   TARGET_COMPILE_DEFINITIONS(gittest_clnt       PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt")
   TARGET_COMPILE_DEFINITIONS(gittest_clnt_clone PRIVATE GS_CONFIG_DEFS_GITTEST_CLNT_VERSUB="versub_clnt_clone")
@@ -219,8 +169,8 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS)
     TARGET_INCLUDE_DIRECTORIES("${VV}"
       PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}            # for Config Header Generator
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${GITTEST_COMMON_PREFIX}/include    # for Gittest Common
         ${GITTEST_DEP_INCLUDE_DIRS}
     )
   ENDFOREACH()
@@ -229,18 +179,25 @@ FUNCTION (GITTEST_SOURCES_CONFIGURE_TARGETS)
   
   # http://stackoverflow.com/questions/14468678/cmake-link-a-library-to-library/14480396#14480396
   #   linking static libraries to static libraries not needed? list them just for the executables.
-  TARGET_LINK_LIBRARIES(gittest_lib)
-  TARGET_LINK_LIBRARIES(gittest_net)
-  TARGET_LINK_LIBRARIES(gittest_selfupdate)
+  #   it is however used to 'inherit' TARGET_COMPILE_DEFINITIONS (PUBLIC and INTERFACE keywords).
+  #   ie if libA defines -DENABLE_FOO linking libA into libB causes libB to also be compiled with -DENABLE_FOO.
+  TARGET_LINK_LIBRARIES(gittest_lib gittest_common)
+  TARGET_LINK_LIBRARIES(gittest_net gittest_common)
+  TARGET_LINK_LIBRARIES(gittest_selfupdate gittest_common)
   
   FOREACH(VV IN LISTS GITTEST_SOURCES_TARGETS_EXE)
-    TARGET_LINK_LIBRARIES("${VV}" gittest_selfupdate gittest_net gittest_lib ${GITTEST_DEP_LIBRARIES})
+    TARGET_LINK_LIBRARIES("${VV}"
+      gittest_selfupdate
+      gittest_net
+      gittest_lib
+      gittest_common    # for Gittest Common
+      ${GITTEST_DEP_LIBRARIES})
   ENDFOREACH()  
 ENDFUNCTION ()
 
 
 FUNCTION (GITTEST_SOURCES_INSTALL_TARGETS)
-  GITTEST_COMMON_ENSURE_COMPILER()
+  GITTEST_PLATFORM_ENSURE_COMPILER()
 
   INSTALL(TARGETS ${GITTEST_SOURCES_TARGETS_EXE}
     LIBRARY DESTINATION "lib"
@@ -275,7 +232,6 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_clnt
     gittest_clnt_clone
     gittest_repo_setup
-    gittest_log_convert
     gittest_test_02
     gittest_ev2_test
     gittest_ev2_serv
@@ -283,54 +239,16 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     gittest_ev2_selfupdate_clone
   )
   
-  # misc
-
-  SET(GITTEST_MISC_HEADERS
-    include/gittest/config_defs.h
-    include/gittest/log_defs.h
-  )
-  GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_MISC_SOURCES)
-  
   # gittest_lib
 
   SET(GITTEST_LIB_HEADERS
     include/gittest/gittest.h
-    include/gittest/cbuf.h
-    include/gittest/config.h
-    GsConfigHeader.h            # for Config Header Generator
-    include/gittest/log.h
-    include/gittest/misc.h
-    include/gittest/bypart.h
-    include/gittest/filesys.h
     include/gittest/bypart_git.h
-  )
-  SET(GITTEST_LIB_HEADERS_WIN
-    include/gittest/filesys_win.h
-  )
-  SET(GITTEST_LIB_HEADERS_NIX
-    include/gittest/filesys_nix.h
   )
 
   SET(GITTEST_LIB_SOURCES
-    src/cbuf.cpp
-    src/config.cpp
-    src/log.cpp
-    src/log_unified.cpp
-    src/misc.cpp
     src/main.cpp
-    src/bypart.cpp
-    src/filesys.cpp
     src/bypart_git.cpp
-  )
-  SET(GITTEST_LIB_SOURCES_WIN
-    src/log_win.cpp
-    src/misc_win.cpp
-    src/filesys_win.cpp
-  )
-  SET(GITTEST_LIB_SOURCES_NIX
-    src/log_nix.cpp
-    src/misc_nix.cpp
-    src/filesys_nix.cpp
   )
   
   # gittest_net
@@ -409,14 +327,6 @@ MACRO (GITTEST_SOURCES_SET_COMMON)
     src/gittest_repo_setup.cpp
   )
   
-  # gittest_log_convert
-  
-  GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_LOG_CONVERT_HEADERS)
-  
-  SET(GITTEST_LOG_CONVERT_SOURCES
-    src/gittest_log_convert.cpp
-  )
-
   # gittest_test_02
   
   GITTEST_AUX_SOURCES_SET_MAGIC_EMPTY(GITTEST_TEST_02_HEADERS)

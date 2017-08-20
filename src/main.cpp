@@ -23,6 +23,7 @@
 
 #include <gittest/misc.h>
 #include <gittest/bypart.h>
+#include <gittest/bypart_git.h>
 #include <gittest/gittest.h>
 
 /*

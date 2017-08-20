@@ -15,8 +15,6 @@
 #include <gittest/gittest.h>
 #include <gittest/gittest_selfupdate.h>
 
-#include <sqlite3.h>
-
 #define GS_REPO_SETUP_ARG_UPDATEMODE            "--gsreposetup"
 #define GS_REPO_SETUP_ARG_COMMIT_SELFUPDATE     "--xcommit_selfupdate"
 #define GS_REPO_SETUP_ARG_COMMIT_MAIN           "--xcommit_main"
